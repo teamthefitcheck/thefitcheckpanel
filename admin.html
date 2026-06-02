@@ -17,6 +17,25 @@
   --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--cyan:#06b6d4;--purple:#a78bfa;
   --radius:10px;--radius-sm:6px;
 }
+[data-theme="light"]{
+  --bg:#f0f0f0;--bg-card:#ffffff;--bg-card2:#f5f5f5;
+  --border:#e0e0e0;--border2:#d0d0d0;
+  --text:#111111;--text-muted:#666666;--text-dim:#aaaaaa;
+  --accent:#000000;--accent-dim:#333333;
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--cyan:#0891b2;--purple:#7c3aed;
+}
+[data-theme="light"] body{background:var(--bg)}
+[data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{background:#fff;border-color:var(--border2);color:var(--text)}
+[data-theme="light"] input:focus,[data-theme="light"] select:focus{border-color:#999}
+[data-theme="light"] select option{background:#fff;color:#111}
+[data-theme="light"] .btn-primary{background:#111;color:#fff}
+[data-theme="light"] .btn-primary:hover{background:#333}
+[data-theme="light"] .btn-ghost{border-color:var(--border2);color:var(--text-muted)}
+[data-theme="light"] .btn-ghost:hover{border-color:#999;color:var(--text)}
+[data-theme="light"] tr:hover td{background:#00000005}
+[data-theme="light"] .modal-overlay{background:rgba(0,0,0,.5)}
+[data-theme="light"] .modal{background:#fff}
+[data-theme="light"] ::-webkit-scrollbar-thumb{background:#ccc}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
 input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{border-color:#555}
@@ -62,6 +81,9 @@ label{font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px
 </head>
 <body>
 <div id="root"></div>
+<script>
+  (function(){ var t=localStorage.getItem('fc_theme'); if(t) document.documentElement.setAttribute('data-theme',t); })();
+</script>
 <script type="text/babel">
 const { useState, useEffect, useCallback } = React;
 const API = '';
@@ -145,7 +167,7 @@ function Login({ onLogin }) {
 }
 
 /* ── Sidebar ──────────────────────────────────────────────── */
-function Sidebar({ tab, setTab, onLogout }) {
+function Sidebar({ tab, setTab, onLogout, light, setLight }) {
   const items = [
     ['dashboard','📊','Dashboard'],
     ['orders','📦','Orders'],
@@ -176,7 +198,23 @@ function Sidebar({ tab, setTab, onLogout }) {
           </button>
         ))}
       </nav>
-      <div style={{padding:'12px 10px',borderTop:'1px solid var(--border)'}}>
+      <div style={{padding:'12px 10px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:8}}>
+        <button onClick={()=>setLight(l=>!l)} style={{
+          width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'8px 12px',borderRadius:8,border:'1px solid var(--border2)',
+          background:'transparent',color:'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'
+        }}>
+          <span>{light ? '☀️ Light' : '🌙 Dark'}</span>
+          <span style={{
+            width:34,height:18,borderRadius:9,background:light?'#111':'#333',
+            display:'inline-flex',alignItems:'center',padding:'0 2px',transition:'background .2s',flexShrink:0
+          }}>
+            <span style={{
+              width:14,height:14,borderRadius:'50%',background:'#fff',
+              transform:light?'translateX(16px)':'translateX(0)',transition:'transform .2s',display:'block'
+            }}/>
+          </span>
+        </button>
         <button onClick={onLogout} className="btn-ghost" style={{width:'100%',fontSize:12}}>Sign Out</button>
       </div>
     </div>
@@ -866,6 +904,12 @@ function Settings() {
 function App() {
   const [authed, setAuthed] = useState(!!token());
   const [tab, setTab]       = useState('dashboard');
+  const [light, setLight]   = useState(() => localStorage.getItem('fc_theme') === 'light');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+    localStorage.setItem('fc_theme', light ? 'light' : 'dark');
+  }, [light]);
 
   const logout = async () => {
     try { await apiFetch('/admin/logout', { method:'POST' }); } catch {}
@@ -878,7 +922,7 @@ function App() {
 
   return (
     <div style={{display:'flex',minHeight:'100vh'}}>
-      <Sidebar tab={tab} setTab={setTab} onLogout={logout}/>
+      <Sidebar tab={tab} setTab={setTab} onLogout={logout} light={light} setLight={setLight}/>
       <main style={{flex:1,overflow:'auto'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 28px'}}>
           {views[tab] || <Dashboard/>}
