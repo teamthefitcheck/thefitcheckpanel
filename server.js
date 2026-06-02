@@ -455,7 +455,9 @@ app.get('/admin/email-config', adminAuth, async (req, res) => {
 app.post('/admin/email-config', adminAuth, async (req, res) => {
   try {
     const { host, port, secure, user, pass, from } = req.body || {};
-    await mdb.collection('email_config').updateOne({}, { $set: { host, port: parseInt(port) || 587, secure: !!secure, user, pass, from, updated_at: new Date() } }, { upsert: true });
+    const update = { host, port: parseInt(port) || 587, secure: !!secure, user, from, updated_at: new Date() };
+    if (pass) update.pass = pass;
+    await mdb.collection('email_config').updateOne({}, { $set: update }, { upsert: true });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
