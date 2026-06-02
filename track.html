@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Track Your Order · Fit Check</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fafafa;--bg-card:#ffffff;--border:#e5e5e5;--border2:#d4d4d4;
+  --text:#111111;--text-muted:#666;--text-dim:#999;
+  --accent:#111111;--accent2:#333;
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--blue:#2563eb;--purple:#7c3aed;
+  --radius:12px;--radius-sm:8px;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;min-height:100vh}
+
+header{background:#111;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo-mark{width:32px;height:32px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#111}
+.logo-name{font-size:16px;font-weight:700;color:#fff;letter-spacing:-.3px}
+.header-link{color:#888;font-size:13px;text-decoration:none}
+.header-link:hover{color:#fff}
+
+.container{max-width:680px;margin:0 auto;padding:32px 20px 80px}
+
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.card+.card{margin-top:16px}
+
+h2{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px;margin-bottom:6px}
+p.sub{font-size:14px;color:var(--text-muted);margin-bottom:24px}
+
+.tabs{display:flex;gap:0;border:1.5px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:20px;background:#f5f5f5}
+.tab{flex:1;padding:9px 12px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;background:transparent;border:none;transition:all .15s;text-align:center}
+.tab.active{background:#111;color:#fff}
+
+.field{margin-bottom:14px}
+label.lbl{display:block;font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px;margin-bottom:5px;text-transform:uppercase}
+input,select,textarea{width:100%;border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:10px 13px;font-size:14px;color:var(--text);background:#fff;outline:none;transition:border-color .15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:#111}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;border:none;letter-spacing:.1px}
+.btn-black{background:#111;color:#fff}
+.btn-black:hover{background:#333}
+.btn-outline{background:transparent;border:1.5px solid var(--border2);color:var(--text-muted)}
+.btn-outline:hover{border-color:#111;color:#111}
+.btn-sm{padding:7px 14px;font-size:12px}
+.btn-full{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+.alert{padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px}
+.alert-error{background:#fef2f2;border:1px solid #fecaca;color:var(--red)}
+.alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:var(--green)}
+
+/* ── Stage timeline ── */
+.timeline{display:flex;flex-direction:column;gap:0;margin:16px 0}
+.tl-item{display:flex;gap:14px;position:relative}
+.tl-item:not(:last-child) .tl-line{position:absolute;left:11px;top:24px;width:2px;height:calc(100% + 4px);background:var(--border)}
+.tl-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;border:2px solid;z-index:1;background:#fff}
+.tl-dot.done{background:#111;border-color:#111;color:#fff}
+.tl-dot.active{background:#fff;border-color:#111;color:#111}
+.tl-dot.pending{background:#fff;border-color:#ddd;color:#bbb}
+.tl-content{padding:2px 0 20px;flex:1}
+.tl-label{font-size:14px;font-weight:600;color:var(--text)}
+.tl-label.pending-text{color:#bbb}
+.tl-sub{font-size:12px;color:var(--text-muted);margin-top:1px}
+
+/* ── Order card ── */
+.order-row{padding:14px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12;cursor:pointer}
+.order-row:last-child{border-bottom:none}
+.order-row:hover{background:#f9f9f9;margin:0 -24px;padding:14px 24px}
+
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-green{background:#dcfce7;color:var(--green)}
+.badge-red{background:#fee2e2;color:var(--red)}
+.badge-yellow{background:#fef3c7;color:var(--yellow)}
+.badge-blue{background:#dbeafe;color:var(--blue)}
+.badge-gray{background:#f5f5f5;color:#666}
+
+/* ── RR form ── */
+.item-check{display:flex;align-items:flex-start;gap:10;padding:10px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.item-check:hover{border-color:#aaa}
+.item-check.selected{border-color:#111;background:#fafafa}
+.item-check input[type=checkbox]{margin-top:2px;accent-color:#111;width:15px;height:15px;flex-shrink:0}
+
+.divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+
+.tracking-box{background:#f9f9f9;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12}
+
+.step-nav{display:flex;align-items:center;gap:8;margin-bottom:20px;font-size:12px;color:var(--text-muted)}
+.step-nav span{font-weight:700;color:var(--text)}
+
+.img-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.img-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+.img-placeholder{width:100%;aspect-ratio:1;background:#f5f5f5;border:1.5px dashed var(--border2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;color:#bbb}
+
+footer{text-align:center;padding:32px 20px;font-size:12px;color:var(--text-dim)}
+footer a{color:#999;text-decoration:none}
+
+@media(max-width:600px){
+  .container{padding:20px 14px 60px}
+  .card{padding:18px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/track" class="logo">
+    <div class="logo-mark">✓</div>
+    <span class="logo-name">Fit Check</span>
+  </a>
+  <a href="/track" class="header-link">Track Order</a>
+</header>
+
+<div class="container" id="app">
+
+  <!-- Search card -->
+  <div id="searchSection">
+    <div class="card">
+      <h2>Track Your Order</h2>
+      <p class="sub">Enter your order number and email or phone to track.</p>
+
+      <div class="tabs">
+        <button class="tab active" id="tabSingle" onclick="switchTab('single')">Track by Order #</button>
+        <button class="tab" id="tabAll" onclick="switchTab('all')">All My Orders</button>
+      </div>
+
+      <!-- Single order -->
+      <div id="formSingle">
+        <div id="errSingle" class="alert alert-error" style="display:none"></div>
+        <div class="field">
+          <label class="lbl">Order Number</label>
+          <input id="inputOrder" placeholder="#1234" onkeydown="if(event.key==='Enter')lookupOrder()"/>
+        </div>
+        <div class="field">
+          <label class="lbl">Email or Phone</label>
+          <input id="inputContact" placeholder="you@email.com or 9876543210" onkeydown="if(event.key==='Enter')lookupOrder()"/>
+        </div>
+        <button class="btn btn-black btn-full" id="btnLookup" onclick="lookupOrder()">Track Order →</button>
+      </div>
+
+      <!-- All orders -->
+      <div id="formAll" style="display:none">
+        <div id="errAll" class="alert alert-error" style="display:none"></div>
+        <div class="field">
+          <label class="lbl">Email or Phone</label>
+          <input id="inputContactAll" placeholder="you@email.com or 9876543210" onkeydown="if(event.key==='Enter')lookupAll()"/>
+        </div>
+        <button class="btn btn-black btn-full" id="btnAll" onclick="lookupAll()">Find My Orders →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- All orders list -->
+  <div id="allOrdersSection" style="display:none">
+    <div style="display:flex;align-items:center;gap:10;margin-bottom:14px">
+      <button class="btn btn-outline btn-sm" onclick="resetAll()">← Back</button>
+      <span style="font-size:14px;color:var(--text-muted)" id="allOrdersCount"></span>
+    </div>
+    <div class="card" id="allOrdersList"></div>
+  </div>
+
+  <!-- Order detail -->
+  <div id="orderSection" style="display:none"></div>
+
+</div>
+
+<footer>
+  Powered by <a href="#">Arqontiq</a> · <a href="/track">Track Another Order</a>
+</footer>
+
+<script>
+const API = '';
+let currentOrder = null;
+
+/* ── Helpers ────────────────────────────────────────── */
+function fmt(d){ return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function fmtMoney(n){ return '₹'+parseFloat(n||0).toLocaleString('en-IN'); }
+
+function stageBadge(s){
+  const map={delivered:['badge-green','Delivered'],transit:['badge-blue','In Transit'],pickup:['badge-blue','Picked Up'],rto:['badge-red','RTO'],confirmed:['badge-yellow','Confirmed'],ready:['badge-yellow','Ready'],cancelled:['badge-red','Cancelled'],new:['badge-gray','Processing'],misc:['badge-gray','Processing']};
+  const [cls,label]=map[s]||['badge-gray','Processing'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function rrStatusBadge(s){
+  const map={pending:['badge-yellow','Pending Review'],approved:['badge-green','Approved'],rejected:['badge-red','Rejected'],in_progress:['badge-blue','In Progress'],completed:['badge-green','Completed']};
+  const [cls,label]=map[s]||['badge-gray',s];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function switchTab(t){
+  document.getElementById('tabSingle').className='tab'+(t==='single'?' active':'');
+  document.getElementById('tabAll').className='tab'+(t==='all'?' active':'');
+  document.getElementById('formSingle').style.display=t==='single'?'block':'none';
+  document.getElementById('formAll').style.display=t==='all'?'block':'none';
+}
+
+/* ── Lookup single order ───────────────────────────── */
+async function lookupOrder(){
+  const q=document.getElementById('inputOrder').value.trim();
+  const contact=document.getElementById('inputContact').value.trim();
+  const errEl=document.getElementById('errSingle');
+  errEl.style.display='none';
+  if(!q){errEl.textContent='Please enter your order number.';errEl.style.display='block';return;}
+  if(!contact){errEl.textContent='Please enter your email or phone.';errEl.style.display='block';return;}
+  const btn=document.getElementById('btnLookup');
+  btn.disabled=true;btn.textContent='Looking up…';
+  try{
+    const r=await fetch(`${API}/track/order?q=${encodeURIComponent(q)}&contact=${encodeURIComponent(contact)}`);
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'Order not found.';errEl.style.display='block';return;}
+    showOrderDetail(d);
+  }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';}
+  btn.disabled=false;btn.textContent='Track Order →';
+}
+
+/* ── Lookup all orders ─────────────────────────────── */
+async function lookupAll(){
+  const contact=document.getElementById('inputContactAll').value.trim();
+  const errEl=document.getElementById('errAll');
+  errEl.style.display='none';
+  if(!contact){errEl.textContent='Please enter your email or phone.';errEl.style.display='block';return;}
+  const btn=document.getElementById('btnAll');
+  btn.disabled=true;btn.textContent='Searching…';
+  try{
+    const r=await fetch(`${API}/track/my-orders?contact=${encodeURIComponent(contact)}`);
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'No orders found.';errEl.style.display='block';return;}
+    showAllOrders(d.orders||[]);
+  }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';}
+  btn.disabled=false;btn.textContent='Find My Orders →';
+}
+
+function showAllOrders(orders){
+  document.getElementById('searchSection').style.display='none';
+  document.getElementById('allOrdersSection').style.display='block';
+  document.getElementById('allOrdersCount').textContent=`${orders.length} order${orders.length!==1?'s':''} found`;
+  const el=document.getElementById('allOrdersList');
+  if(!orders.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-muted)">No orders found.</div>';return;}
+  el.innerHTML=orders.map(o=>`
+    <div class="order-row" onclick="loadOrderById('${o.shopify_order_id}')">
+      <div>
+        <div style="font-weight:700;font-size:14px">${o.order_name}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${fmt(o.created_at)} · ${o.items_preview||''}${(o.item_count||0)>2?'…':''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        ${stageBadge(o.stage)}
+        <div style="font-size:13px;font-weight:600;margin-top:4px">${fmtMoney(o.total)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadOrderById(id){
+  try{
+    const r=await fetch(`${API}/track/order?q=${id}&contact=na`);
+    const d=await r.json();
+    if(r.ok){document.getElementById('allOrdersSection').style.display='none';showOrderDetail(d);}
+  }catch{}
+}
+
+function resetAll(){
+  document.getElementById('searchSection').style.display='block';
+  document.getElementById('allOrdersSection').style.display='none';
+  document.getElementById('orderSection').style.display='none';
+}
+
+/* ── Stage timeline data ───────────────────────────── */
+function getTimeline(stage){
+  const stages=[
+    {key:'confirmed',icon:'📋',label:'Order Confirmed',sub:'Your order has been received'},
+    {key:'ready',icon:'📦',label:'Packed',sub:'Your order has been packed'},
+    {key:'pickup',icon:'🚛',label:'Picked Up',sub:'Handed over to courier'},
+    {key:'transit',icon:'🚚',label:'In Transit',sub:'On the way to you'},
+    {key:'delivered',icon:'✅',label:'Delivered',sub:'Successfully delivered'},
+  ];
+  if(stage==='rto') return[...stages.slice(0,3),{key:'rto',icon:'↩',label:'Returned to Origin',sub:'Package returned to sender'}];
+  if(stage==='cancelled') return [{key:'cancelled',icon:'✕',label:'Order Cancelled',sub:'This order has been cancelled'}];
+  const idx=stages.findIndex(s=>s.key===stage);
+  return stages.map((s,i)=>{
+    let state='pending';
+    if(i<idx) state='done';
+    else if(i===idx) state='active';
+    return {...s,state};
+  });
+}
+
+/* ── Order detail renderer ─────────────────────────── */
+function showOrderDetail(order){
+  currentOrder=order;
+  document.getElementById('searchSection').style.display='none';
+  document.getElementById('allOrdersSection').style.display='none';
+  const el=document.getElementById('orderSection');
+  el.style.display='block';
+
+  const timeline=getTimeline(order.stage||'confirmed');
+  const tlHtml=timeline.map(t=>`
+    <div class="tl-item">
+      <div class="tl-line"></div>
+      <div class="tl-dot ${t.state}">${t.state==='done'?'✓':t.icon}</div>
+      <div class="tl-content">
+        <div class="tl-label${t.state==='pending'?' pending-text':''}">${t.label}</div>
+        <div class="tl-sub">${t.state!=='pending'?t.sub:'Upcoming'}</div>
+      </div>
+    </div>
+  `).join('');
+
+  const trackUrl=order.tracking_url||(order.awb?`https://shiprocket.co/tracking/${order.awb}`:'');
+
+  const itemsHtml=(order.items||[]).map(it=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div>
+        <div style="font-weight:600">${it.title}</div>
+        ${it.variant_title?`<div style="color:var(--text-muted);font-size:12px">${it.variant_title}</div>`:''}
+        ${it.sku?`<div style="color:var(--text-muted);font-size:11px;font-family:monospace">${it.sku}</div>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-weight:600">${fmtMoney(it.price)}</div>
+        <div style="font-size:12px;color:var(--text-muted)">Qty: ${it.qty}</div>
+      </div>
+    </div>
+  `).join('');
+
+  const existingRRs=(order.return_requests||[]).map(rr=>`
+    <div style="padding:10px 12px;background:#f9f9f9;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600">${rr.type==='exchange'?'Exchange':'Return'} Request</div>
+        ${rrStatusBadge(rr.status)}
+      </div>
+      <div style="color:var(--text-muted);font-size:12px;margin-top:3px">${rr.request_id} · ${fmt(rr.created_at)}</div>
+      ${rr.reason?`<div style="color:var(--text-muted);font-size:12px;margin-top:2px">Reason: ${rr.reason}</div>`:''}
+    </div>
+  `).join('');
+
+  const canRR=(order.exchange_enabled!==false||order.return_enabled!==false)&&['delivered'].includes(order.stage||'');
+
+  el.innerHTML=`
+    <button class="btn btn-outline btn-sm" style="margin-bottom:16px" onclick="document.getElementById('searchSection').style.display='block';document.getElementById('orderSection').style.display='none'">← Track Another</button>
+
+    <!-- Status card -->
+    <div class="card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12;flex-wrap:wrap;margin-bottom:16px">
+        <div>
+          <div style="font-size:20px;font-weight:800">${order.order_name}</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:3px">Placed ${fmt(order.created_at)}</div>
+        </div>
+        ${stageBadge(order.stage)}
+      </div>
+
+      ${order.awb?`
+        <div class="tracking-box" style="margin-bottom:16px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px">Tracking</div>
+            <div style="font-size:15px;font-weight:700;font-family:monospace;margin-top:2px">${order.awb}</div>
+            ${order.courier?`<div style="font-size:12px;color:var(--text-muted)">${order.courier}</div>`:''}
+          </div>
+          ${trackUrl?`<a href="${trackUrl}" target="_blank" class="btn btn-black btn-sm">Track →</a>`:''}
+        </div>
+      `:''}
+
+      <div class="timeline">${tlHtml}</div>
+    </div>
+
+    <!-- Items -->
+    <div class="card">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Order Items</div>
+      ${itemsHtml}
+    </div>
+
+    <!-- Return / Exchange -->
+    ${existingRRs?`<div class="card"><div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Return / Exchange Requests</div>${existingRRs}</div>`:''}
+
+    ${canRR?`
+    <div class="card" id="rrSection">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Need Help?</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">Return or Exchange</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Not happy with your order? We'll make it right.</div>
+      <div style="display:flex;gap:10;flex-wrap:wrap">
+        ${order.exchange_enabled!==false?`<button class="btn btn-black btn-sm" onclick="startRR('exchange')">⇄ Request Exchange</button>`:''}
+        ${order.return_enabled!==false?`<button class="btn btn-outline btn-sm" onclick="startRR('return')">↩ Request Return</button>`:''}
+      </div>
+    </div>
+    `:`
+    <div class="card" style="text-align:center;padding:20px">
+      <div style="font-size:24px;margin-bottom:8px">💬</div>
+      <div style="font-weight:600;margin-bottom:4px">Need Help?</div>
+      <div style="font-size:13px;color:var(--text-muted)">For any queries, please <a href="mailto:support@fitcheck.com" style="color:var(--accent)">contact us</a>.</div>
+    </div>
+    `}
+  `;
+}
+
+/* ── Return / Exchange form ────────────────────────── */
+let rrType='';
+let rrStep=1;
+let rrData={};
+
+function startRR(type){
+  rrType=type; rrStep=1; rrData={type};
+  renderRRForm();
+  document.getElementById('rrSection').scrollIntoView({behavior:'smooth'});
+}
+
+function renderRRForm(){
+  const sec=document.getElementById('rrSection');
+  const order=currentOrder;
+  if(!order) return;
+
+  if(rrStep===1){
+    // Step 1: select items
+    const itemsHtml=(order.items||[]).map((it,i)=>`
+      <label class="item-check" id="item-check-${i}">
+        <input type="checkbox" id="item-cb-${i}" value="${i}" onchange="updateItemCheck(${i})"/>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">${it.title}</div>
+          ${it.variant_title?`<div style="font-size:12px;color:var(--text-muted)">${it.variant_title}</div>`:''}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${fmtMoney(it.price)} · Qty: ${it.qty}</div>
+        </div>
+      </label>
+    `).join('');
+
+    sec.innerHTML=`
+      <div style="margin-bottom:14px">
+        <div class="step-nav">Step <span>1</span> of 3 · Select Items</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">${rrType==='exchange'?'⇄ Request Exchange':'↩ Request Return'}</div>
+        <div style="font-size:13px;color:var(--text-muted)">Select the item(s) you want to ${rrType}.</div>
+      </div>
+      <div id="itemsList">${itemsHtml}</div>
+      <div id="rrErr" class="alert alert-error" style="display:none"></div>
+      <div style="display:flex;gap:10;margin-top:16px">
+        <button class="btn btn-outline btn-sm" onclick="cancelRR()">Cancel</button>
+        <button class="btn btn-black btn-sm" onclick="rrNext1()">Next →</button>
+      </div>
+    `;
+  }
+
+  else if(rrStep===2){
+    // Step 2: reason + images
+    sec.innerHTML=`
+      <div style="margin-bottom:14px">
+        <div class="step-nav">Step <span>2</span> of 3 · Reason</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">${rrType==='exchange'?'⇄ Request Exchange':'↩ Request Return'}</div>
+      </div>
+      <div id="rrErr" class="alert alert-error" style="display:none"></div>
+      <div class="field">
+        <label class="lbl">Reason for ${rrType}</label>
+        <select id="rrReason">
+          <option value="">Select a reason…</option>
+          <option value="Wrong size received">Wrong size received</option>
+          <option value="Defective / damaged product">Defective / damaged product</option>
+          <option value="Wrong item received">Wrong item received</option>
+          <option value="Quality not as expected">Quality not as expected</option>
+          <option value="Changed my mind">Changed my mind</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field" id="otherReasonField" style="display:none">
+        <label class="lbl">Please describe</label>
+        <textarea id="rrReasonOther" rows="3" placeholder="Tell us more…"></textarea>
+      </div>
+      <div class="field">
+        <label class="lbl">Photos (optional)</label>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Upload photos of the product if applicable</div>
+        <input type="file" id="rrImages" accept="image/*" multiple style="font-size:13px"/>
+      </div>
+      <div style="display:flex;gap:10;margin-top:16px">
+        <button class="btn btn-outline btn-sm" onclick="rrBack()">← Back</button>
+        <button class="btn btn-black btn-sm" onclick="rrNext2()">Next →</button>
+      </div>
+    `;
+    document.getElementById('rrReason').addEventListener('change',function(){
+      document.getElementById('otherReasonField').style.display=this.value==='Other'?'block':'none';
+    });
+  }
+
+  else if(rrStep===3){
+    // Step 3: confirm details
+    const addr=currentOrder.customer_address||{};
+    sec.innerHTML=`
+      <div style="margin-bottom:14px">
+        <div class="step-nav">Step <span>3</span> of 3 · Confirm</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">Confirm Your ${rrType==='exchange'?'Exchange':'Return'} Request</div>
+      </div>
+      <div id="rrErr" class="alert alert-error" style="display:none"></div>
+      <div style="background:#f9f9f9;border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;margin-bottom:14px">
+        <div style="font-weight:700;margin-bottom:8px">Request Summary</div>
+        <div style="color:var(--text-muted)">Type: <strong style="color:var(--text)">${rrType}</strong></div>
+        <div style="color:var(--text-muted);margin-top:4px">Items: <strong style="color:var(--text)">${(rrData.items||[]).map(i=>i.title).join(', ')}</strong></div>
+        <div style="color:var(--text-muted);margin-top:4px">Reason: <strong style="color:var(--text)">${rrData.reason}</strong></div>
+      </div>
+      <div class="field">
+        <label class="lbl">Pickup Address</label>
+        <input id="addr1" placeholder="House no., street, area" value="${addr.address1||addr.address2||''}"/>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label class="lbl">City</label><input id="city" value="${addr.city||''}"/></div>
+        <div class="field"><label class="lbl">State</label><input id="state" value="${addr.province||addr.state||''}"/></div>
+      </div>
+      <div class="field"><label class="lbl">Pincode</label><input id="pincode" value="${addr.zip||''}"/></div>
+      <div style="display:flex;gap:10;margin-top:8px">
+        <button class="btn btn-outline btn-sm" onclick="rrBack()">← Back</button>
+        <button class="btn btn-black btn-sm" id="btnSubmitRR" onclick="submitRR()">Submit Request</button>
+      </div>
+    `;
+  }
+}
+
+function updateItemCheck(i){
+  const cb=document.getElementById(`item-cb-${i}`);
+  document.getElementById(`item-check-${i}`).className='item-check'+(cb.checked?' selected':'');
+}
+
+function rrNext1(){
+  const order=currentOrder;
+  const selected=[];
+  (order.items||[]).forEach((it,i)=>{
+    if(document.getElementById(`item-cb-${i}`)?.checked) selected.push({...it, line_item_id: it.line_item_id||it.id});
+  });
+  if(!selected.length){
+    document.getElementById('rrErr').textContent='Please select at least one item.';
+    document.getElementById('rrErr').style.display='block';
+    return;
+  }
+  rrData.items=selected;
+  rrStep=2; renderRRForm();
+}
+
+function rrNext2(){
+  const reason=document.getElementById('rrReason').value;
+  const otherReason=document.getElementById('rrReasonOther')?.value||'';
+  const finalReason=reason==='Other'?otherReason:reason;
+  if(!finalReason){
+    document.getElementById('rrErr').textContent='Please select a reason.';
+    document.getElementById('rrErr').style.display='block';
+    return;
+  }
+  rrData.reason=finalReason;
+  rrStep=3; renderRRForm();
+}
+
+function rrBack(){
+  rrStep--; renderRRForm();
+}
+
+function cancelRR(){
+  showOrderDetail(currentOrder);
+}
+
+async function submitRR(){
+  const btn=document.getElementById('btnSubmitRR');
+  const errEl=document.getElementById('rrErr');
+  errEl.style.display='none';
+  const addr1=document.getElementById('addr1').value.trim();
+  const city=document.getElementById('city').value.trim();
+  const state=document.getElementById('state').value.trim();
+  const pincode=document.getElementById('pincode').value.trim();
+  if(!addr1||!city||!pincode){errEl.textContent='Please fill in the pickup address.';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Submitting…';
+  try{
+    const r=await fetch(`${API}/track/request`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        shopify_order_id: currentOrder.shopify_order_id,
+        order_name: currentOrder.order_name,
+        customer_email: currentOrder.customer_email,
+        customer_name: currentOrder.customer_name,
+        customer_phone: currentOrder.customer_phone,
+        customer_address1: addr1,
+        customer_city: city,
+        customer_state: state,
+        customer_pincode: pincode,
+        type: rrType,
+        items: rrData.items,
+        reason: rrData.reason,
+      }),
+    });
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'Submission failed.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';return;}
+    // Success
+    document.getElementById('rrSection').innerHTML=`
+      <div style="text-align:center;padding:24px 0">
+        <div style="font-size:36px;margin-bottom:12px">✅</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px">Request Submitted!</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Request ID: <strong>${d.request_id}</strong></div>
+        <div style="font-size:13px;color:var(--text-muted)">Our team will review and get back to you within 24–48 hours.</div>
+      </div>
+    `;
+  }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';}
+}
+
+// Pre-fill from URL params (e.g. from email link: /track?order=1234&contact=email)
+(function(){
+  const p=new URLSearchParams(window.location.search);
+  if(p.get('order')){
+    document.getElementById('inputOrder').value=p.get('order');
+    if(p.get('contact')) document.getElementById('inputContact').value=p.get('contact');
+    if(p.get('email'))   document.getElementById('inputContact').value=p.get('email');
+  }
+})();
+</script>
+</body>
+</html>

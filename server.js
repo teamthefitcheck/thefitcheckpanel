@@ -807,9 +807,211 @@ app.post('/admin/change-password', adminAuth, async (req, res) => {
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, brand: BRAND_NAME, shop: SHOP_DOMAIN }));
 
+// ─── Public Track Routes ──────────────────────────────────────────────────────
+function normalizePhone(p = '') {
+  const d = p.replace(/\D/g, '');
+  return d.startsWith('91') && d.length > 10 ? d.slice(2) : d;
+}
+
+function trackingUrlForCourier(courier, awb) {
+  const c = (courier || '').toLowerCase();
+  if (!awb) return null;
+  if (c.includes('delhivery'))  return `https://www.delhivery.com/track/package/${awb}`;
+  if (c.includes('shiprocket')) return `https://shiprocket.co/tracking/${awb}`;
+  if (c.includes('bluedart'))   return `https://www.bluedart.com/tracking?trackNo=${awb}`;
+  if (c.includes('dtdc'))       return `https://www.dtdc.in/tracking.asp?txtrknumber=${awb}`;
+  if (c.includes('xpressbee'))  return `https://www.xpressbees.com/shipment/tracking?awbNumber=${awb}`;
+  if (c.includes('ecom'))       return `https://ecomexpress.in/tracking/?awb_field=${awb}`;
+  if (c.includes('shadowfax'))  return `https://track.shadowfax.in/?awb=${awb}`;
+  if (c.includes('ekart'))      return `https://ekartlogistics.com/track?trackingId=${awb}`;
+  return null;
+}
+
+// GET /track/order?q=1234&contact=email_or_phone
+app.get('/track/order', async (req, res) => {
+  try {
+    const { q, contact } = req.query;
+    if (!q) return res.status(400).json({ error: 'Order number is required' });
+
+    const name = `#${q.replace(/^#/, '').trim()}`;
+    const data = await shopifyREST(`/orders.json?name=${encodeURIComponent(name)}&status=any&limit=5`);
+    const orders = data.orders || [];
+
+    const skipContact = !contact || contact.trim().toLowerCase() === 'na';
+    let order;
+    if (skipContact) {
+      order = orders[0];
+    } else {
+      const contactClean = contact.toLowerCase().trim();
+      const contactPhone = normalizePhone(contact);
+      order = orders.find(o => {
+        const oEmail = (o.email || o.contact_email || '').toLowerCase().trim();
+        const oPhone = normalizePhone(o.shipping_address?.phone || o.billing_address?.phone || o.phone || '');
+        return oEmail === contactClean || (contactPhone.length >= 10 && oPhone === contactPhone);
+      });
+    }
+
+    if (!order) return res.status(404).json({ error: 'Order not found. Please check your order number and contact details.' });
+
+    const sid = String(order.id);
+    const st  = await OS.get(sid) || {};
+
+    // AWB from our DB first, then Shopify fulfillments
+    let awb = st.awb || null;
+    let courier = st.courier || null;
+    let trackingUrl = st.tracking_url || null;
+    if (!awb) {
+      for (const f of (order.fulfillments || [])) {
+        if (f.tracking_number) { awb = f.tracking_number; courier = f.tracking_company || null; trackingUrl = f.tracking_url || null; break; }
+      }
+    }
+    if (!trackingUrl && awb) trackingUrl = trackingUrlForCourier(courier, awb);
+
+    const customerName = order.shipping_address
+      ? `${order.shipping_address.first_name || ''} ${order.shipping_address.last_name || ''}`.trim()
+      : order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '';
+
+    const existingRRs = await mdb.collection('return_requests').find(
+      { shopify_order_id: sid },
+      { projection: { _id: 0, request_id: 1, type: 1, status: 1, reason: 1, created_at: 1 } }
+    ).sort({ created_at: -1 }).toArray();
+
+    // Return/exchange settings from DB
+    const rrCfg = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, _id: 0 } }) || {};
+
+    res.json({
+      shopify_order_id: order.id,
+      order_name: order.name,
+      customer_name: customerName,
+      customer_email: order.email || '',
+      customer_phone: order.shipping_address?.phone || order.billing_address?.phone || order.phone || '',
+      customer_address: order.shipping_address || order.billing_address || null,
+      stage: st.stage || 'confirmed',
+      financial_status: order.financial_status,
+      fulfillment_status: order.fulfillment_status,
+      created_at: order.created_at,
+      awb, courier, tracking_url: trackingUrl,
+      items: (order.line_items || []).map(li => ({
+        line_item_id: li.id, title: li.title, variant_title: li.variant_title || '',
+        sku: li.sku, qty: li.quantity, price: li.price,
+      })),
+      return_requests: existingRRs,
+      exchange_enabled: rrCfg.exchange_enabled !== false,
+      return_enabled: rrCfg.return_enabled !== false,
+      return_window_days: rrCfg.return_window_days || 7,
+    });
+  } catch (e) { console.error('GET /track/order:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// GET /track/my-orders?contact=email_or_phone
+app.get('/track/my-orders', async (req, res) => {
+  try {
+    const { contact } = req.query;
+    if (!contact || contact.trim().length < 5) return res.status(400).json({ error: 'Please enter a valid email or phone number.' });
+
+    const contactClean = contact.trim().toLowerCase();
+    const contactPhone = normalizePhone(contact);
+    const isPhone = /^\d{7,}$/.test(contactPhone);
+
+    let allOrders = [];
+    let page = await shopifyREST('/orders.json?status=any&limit=250');
+    allOrders = allOrders.concat(page.orders || []);
+    for (let i = 0; i < 3 && (page.orders || []).length === 250; i++) {
+      const lastId = page.orders[page.orders.length - 1]?.id;
+      if (!lastId) break;
+      page = await shopifyREST(`/orders.json?status=any&limit=250&since_id=${lastId}`);
+      allOrders = allOrders.concat(page.orders || []);
+    }
+
+    const matched = allOrders.filter(o => {
+      const oEmail = (o.email || o.contact_email || '').toLowerCase().trim();
+      const oPhone = normalizePhone(o.shipping_address?.phone || o.billing_address?.phone || o.phone || '');
+      if (isPhone) return oPhone === contactPhone && contactPhone.length >= 7;
+      return oEmail === contactClean && contactClean.includes('@');
+    });
+
+    if (!matched.length) return res.status(404).json({ error: 'No orders found for this contact.' });
+
+    const ids = matched.map(o => String(o.id));
+    const stages = await mdb.collection('order_stage').find({ shopify_id: { $in: ids } }, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray();
+    const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
+
+    res.json({
+      orders: matched.slice(0, 20).map(o => ({
+        shopify_order_id: o.id,
+        order_name: o.name,
+        created_at: o.created_at,
+        stage: stageMap[String(o.id)] || 'confirmed',
+        financial_status: o.financial_status,
+        item_count: (o.line_items || []).reduce((s, li) => s + li.quantity, 0),
+        items_preview: (o.line_items || []).slice(0, 2).map(li => li.title).join(', '),
+        total: o.total_price,
+      })),
+    });
+  } catch (e) { console.error('GET /track/my-orders:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// POST /track/request — public submit return/exchange
+app.post('/track/request', async (req, res) => {
+  try {
+    const { shopify_order_id, order_name, customer_email, customer_name, customer_phone,
+            customer_address1, customer_address2, customer_city, customer_state, customer_pincode,
+            type, items, reason, image_urls } = req.body || {};
+
+    if (!shopify_order_id || !type || !items?.length || !reason)
+      return res.status(400).json({ error: 'Missing required fields' });
+    if (!['return', 'exchange'].includes(type))
+      return res.status(400).json({ error: "type must be 'return' or 'exchange'" });
+
+    const now = new Date();
+    const rand = String(Math.floor(Math.random() * 9000) + 1000);
+    const request_id = `RR-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${rand}`;
+
+    const doc = {
+      request_id,
+      shopify_order_id: String(shopify_order_id),
+      order_name: order_name || '',
+      customer_email: (customer_email || '').toLowerCase().trim(),
+      customer_name: customer_name || '',
+      customer_phone: customer_phone || '',
+      customer_address1: customer_address1 || '',
+      customer_address2: customer_address2 || '',
+      customer_city: customer_city || '',
+      customer_state: customer_state || '',
+      customer_pincode: customer_pincode || '',
+      type, items, reason,
+      status: 'pending',
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      admin_note: '',
+      image_urls: Array.isArray(image_urls) ? image_urls : [],
+    };
+
+    await mdb.collection('return_requests').insertOne(doc);
+
+    // Notify admin via email (optional, ignore errors)
+    try {
+      const cfg = await getSmtpConfig();
+      if (cfg) {
+        await sendEmail({
+          to: cfg.from || cfg.user,
+          subject: `New ${type} request — ${order_name} (${request_id})`,
+          html: emailBase(`<h2 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px">New ${type} request</h2>
+            <p style="font-size:14px;color:#555;">Order: <strong>${order_name}</strong> · ${customer_name} · ${customer_email}</p>
+            <p style="font-size:14px;color:#555;margin-top:8px;">Reason: ${reason}</p>
+            <p style="font-size:14px;color:#555;margin-top:8px;">Request ID: <strong>${request_id}</strong></p>`),
+        });
+      }
+    } catch {}
+
+    res.json({ success: true, request_id });
+  } catch (e) { console.error('POST /track/request:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ─── Serve HTML ───────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
 app.get('/staff', (req, res) => res.sendFile(path.join(__dirname, 'staff.html')));
+app.get('/track', (req, res) => res.sendFile(path.join(__dirname, 'track.html')));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 connectMongo().then(async () => {
