@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fit Check · Admin</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg-card:#141414;--bg-card2:#1c1c1c;
+  --border:#2a2a2a;--border2:#333;
+  --text:#f5f5f5;--text-muted:#888;--text-dim:#555;
+  --accent:#ffffff;--accent-dim:#d4d4d4;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--cyan:#06b6d4;--purple:#a78bfa;
+  --radius:10px;--radius-sm:6px;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:#555}
+select option{background:#1c1c1c}
+button{cursor:pointer;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;padding:8px 16px;transition:all .15s}
+.btn-primary{background:#fff;color:#000;padding:9px 20px}
+.btn-primary:hover{background:#e5e5e5}
+.btn-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--text-muted);padding:7px 14px}
+.btn-ghost:hover{border-color:#555;color:var(--text)}
+.btn-danger{background:transparent;border:1.5px solid #ef444455;color:var(--red);padding:7px 14px}
+.btn-danger:hover{background:#ef444411}
+.btn-sm{padding:5px 12px;font-size:12px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.badge-green{background:#22c55e22;color:var(--green)}
+.badge-red{background:#ef444422;color:var(--red)}
+.badge-yellow{background:#f59e0b22;color:var(--yellow)}
+.badge-cyan{background:#06b6d422;color:var(--cyan)}
+.badge-gray{background:#ffffff11;color:var(--text-muted)}
+.badge-purple{background:#a78bfa22;color:var(--purple)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#ffffff04}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;backdrop-filter:blur(4px)}
+.modal{background:var(--bg-card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:640px}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-body{padding:24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+label{font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px}
+.alert-error{background:#ef444415;border:1px solid #ef444430;color:var(--red)}
+.alert-success{background:#22c55e15;border:1px solid #22c55e30;color:var(--green)}
+.spin{display:inline-block;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+const API = '';
+
+/* ── Helpers ──────────────────────────────────────────────── */
+function token() { return localStorage.getItem('fc_admin_token') || ''; }
+function setToken(t) { localStorage.setItem('fc_admin_token', t); }
+function clearToken() { localStorage.removeItem('fc_admin_token'); localStorage.removeItem('fc_brand'); }
+function brand() { return localStorage.getItem('fc_brand') || 'Fit Check'; }
+
+async function apiFetch(url, opts = {}) {
+  const r = await fetch(API + url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}`, ...(opts.headers || {}) },
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
+function stageBadge(s) {
+  const map = {
+    delivered: ['badge-green','Delivered'], transit: ['badge-cyan','In Transit'],
+    pickup: ['badge-cyan','Picked Up'], rto: ['badge-red','RTO'],
+    confirmed: ['badge-yellow','Confirmed'], ready: ['badge-yellow','Ready'],
+    cancelled: ['badge-red','Cancelled'], new: ['badge-gray','New'], misc: ['badge-gray','Misc'],
+  };
+  const [cls, label] = map[s] || ['badge-gray', s || 'Unknown'];
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
+
+function fmt(date) {
+  if (!date) return '—';
+  return new Date(date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function fmtMoney(n) { return '₹' + parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+
+/* ── Login ────────────────────────────────────────────────── */
+function Login({ onLogin }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true); setErr('');
+    try {
+      const d = await apiFetch('/admin/login', { method: 'POST', body: JSON.stringify({ password: pw }) });
+      setToken(d.token);
+      localStorage.setItem('fc_brand', d.brand || 'Fit Check');
+      onLogin();
+    } catch(e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{width:'100%',maxWidth:360}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{display:'inline-flex',width:52,height:52,background:'#fff',borderRadius:14,alignItems:'center',justifyContent:'center',fontSize:26,marginBottom:14}}>✓</div>
+          <h1 style={{fontSize:22,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>{brand()}</h1>
+          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:4}}>Admin Panel · Powered by Arqontiq</p>
+        </div>
+        <div className="card">
+          <form onSubmit={submit}>
+            {err && <div className="alert alert-error">{err}</div>}
+            <div className="field">
+              <label>Admin Password</label>
+              <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Enter password" autoFocus/>
+            </div>
+            <button className="btn-primary" type="submit" disabled={loading} style={{width:'100%',marginTop:4}}>
+              {loading ? 'Signing in…' : 'Sign In →'}
+            </button>
+          </form>
+        </div>
+        <p style={{textAlign:'center',color:'var(--text-dim)',fontSize:11,marginTop:20}}>Staff login at <a href="/staff" style={{color:'var(--text-muted)'}}>/staff</a></p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+function Sidebar({ tab, setTab, onLogout }) {
+  const items = [
+    ['dashboard','📊','Dashboard'],
+    ['orders','📦','Orders'],
+    ['returns','↩','Returns'],
+    ['emails','📧','Emails'],
+    ['shipping','🚚','Shipping'],
+    ['settings','⚙','Settings'],
+  ];
+  return (
+    <div style={{width:220,minHeight:'100vh',background:'#0d0d0d',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{padding:'20px 18px 14px',borderBottom:'1px solid var(--border)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:32,height:32,background:'#fff',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:800,color:'#000',flexShrink:0}}>✓</div>
+          <div>
+            <div style={{fontWeight:800,fontSize:14,color:'#fff',letterSpacing:'-0.3px'}}>{brand()}</div>
+            <div style={{fontSize:10,color:'var(--text-dim)'}}>by Arqontiq</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{flex:1,padding:'10px 10px'}}>
+        {items.map(([id,icon,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{
+            width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,
+            background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',
+            border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===id?600:400,marginBottom:2,transition:'all .15s',textAlign:'left'
+          }}>
+            <span style={{fontSize:15,opacity:tab===id?1:.7}}>{icon}</span>{label}
+          </button>
+        ))}
+      </nav>
+      <div style={{padding:'12px 10px',borderTop:'1px solid var(--border)'}}>
+        <button onClick={onLogout} className="btn-ghost" style={{width:'100%',fontSize:12}}>Sign Out</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Dashboard ────────────────────────────────────────────── */
+function Dashboard() {
+  const [stats, setStats] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+    const to   = now.toISOString().slice(0,10);
+    Promise.all([
+      apiFetch(`/orders/stats?from=${from}&to=${to}`),
+      apiFetch(`/orders?from=${from}&to=${to}`),
+    ]).then(([s, o]) => { setStats(s); setOrders((o.orders||[]).slice(0,8)); }).finally(()=>setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{padding:40,color:'var(--text-muted)'}}>Loading…</div>;
+
+  const statCards = [
+    { label:'Total Orders', value: stats?.total||0, color:'#fff' },
+    { label:'Delivered', value: stats?.delivered||0, color:'var(--green)' },
+    { label:'In Transit', value: stats?.transit||0, color:'var(--cyan)' },
+    { label:'RTO', value: stats?.rto||0, color:'var(--red)' },
+    { label:'Pending', value: stats?.pending||0, color:'var(--yellow)' },
+    { label:'Revenue (MTD)', value: fmtMoney(stats?.revenue||0), color:'var(--purple)' },
+  ];
+
+  return (
+    <div>
+      <div style={{marginBottom:24}}>
+        <h2 style={{fontSize:20,fontWeight:700,color:'#fff'}}>Dashboard</h2>
+        <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Month-to-date overview</p>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:14,marginBottom:28}}>
+        {statCards.map(({label,value,color})=>(
+          <div key={label} className="card" style={{padding:18}}>
+            <div style={{fontSize:11,color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>{label}</div>
+            <div style={{fontSize:26,fontWeight:800,color}}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:'#fff'}}>Recent Orders</div>
+        <table>
+          <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Stage</th></tr></thead>
+          <tbody>
+            {orders.map(o=>(
+              <tr key={o.id}>
+                <td style={{fontWeight:600,fontFamily:'monospace'}}>{o.name}</td>
+                <td style={{color:'var(--text-muted)'}}>{o.customer?.firstName} {o.customer?.lastName}</td>
+                <td style={{color:'var(--text-muted)'}}>{fmt(o.created_at)}</td>
+                <td>{fmtMoney(o.total_price)}</td>
+                <td>{stageBadge(o._stage)}</td>
+              </tr>
+            ))}
+            {orders.length===0 && <tr><td colSpan={5} style={{textAlign:'center',color:'var(--text-muted)',padding:24}}>No orders this month</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Orders ───────────────────────────────────────────────── */
+function Orders() {
+  const [orders, setOrders]   = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ]             = useState('');
+  const [stage, setStage]     = useState('');
+  const [from, setFrom]       = useState('');
+  const [to, setTo]           = useState('');
+  const [modal, setModal]     = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (q)     params.set('q', q);
+      if (stage) params.set('stage', stage);
+      if (from)  params.set('from', from);
+      if (to)    params.set('to', to);
+      const d = await apiFetch(`/orders?${params}`);
+      setOrders(d.orders || []);
+    } finally { setLoading(false); }
+  }, [q, stage, from, to]);
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div><h2 style={{fontSize:20,fontWeight:700}}>Orders</h2><p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{orders.length} orders</p></div>
+        <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+      </div>
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+        <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
+        <select value={stage} onChange={e=>setStage(e.target.value)} style={{width:140}}>
+          <option value="">All Stages</option>
+          {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
+            <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+          ))}
+        </select>
+        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:145}}/>
+        <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:145}}/>
+        <button className="btn-primary btn-sm" onClick={load}>Search</button>
+      </div>
+      <div className="card" style={{padding:0,overflow:'auto'}}>
+        <table>
+          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th></tr></thead>
+          <tbody>
+            {orders.map(o=>(
+              <tr key={o.id}>
+                <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
+                <td style={{color:'var(--text-muted)'}}>{fmt(o.created_at)}</td>
+                <td>{o.customer?.firstName} {o.customer?.lastName}</td>
+                <td>{fmtMoney(o.total_price)}</td>
+                <td><span className={`badge ${o.financial_status==='paid'?'badge-green':o.financial_status?.includes('pending')?'badge-yellow':'badge-gray'}`}>{o.financial_status==='paid'?'Prepaid':'COD'}</span></td>
+                <td>{stageBadge(o._stage)}</td>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
+                <td><button className="btn-ghost btn-sm" onClick={()=>setModal(o)}>View</button></td>
+              </tr>
+            ))}
+            {!loading && orders.length===0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
+            {loading && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>Loading…</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && <OrderModal order={modal} onClose={()=>{setModal(null);load();}}/>}
+    </div>
+  );
+}
+
+function OrderModal({ order: initOrder, onClose }) {
+  const [order, setOrder]     = useState(initOrder);
+  const [stage, setStage]     = useState(initOrder._stage||'confirmed');
+  const [awb, setAwb]         = useState(initOrder._awb||'');
+  const [courier, setCourier] = useState(initOrder._courier||'');
+  const [partner, setPartner] = useState('delhivery');
+  const [shipMode, setShipMode] = useState('Surface');
+  const [weight, setWeight]   = useState('0.5');
+  const [saving, setSaving]   = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg]         = useState(null);
+
+  const saveStage = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch(`/admin/orders/${order.id}/stage`, { method:'PUT', body: JSON.stringify({ stage, awb, courier }) });
+      setMsg({ type:'success', text:'Stage updated!' });
+    } catch(e) { setMsg({ type:'error', text: e.message }); }
+    setSaving(false);
+  };
+
+  const createShipment = async () => {
+    setCreating(true); setMsg(null);
+    try {
+      const d = await apiFetch(`/admin/orders/${order.id}/create-shipment`, { method:'POST', body: JSON.stringify({ partner, shipMode, weight: parseFloat(weight)||0.5, length:15, breadth:12, height:8 }) });
+      setMsg({ type:'success', text:`Shipment created! AWB: ${d.awb}` });
+      setAwb(d.awb); setCourier(d.courier); setStage('pickup');
+    } catch(e) { setMsg({ type:'error', text: e.message }); }
+    setCreating(false);
+  };
+
+  const addr = order.shipping_address || {};
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div>
+            <div style={{fontWeight:700,fontSize:16}}>{order.name}</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{fmt(order.created_at)} · {order.customer?.firstName} {order.customer?.lastName}</div>
+          </div>
+          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{maxHeight:'75vh',overflowY:'auto'}}>
+          {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+
+          {/* Items */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Items</div>
+            {(order.line_items||[]).map((li,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+                <span>{li.title} {li.quantity > 1 ? `×${li.quantity}` : ''}</span>
+                <span style={{color:'var(--text-muted)'}}>{fmtMoney(li.price * li.quantity)}</span>
+              </div>
+            ))}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontWeight:700}}>
+              <span>Total</span><span>{fmtMoney(order.total_price)}</span>
+            </div>
+          </div>
+
+          {/* Address */}
+          {addr.address1 && (
+            <div style={{marginBottom:18,background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px',fontSize:12,color:'var(--text-muted)'}}>
+              <div style={{fontWeight:700,color:'var(--text)',marginBottom:4}}>📍 Shipping Address</div>
+              <div>{addr.name}</div>
+              <div>{addr.address1}{addr.address2?', '+addr.address2:''}</div>
+              <div>{addr.city}, {addr.province} {addr.zip}</div>
+              {addr.phone && <div>{addr.phone}</div>}
+            </div>
+          )}
+
+          {/* Stage */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Update Stage</div>
+            <div className="grid-2" style={{marginBottom:10}}>
+              <div className="field">
+                <label>Stage</label>
+                <select value={stage} onChange={e=>setStage(e.target.value)}>
+                  {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
+                    <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>AWB / Tracking</label>
+                <input value={awb} onChange={e=>setAwb(e.target.value)} placeholder="Tracking number"/>
+              </div>
+            </div>
+            <div className="field" style={{marginBottom:10}}>
+              <label>Courier</label>
+              <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="e.g. Delhivery"/>
+            </div>
+            <button className="btn-primary btn-sm" onClick={saveStage} disabled={saving}>{saving?'Saving…':'Save Stage'}</button>
+          </div>
+
+          {/* Create Shipment */}
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Create Shipment</div>
+            <div className="grid-2" style={{marginBottom:10}}>
+              <div className="field">
+                <label>Partner</label>
+                <select value={partner} onChange={e=>setPartner(e.target.value)}>
+                  <option value="delhivery">Delhivery</option>
+                  <option value="shiprocket">Shiprocket</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Mode</label>
+                <select value={shipMode} onChange={e=>setShipMode(e.target.value)}>
+                  <option value="Surface">Surface</option>
+                  <option value="Express">Express</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Weight (kg)</label>
+                <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} step="0.1" min="0.1"/>
+              </div>
+            </div>
+            <button className="btn-ghost btn-sm" onClick={createShipment} disabled={creating}>
+              {creating ? <><span className="spin">↻</span> Creating…</> : '🚚 Create Shipment'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Returns ──────────────────────────────────────────────── */
+function Returns() {
+  const [rrs, setRrs]         = useState([]);
+  const [tab, setTab]         = useState('pending');
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal]     = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await apiFetch(`/admin/returns?status=${tab}`); setRrs(d||[]); } finally { setLoading(false); }
+  };
+
+  useEffect(()=>{ load(); }, [tab]);
+
+  const tabs = ['pending','approved','rejected','completed'];
+
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <h2 style={{fontSize:20,fontWeight:700}}>Returns & Exchanges</h2>
+        <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{rrs.length} requests</p>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:16}}>
+        {tabs.map(t=>(
+          <button key={t} onClick={()=>setTab(t)} style={{
+            padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),
+            background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',
+            fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'
+          }}>{t}</button>
+        ))}
+      </div>
+      <div className="card" style={{padding:0,overflow:'auto'}}>
+        <table>
+          <thead><tr><th>ID</th><th>Order</th><th>Type</th><th>Customer</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {rrs.map(rr=>(
+              <tr key={rr.request_id}>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{rr.request_id}</td>
+                <td style={{fontWeight:600}}>{rr.order_name||'—'}</td>
+                <td><span className={`badge ${rr.type==='exchange'?'badge-purple':'badge-cyan'}`}>{rr.type||'return'}</span></td>
+                <td style={{color:'var(--text-muted)'}}>{rr.customer_name||'—'}</td>
+                <td style={{color:'var(--text-muted)'}}>{fmt(rr.created_at)}</td>
+                <td>{stageBadge(rr.status)}</td>
+                <td><button className="btn-ghost btn-sm" onClick={()=>setModal(rr)}>Manage</button></td>
+              </tr>
+            ))}
+            {!loading && rrs.length===0 && <tr><td colSpan={7} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No {tab} requests</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && <RRModal rr={modal} onClose={()=>{setModal(null);load();}}/>}
+    </div>
+  );
+}
+
+function RRModal({ rr: initRr, onClose }) {
+  const [rr, setRr]           = useState(initRr);
+  const [status, setStatus]   = useState(initRr.status||'pending');
+  const [note, setNote]       = useState(initRr.admin_note||'');
+  const [partner, setPartner] = useState('delhivery');
+  const [saving, setSaving]   = useState(false);
+  const [creating, setCreating] = useState('');
+  const [msg, setMsg]         = useState(null);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch(`/admin/returns/${rr.request_id}`, { method:'PUT', body: JSON.stringify({ status, admin_note: note }) });
+      setMsg({ type:'success', text:'Saved!' });
+    } catch(e) { setMsg({ type:'error', text: e.message }); }
+    setSaving(false);
+  };
+
+  const createShipment = async (direction) => {
+    setCreating(direction); setMsg(null);
+    try {
+      const d = await apiFetch(`/admin/returns/${rr.request_id}/create-shipment`, { method:'POST', body: JSON.stringify({ direction, partner, weight:0.5, length:15, breadth:12, height:8 }) });
+      setMsg({ type:'success', text:`${direction} shipment created! AWB: ${d.awb}` });
+    } catch(e) { setMsg({ type:'error', text: e.message }); }
+    setCreating('');
+  };
+
+  const removeShipment = async (dir) => {
+    if (!confirm(`Remove ${dir} shipment?`)) return;
+    try {
+      await apiFetch(`/admin/returns/${rr.request_id}/shipment/${dir}`, { method:'DELETE' });
+      setMsg({ type:'success', text:'Removed.' });
+    } catch(e) { setMsg({ type:'error', text: e.message }); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div>
+            <div style={{fontWeight:700,fontSize:15}}>{rr.request_id}</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{rr.type||'Return'} · {rr.order_name||''}</div>
+          </div>
+          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{maxHeight:'75vh',overflowY:'auto'}}>
+          {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+          <div className="grid-2" style={{marginBottom:14}}>
+            <div className="field">
+              <label>Status</label>
+              <select value={status} onChange={e=>setStatus(e.target.value)}>
+                {['pending','approved','rejected','in_progress','completed'].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Reason</label>
+              <input value={rr.reason||''} readOnly style={{opacity:.6}}/>
+            </div>
+          </div>
+          <div className="field" style={{marginBottom:14}}>
+            <label>Admin Note</label>
+            <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2}/>
+          </div>
+          <button className="btn-primary btn-sm" onClick={save} disabled={saving} style={{marginBottom:18}}>{saving?'Saving…':'Save'}</button>
+
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Shipments</div>
+            <div className="field" style={{marginBottom:10}}>
+              <label>Partner</label>
+              <select value={partner} onChange={e=>setPartner(e.target.value)} style={{width:160}}>
+                <option value="delhivery">Delhivery</option>
+                <option value="shiprocket">Shiprocket</option>
+              </select>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {rr.reverse_shipment
+                ? <div style={{fontSize:12,color:'var(--cyan)',padding:'6px 12px',border:'1px solid var(--cyan)33',borderRadius:6}}>↩ {rr.reverse_shipment.awb} <button onClick={()=>removeShipment('reverse')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:11,marginLeft:4}}>✕</button></div>
+                : <button className="btn-ghost btn-sm" onClick={()=>createShipment('reverse')} disabled={!!creating}>{creating==='reverse'?'Creating…':'↩ Create Reverse Pickup'}</button>
+              }
+              {rr.type==='exchange' && (
+                rr.forward_shipment
+                  ? <div style={{fontSize:12,color:'var(--green)',padding:'6px 12px',border:'1px solid var(--green)33',borderRadius:6}}>→ {rr.forward_shipment.awb} <button onClick={()=>removeShipment('forward')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:11,marginLeft:4}}>✕</button></div>
+                  : <button className="btn-ghost btn-sm" onClick={()=>createShipment('forward')} disabled={!!creating}>{creating==='forward'?'Creating…':'→ Create Forward Dispatch'}</button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Emails ───────────────────────────────────────────────── */
+function Emails() {
+  const [cfg, setCfg]   = useState(null);
+  const [form, setForm] = useState({ host:'', port:'587', user:'', pass:'', from:'' });
+  const [testTo, setTestTo]       = useState('');
+  const [testTemplate, setTmpl]   = useState('shipped');
+  const [logs, setLogs]           = useState([]);
+  const [saving, setSaving]       = useState(false);
+  const [testing, setTesting]     = useState(false);
+  const [msg, setMsg]             = useState(null);
+  const [tab, setTab]             = useState('config');
+
+  useEffect(()=>{
+    apiFetch('/admin/email-config').then(d=>{ if(d){ setCfg(d); setForm({host:d.host||'',port:d.port||587,user:d.user||'',pass:'',from:d.from||''}); } });
+    apiFetch('/admin/email-logs').then(d=>setLogs(d||[]));
+  },[]);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try { await apiFetch('/admin/email-config', { method:'POST', body: JSON.stringify(form) }); setMsg({type:'success',text:'Email config saved!'}); } catch(e) { setMsg({type:'error',text:e.message}); }
+    setSaving(false);
+  };
+
+  const sendTest = async () => {
+    if (!testTo) return;
+    setTesting(true); setMsg(null);
+    try { await apiFetch('/admin/email/test', { method:'POST', body: JSON.stringify({ to: testTo, template: testTemplate }) }); setMsg({type:'success',text:`Test email sent to ${testTo}`}); } catch(e) { setMsg({type:'error',text:e.message}); }
+    setTesting(false);
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Emails</h2></div>
+      <div style={{display:'flex',gap:6,marginBottom:18}}>
+        {['config','test','logs'].map(t=>(
+          <button key={t} onClick={()=>setTab(t)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>{t==='config'?'SMTP Config':t==='test'?'Send Test':'Email Logs'}</button>
+        ))}
+      </div>
+      {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+
+      {tab==='config' && (
+        <div className="card" style={{maxWidth:500}}>
+          <div style={{fontWeight:700,marginBottom:16}}>SMTP Configuration</div>
+          {[['Host','host','smtp.gmail.com'],['Port','port','587'],['Username','user','you@gmail.com'],['Password','pass',''],['From Address','from','noreply@fitcheck.com']].map(([label,key,ph])=>(
+            <div className="field" key={key}>
+              <label>{label}</label>
+              <input type={key==='pass'?'password':'text'} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={ph}/>
+            </div>
+          ))}
+          <button className="btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save Config'}</button>
+        </div>
+      )}
+
+      {tab==='test' && (
+        <div className="card" style={{maxWidth:440}}>
+          <div style={{fontWeight:700,marginBottom:16}}>Send Test Email</div>
+          <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
+          <div className="field">
+            <label>Template</label>
+            <select value={testTemplate} onChange={e=>setTmpl(e.target.value)}>
+              <option value="shipped">Order Shipped</option>
+              <option value="transit">In Transit</option>
+              <option value="ofd">Out for Delivery</option>
+              <option value="delivered">Delivered</option>
+            </select>
+          </div>
+          <button className="btn-primary" onClick={sendTest} disabled={testing}>{testing?'Sending…':'Send Test Email'}</button>
+        </div>
+      )}
+
+      {tab==='logs' && (
+        <div className="card" style={{padding:0,overflow:'auto'}}>
+          <table>
+            <thead><tr><th>To</th><th>Subject</th><th>Sent At</th></tr></thead>
+            <tbody>
+              {logs.map((l,i)=>(
+                <tr key={i}>
+                  <td style={{color:'var(--text-muted)'}}>{l.to}</td>
+                  <td>{l.subject}</td>
+                  <td style={{color:'var(--text-muted)'}}>{fmt(l.sent_at)}</td>
+                </tr>
+              ))}
+              {logs.length===0 && <tr><td colSpan={3} style={{textAlign:'center',color:'var(--text-muted)',padding:24}}>No emails sent yet</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Shipping ─────────────────────────────────────────────── */
+function Shipping() {
+  const [creds, setCreds]   = useState([]);
+  const [partner, setPartner] = useState('delhivery');
+  const [form, setForm]     = useState({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg]       = useState(null);
+
+  const delhiveryFields = [
+    ['API Token','api_token','Your Delhivery API token'],
+    ['Pickup Location Name','pickup_location','Warehouse name on Delhivery'],
+    ['Company Name','company_name','Your brand/company name'],
+    ['Return Address','return_address','Warehouse address'],
+    ['Return City','return_city','City'],
+    ['Return State','return_state','State'],
+    ['Return Pincode','return_pincode','Pincode'],
+    ['Return Phone','return_phone','Contact number'],
+  ];
+  const shiprocketFields = [
+    ['Email','email','Shiprocket account email'],
+    ['Password','password','Shiprocket account password'],
+    ['Pickup Location','pickup_location','Pickup location name'],
+    ['Company Name','company_name','Your brand name'],
+  ];
+  const fields = partner === 'delhivery' ? delhiveryFields : shiprocketFields;
+
+  useEffect(()=>{ apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[])); },[]);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch('/admin/shipping-creds', { method:'POST', body: JSON.stringify({ partner, credentials: form }) });
+      setMsg({type:'success',text:`${partner} credentials saved!`});
+      apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[]));
+    } catch(e) { setMsg({type:'error',text:e.message}); }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Shipping</h2></div>
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}}>
+        <div className="card" style={{maxWidth:460,flex:'1 1 340px'}}>
+          <div style={{fontWeight:700,marginBottom:16}}>Connect Courier Partner</div>
+          {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+          <div className="field">
+            <label>Partner</label>
+            <select value={partner} onChange={e=>{setPartner(e.target.value);setForm({});}}>
+              <option value="delhivery">Delhivery</option>
+              <option value="shiprocket">Shiprocket</option>
+            </select>
+          </div>
+          {fields.map(([label,key,ph])=>(
+            <div className="field" key={key}>
+              <label>{label}</label>
+              <input type={key.includes('password')||key.includes('token')?'password':'text'} value={form[key]||''} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={ph}/>
+            </div>
+          ))}
+          <button className="btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save'}</button>
+        </div>
+        <div style={{flex:'1 1 220px'}}>
+          <div className="card">
+            <div style={{fontWeight:700,marginBottom:12}}>Connected Partners</div>
+            {creds.length===0 && <div style={{color:'var(--text-muted)',fontSize:13}}>None connected yet</div>}
+            {creds.map(c=>(
+              <div key={c.partner} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:13,textTransform:'capitalize'}}>{c.partner}</div>
+                  <div style={{fontSize:11,color:'var(--green)'}}>● Connected</div>
+                </div>
+                <button className="btn-danger btn-sm" onClick={async()=>{await apiFetch(`/admin/shipping-creds/${c.partner}`,{method:'DELETE'});apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[]));}}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Settings ─────────────────────────────────────────────── */
+function Settings() {
+  const [staff, setStaff]   = useState([]);
+  const [newUser, setNewUser] = useState({ username:'', name:'', password:'' });
+  const [newPw, setNewPw]   = useState('');
+  const [tab, setTab]       = useState('staff');
+  const [msg, setMsg]       = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(()=>{ apiFetch('/admin/staff').then(d=>setStaff(d||[])); },[]);
+
+  const addStaff = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch('/admin/staff', { method:'POST', body: JSON.stringify(newUser) });
+      setMsg({type:'success',text:'Staff added!'}); setNewUser({username:'',name:'',password:''});
+      apiFetch('/admin/staff').then(d=>setStaff(d||[]));
+    } catch(e) { setMsg({type:'error',text:e.message}); }
+    setSaving(false);
+  };
+
+  const removeStaff = async (username) => {
+    if (!confirm(`Remove ${username}?`)) return;
+    await apiFetch(`/admin/staff/${username}`, { method:'DELETE' });
+    apiFetch('/admin/staff').then(d=>setStaff(d||[]));
+  };
+
+  const changePw = async () => {
+    if (newPw.length < 6) { setMsg({type:'error',text:'Password too short'}); return; }
+    setSaving(true);
+    try {
+      const d = await apiFetch('/admin/change-password', { method:'POST', body: JSON.stringify({ newPassword: newPw }) });
+      setMsg({type:'success',text:d.message||'Password updated!'}); setNewPw('');
+    } catch(e) { setMsg({type:'error',text:e.message}); }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Settings</h2></div>
+      <div style={{display:'flex',gap:6,marginBottom:18}}>
+        {['staff','security','store'].map(t=>(
+          <button key={t} onClick={()=>setTab(t)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>{t==='staff'?'Staff Accounts':t==='security'?'Security':'Store Info'}</button>
+        ))}
+      </div>
+      {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+
+      {tab==='staff' && (
+        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}}>
+          <div className="card" style={{maxWidth:380,flex:'1 1 300px'}}>
+            <div style={{fontWeight:700,marginBottom:14}}>Add Staff Account</div>
+            {[['Username','username','johndoe'],['Full Name','name','John Doe'],['Password','password','']].map(([label,key,ph])=>(
+              <div className="field" key={key}>
+                <label>{label}</label>
+                <input type={key==='password'?'password':'text'} value={newUser[key]} onChange={e=>setNewUser({...newUser,[key]:e.target.value})} placeholder={ph}/>
+              </div>
+            ))}
+            <button className="btn-primary" onClick={addStaff} disabled={saving}>{saving?'Adding…':'Add Staff'}</button>
+          </div>
+          <div className="card" style={{flex:'1 1 260px'}}>
+            <div style={{fontWeight:700,marginBottom:12}}>Staff Accounts</div>
+            {staff.length===0 && <div style={{color:'var(--text-muted)',fontSize:13}}>No staff added yet</div>}
+            {staff.map(s=>(
+              <div key={s.username} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                <div><div style={{fontWeight:600,fontSize:13}}>{s.name||s.username}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>@{s.username}</div></div>
+                <button className="btn-danger btn-sm" onClick={()=>removeStaff(s.username)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab==='security' && (
+        <div className="card" style={{maxWidth:380}}>
+          <div style={{fontWeight:700,marginBottom:14}}>Change Admin Password</div>
+          <div className="field"><label>New Password</label><input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Min 6 characters"/></div>
+          <button className="btn-primary" onClick={changePw} disabled={saving}>{saving?'Updating…':'Update Password'}</button>
+          <p style={{fontSize:11,color:'var(--text-muted)',marginTop:10}}>⚠ Also update ADMIN_PASSWORD in your Render environment variables to persist after restart.</p>
+        </div>
+      )}
+
+      {tab==='store' && (
+        <div className="card" style={{maxWidth:440}}>
+          <div style={{fontWeight:700,marginBottom:14}}>Store Setup</div>
+          <div style={{marginBottom:12,padding:'12px 14px',background:'var(--bg-card2)',borderRadius:8,fontSize:13}}>
+            <div style={{fontWeight:600,marginBottom:4}}>Connect Shopify Store</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:10}}>Visit the install URL to connect or reconnect your Shopify store.</div>
+            <a href="/install" style={{color:'var(--cyan)',fontSize:13,fontWeight:600}}>Go to /install →</a>
+          </div>
+          <div style={{fontSize:12,color:'var(--text-muted)'}}>Add these URLs to your Shopify app redirect whitelist:<br/>
+            <code style={{fontFamily:'monospace',color:'var(--accent-dim)'}}>{window.location.origin}/shopify/callback</code>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── App Shell ────────────────────────────────────────────── */
+function App() {
+  const [authed, setAuthed] = useState(!!token());
+  const [tab, setTab]       = useState('dashboard');
+
+  const logout = async () => {
+    try { await apiFetch('/admin/logout', { method:'POST' }); } catch {}
+    clearToken(); setAuthed(false);
+  };
+
+  if (!authed) return <Login onLogin={()=>setAuthed(true)}/>;
+
+  const views = { dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>, emails: <Emails/>, shipping: <Shipping/>, settings: <Settings/> };
+
+  return (
+    <div style={{display:'flex',minHeight:'100vh'}}>
+      <Sidebar tab={tab} setTab={setTab} onLogout={logout}/>
+      <main style={{flex:1,overflow:'auto'}}>
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 28px'}}>
+          {views[tab] || <Dashboard/>}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

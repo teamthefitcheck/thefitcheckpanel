@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fit Check · Warehouse</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg-card:#141414;--bg-card2:#1c1c1c;
+  --border:#2a2a2a;--border2:#333;
+  --text:#f5f5f5;--text-muted:#888;--text-dim:#555;
+  --accent:#ffffff;--accent-dim:#d4d4d4;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--cyan:#06b6d4;
+  --radius:10px;--radius-sm:6px;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:#555}
+button{cursor:pointer;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;padding:8px 16px;transition:all .15s}
+.btn-primary{background:#fff;color:#000;padding:9px 20px}
+.btn-primary:hover{background:#e5e5e5}
+.btn-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--text-muted);padding:7px 14px}
+.btn-ghost:hover{border-color:#555;color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.badge-green{background:#22c55e22;color:var(--green)}
+.badge-red{background:#ef444422;color:var(--red)}
+.badge-yellow{background:#f59e0b22;color:var(--yellow)}
+.badge-cyan{background:#06b6d422;color:var(--cyan)}
+.badge-gray{background:#ffffff11;color:var(--text-muted)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#ffffff04}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.modal{background:var(--bg-card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column}
+.modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-body{padding:22px;overflow-y:auto;flex:1}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+label{font-size:12px;font-weight:600;color:var(--text-muted)}
+.alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px}
+.alert-error{background:#ef444415;border:1px solid #ef444430;color:var(--red)}
+.alert-success{background:#22c55e15;border:1px solid #22c55e30;color:var(--green)}
+.spin{display:inline-block;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+const API = '';
+
+function token()    { return localStorage.getItem('fc_staff_token') || ''; }
+function setToken(t){ localStorage.setItem('fc_staff_token', t); }
+function clearToken(){ localStorage.removeItem('fc_staff_token'); localStorage.removeItem('fc_staff_name'); }
+function staffName(){ return localStorage.getItem('fc_staff_name') || 'Staff'; }
+
+async function apiFetch(url, opts = {}) {
+  const r = await fetch(API + url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}`, ...(opts.headers||{}) },
+  });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
+function stageBadge(s) {
+  const map = { delivered:['badge-green','Delivered'], transit:['badge-cyan','In Transit'], pickup:['badge-cyan','Picked Up'], rto:['badge-red','RTO'], confirmed:['badge-yellow','Confirmed'], ready:['badge-yellow','Ready'], cancelled:['badge-red','Cancelled'], new:['badge-gray','New'] };
+  const [cls, label] = map[s] || ['badge-gray', s||'Unknown'];
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
+function fmt(d){ return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—'; }
+function fmtMoney(n){ return '₹'+parseFloat(n||0).toLocaleString('en-IN'); }
+
+/* ── Login ────────────────────────────────────────────────── */
+function Login({ onLogin }) {
+  const [form, setForm] = useState({ username:'', password:'' });
+  const [err, setErr]   = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault(); setLoading(true); setErr('');
+    try {
+      const d = await apiFetch('/staff/login', { method:'POST', body: JSON.stringify(form) });
+      setToken(d.token); localStorage.setItem('fc_staff_name', d.name||d.username);
+      onLogin();
+    } catch(e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{width:'100%',maxWidth:340}}>
+        <div style={{textAlign:'center',marginBottom:28}}>
+          <div style={{display:'inline-flex',width:48,height:48,background:'#fff',borderRadius:12,alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:800,color:'#000',marginBottom:12}}>✓</div>
+          <h1 style={{fontSize:20,fontWeight:800,color:'#fff'}}>Fit Check · Warehouse</h1>
+          <p style={{color:'var(--text-muted)',fontSize:12,marginTop:3}}>Staff Portal</p>
+        </div>
+        <div className="card">
+          <form onSubmit={submit}>
+            {err && <div className="alert alert-error">{err}</div>}
+            <div className="field"><label>Username</label><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="your.username" autoFocus/></div>
+            <div className="field"><label>Password</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="••••••••"/></div>
+            <button className="btn-primary" type="submit" disabled={loading} style={{width:'100%',marginTop:4}}>{loading?'Signing in…':'Sign In'}</button>
+          </form>
+        </div>
+        <p style={{textAlign:'center',color:'var(--text-dim)',fontSize:11,marginTop:16}}>Admin panel at <a href="/admin.html" style={{color:'var(--text-muted)'}}>/admin.html</a></p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+function Header({ tab, setTab, onLogout }) {
+  const tabs = [['orders','📦 Orders'],['returns','↩ Returns']];
+  return (
+    <div style={{background:'#0d0d0d',borderBottom:'1px solid var(--border)',padding:'0 20px',display:'flex',alignItems:'center',justifyContent:'space-between',height:54}}>
+      <div style={{display:'flex',alignItems:'center',gap:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:28,height:28,background:'#fff',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:800,color:'#000'}}>✓</div>
+          <span style={{fontWeight:700,fontSize:14,color:'#fff'}}>Fit Check</span>
+          <span style={{fontSize:11,color:'var(--text-dim)',marginLeft:2}}>Warehouse</span>
+        </div>
+        <div style={{display:'flex',gap:2}}>
+          {tabs.map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{padding:'5px 12px',borderRadius:6,border:'none',background:tab===id?'#ffffff18':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:tab===id?600:400,cursor:'pointer'}}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <span style={{fontSize:12,color:'var(--text-muted)'}}>👤 {staffName()}</span>
+        <button className="btn-ghost btn-sm" onClick={onLogout} style={{fontSize:11}}>Sign Out</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Orders ───────────────────────────────────────────────── */
+function Orders() {
+  const [orders, setOrders]   = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal]     = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await apiFetch('/staff/orders'); setOrders(d.orders||[]); } finally { setLoading(false); }
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  const stageLabel = { confirmed:'Needs packing', ready:'Ready to pickup', pickup:'Picked up', transit:'In transit' };
+
+  return (
+    <div style={{padding:'24px 24px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <h2 style={{fontSize:18,fontWeight:700}}>Active Orders</h2>
+          <p style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{orders.length} orders to action</p>
+        </div>
+        <button className="btn-ghost btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+      </div>
+      <div className="card" style={{padding:0,overflow:'auto'}}>
+        <table>
+          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Amount</th><th>Stage</th><th>AWB</th><th></th></tr></thead>
+          <tbody>
+            {orders.map(o=>(
+              <tr key={o.id}>
+                <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
+                <td style={{color:'var(--text-muted)',fontSize:11}}>{fmt(o.created_at)}</td>
+                <td style={{color:'var(--text-muted)'}}>{o.customer?.firstName} {o.customer?.lastName}</td>
+                <td style={{color:'var(--text-muted)',fontSize:12}}>{(o.line_items||[]).slice(0,2).map(li=>li.title).join(', ').slice(0,35)}{(o.line_items||[]).length>2?'…':''}</td>
+                <td>{fmtMoney(o.total_price)}</td>
+                <td>
+                  <div>{stageBadge(o._stage)}</div>
+                  {stageLabel[o._stage] && <div style={{fontSize:10,color:'var(--text-dim)',marginTop:2}}>{stageLabel[o._stage]}</div>}
+                </td>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
+                <td><button className="btn-ghost btn-sm" onClick={()=>setModal(o)}>Action</button></td>
+              </tr>
+            ))}
+            {!loading && orders.length===0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No active orders 🎉</td></tr>}
+            {loading && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:24}}>Loading…</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && <OrderActionModal order={modal} onClose={()=>{setModal(null);load();}}/>}
+    </div>
+  );
+}
+
+function OrderActionModal({ order, onClose }) {
+  const [stage, setStage]   = useState(order._stage||'ready');
+  const [awb, setAwb]       = useState(order._awb||'');
+  const [courier, setCourier] = useState(order._courier||'');
+  const [partner, setPartner] = useState('delhivery');
+  const [weight, setWeight] = useState('0.5');
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg]       = useState(null);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch(`/staff/orders/${order.id}/stage`, { method:'PUT', body: JSON.stringify({ stage, awb, courier }) });
+      setMsg({type:'success',text:'Updated!'});
+    } catch(e) { setMsg({type:'error',text:e.message}); }
+    setSaving(false);
+  };
+
+  const createShipment = async () => {
+    setCreating(true); setMsg(null);
+    try {
+      const d = await apiFetch(`/staff/orders/${order.id}/create-shipment`, { method:'POST', body: JSON.stringify({ partner, weight: parseFloat(weight)||0.5, length:15, breadth:12, height:8 }) });
+      setMsg({type:'success',text:`AWB: ${d.awb}`}); setAwb(d.awb); setCourier(d.courier); setStage('pickup');
+    } catch(e) { setMsg({type:'error',text:e.message}); }
+    setCreating(false);
+  };
+
+  const addr = order.shipping_address || {};
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div>
+            <div style={{fontWeight:700,fontSize:15}}>{order.name}</div>
+            <div style={{color:'var(--text-muted)',fontSize:12}}>{order.customer?.firstName} {order.customer?.lastName}</div>
+          </div>
+          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+
+          {/* Items */}
+          <div style={{marginBottom:16}}>
+            {(order.line_items||[]).map((li,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+                <span>{li.title}{li.quantity>1?` ×${li.quantity}`:''}</span>
+                <span style={{color:'var(--text-muted)',fontFamily:'monospace',fontSize:12}}>{li.sku||''}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Address */}
+          {addr.address1 && (
+            <div style={{background:'var(--bg-card2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--text-muted)',marginBottom:16}}>
+              <div style={{fontWeight:600,color:'var(--text)',marginBottom:3}}>📍 Deliver to</div>
+              <div>{addr.name} · {addr.phone}</div>
+              <div>{addr.address1}{addr.address2?', '+addr.address2:''}, {addr.city} {addr.zip}</div>
+            </div>
+          )}
+
+          {/* Stage update */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Update Stage</div>
+            <select value={stage} onChange={e=>setStage(e.target.value)} style={{marginBottom:8}}>
+              <option value="ready">Ready to Pickup</option>
+              <option value="pickup">Picked Up</option>
+              <option value="transit">In Transit</option>
+            </select>
+            <input value={awb} onChange={e=>setAwb(e.target.value)} placeholder="AWB / Tracking number" style={{marginBottom:8}}/>
+            <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier name" style={{marginBottom:10}}/>
+            <button className="btn-primary btn-sm" onClick={save} disabled={saving}>{saving?'Saving…':'Save Stage'}</button>
+          </div>
+
+          {/* Create Shipment */}
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Auto-Create Shipment</div>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <select value={partner} onChange={e=>setPartner(e.target.value)} style={{flex:1}}>
+                <option value="delhivery">Delhivery</option>
+                <option value="shiprocket">Shiprocket</option>
+              </select>
+              <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="kg" style={{width:80}} step="0.1" min="0.1"/>
+            </div>
+            <button className="btn-ghost btn-sm" onClick={createShipment} disabled={creating}>
+              {creating ? <><span className="spin">↻</span> Creating…</> : '🚚 Create Shipment'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Returns ──────────────────────────────────────────────── */
+function Returns() {
+  const [rrs, setRrs]         = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal]     = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await apiFetch('/staff/returns'); setRrs(d||[]); } finally { setLoading(false); }
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  return (
+    <div style={{padding:'24px 24px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div><h2 style={{fontSize:18,fontWeight:700}}>Returns & Exchanges</h2><p style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{rrs.length} active requests</p></div>
+        <button className="btn-ghost btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+      </div>
+      <div className="card" style={{padding:0,overflow:'auto'}}>
+        <table>
+          <thead><tr><th>ID</th><th>Order</th><th>Type</th><th>Customer</th><th>Status</th><th>Reverse AWB</th><th></th></tr></thead>
+          <tbody>
+            {rrs.map(rr=>(
+              <tr key={rr.request_id}>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{rr.request_id}</td>
+                <td style={{fontWeight:600}}>{rr.order_name||'—'}</td>
+                <td><span className={`badge ${rr.type==='exchange'?'badge-cyan':'badge-yellow'}`}>{rr.type||'return'}</span></td>
+                <td style={{color:'var(--text-muted)'}}>{rr.customer_name||'—'}</td>
+                <td><span className="badge badge-yellow">{rr.status}</span></td>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{rr.reverse_shipment?.awb||'—'}</td>
+                <td><button className="btn-ghost btn-sm" onClick={()=>setModal(rr)}>View</button></td>
+              </tr>
+            ))}
+            {!loading && rrs.length===0 && <tr><td colSpan={7} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No active return requests</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && <ReturnViewModal rr={modal} onClose={()=>{setModal(null);load();}}/>}
+    </div>
+  );
+}
+
+function ReturnViewModal({ rr, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div><div style={{fontWeight:700}}>{rr.request_id}</div><div style={{color:'var(--text-muted)',fontSize:12}}>{rr.type} · {rr.order_name}</div></div>
+          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px',fontSize:13,marginBottom:14}}>
+            <div style={{fontWeight:600,marginBottom:6}}>Customer Details</div>
+            <div style={{color:'var(--text-muted)'}}>{rr.customer_name}</div>
+            <div style={{color:'var(--text-muted)'}}>{rr.customer_address1}, {rr.customer_city} {rr.customer_pincode}</div>
+            {rr.customer_phone && <div style={{color:'var(--text-muted)'}}>{rr.customer_phone}</div>}
+          </div>
+          <div style={{background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px',fontSize:13,marginBottom:14}}>
+            <div style={{fontWeight:600,marginBottom:6}}>Items</div>
+            {(rr.items||[]).map((it,i)=><div key={i} style={{color:'var(--text-muted)'}}>{it.title} ×{it.qty||1}</div>)}
+          </div>
+          {rr.reason && <div style={{marginBottom:14,fontSize:13,color:'var(--text-muted)'}}><strong style={{color:'var(--text)'}}>Reason:</strong> {rr.reason}</div>}
+          {rr.reverse_shipment && (
+            <div style={{background:'#06b6d411',border:'1px solid #06b6d433',borderRadius:8,padding:'10px 14px',fontSize:13}}>
+              <div style={{fontWeight:600,color:'var(--cyan)',marginBottom:4}}>↩ Reverse Pickup</div>
+              <div>AWB: <span style={{fontFamily:'monospace'}}>{rr.reverse_shipment.awb}</span></div>
+              <div style={{color:'var(--text-muted)',fontSize:12}}>{rr.reverse_shipment.courier}</div>
+            </div>
+          )}
+          {!rr.reverse_shipment && <div style={{color:'var(--yellow)',fontSize:13,padding:'10px 14px',background:'#f59e0b11',borderRadius:8,border:'1px solid #f59e0b33'}}>⚠ Reverse pickup not yet created — contact admin</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── App ──────────────────────────────────────────────────── */
+function App() {
+  const [authed, setAuthed] = useState(!!token());
+  const [tab, setTab]       = useState('orders');
+
+  const logout = async () => {
+    try { await apiFetch('/staff/logout', { method:'POST' }); } catch {}
+    clearToken(); setAuthed(false);
+  };
+
+  if (!authed) return <Login onLogin={()=>setAuthed(true)}/>;
+
+  return (
+    <div style={{minHeight:'100vh'}}>
+      <Header tab={tab} setTab={setTab} onLogout={logout}/>
+      <main style={{maxWidth:1200,margin:'0 auto'}}>
+        {tab==='orders' && <Orders/>}
+        {tab==='returns' && <Returns/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
