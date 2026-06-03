@@ -384,14 +384,19 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
               <div className="section-title">Order Items</div>
               <div style={{marginBottom:18}}>
                 {(initOrder.line_items||[]).map((li,i)=>(
-                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{li.title}</div>
-                      {li.sku && <div style={{fontSize:11,color:'var(--text-muted)',fontFamily:'monospace',marginTop:2}}>{li.sku}</div>}
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+                    {li.image
+                      ? <img src={li.image} alt={li.title} style={{width:52,height:52,objectFit:'cover',borderRadius:8,border:'1px solid var(--border)',flexShrink:0,background:'var(--bg-card2)'}} onError={e=>{e.target.style.display='none'}}/>
+                      : <div style={{width:52,height:52,borderRadius:8,border:'1px solid var(--border)',background:'var(--bg-card2)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>📦</div>
+                    }
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{li.title}</div>
+                      {li.variant_title && li.variant_title!=='Default Title' && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{li.variant_title}</div>}
+                      {li.sku && <div style={{fontSize:11,color:'var(--text-dim)',fontFamily:'monospace',marginTop:1}}>SKU: {li.sku}</div>}
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontWeight:600}}>{fmtMoney(li.price*(li.quantity||1))}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)'}}>Qty: {li.quantity}</div>
+                      <div style={{fontWeight:700}}>{fmtMoney(li.price*(li.quantity||1))}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Qty: {li.quantity} · {fmtMoney(li.price)} each</div>
                     </div>
                   </div>
                 ))}
@@ -524,6 +529,7 @@ function Orders() {
   const [from,setFrom]       = useState(()=>new Date(Date.now()-30*86400000).toISOString().slice(0,10));
   const [to,setTo]           = useState(()=>new Date().toISOString().slice(0,10));
   const [modal,setModal]     = useState(null);
+  const [showImages,setShowImages] = useState(()=>localStorage.getItem('fc_show_images')==='1');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -548,7 +554,18 @@ function Orders() {
           <h2 style={{fontSize:20,fontWeight:800}}>Orders</h2>
           <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{orders.length} orders</p>
         </div>
-        <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--text-muted)'}}>
+            <span>Product Images</span>
+            <span onClick={()=>{const v=!showImages;setShowImages(v);localStorage.setItem('fc_show_images',v?'1':'0');}} style={{
+              width:36,height:20,borderRadius:10,background:showImages?'#fff':'var(--border2)',
+              display:'inline-flex',alignItems:'center',padding:'0 2px',transition:'background .2s',cursor:'pointer',flexShrink:0
+            }}>
+              <span style={{width:16,height:16,borderRadius:'50%',background:showImages?'#000':'#666',transform:showImages?'translateX(16px)':'translateX(0)',transition:'transform .2s',display:'block'}}/>
+            </span>
+          </label>
+          <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+        </div>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
@@ -565,7 +582,11 @@ function Orders() {
       </div>
       <div className="card" style={{padding:0,overflow:'auto'}}>
         <table>
-          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th></tr></thead>
+          <thead><tr>
+            <th>Order</th><th>Date</th><th>Customer</th>
+            {showImages && <th>Products</th>}
+            <th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th>
+          </tr></thead>
           <tbody>
             {orders.map(o=>(
               <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setModal(o)}>
@@ -575,8 +596,21 @@ function Orders() {
                   <div>{o.customer?.firstName} {o.customer?.lastName}</div>
                   {o.email && <div style={{fontSize:11,color:'var(--text-muted)'}}>{o.email}</div>}
                 </td>
-                <td style={{color:'var(--text-muted)',fontSize:12,maxWidth:180}}>
-                  {(o.line_items||[]).slice(0,2).map(li=>li.title).join(', ').slice(0,60)}{(o.line_items||[]).length>2?'…':''}
+                {showImages && (
+                  <td onClick={e=>e.stopPropagation()}>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap',maxWidth:140}}>
+                      {(o.line_items||[]).filter(li=>li.image).slice(0,4).map((li,i)=>(
+                        <img key={i} src={li.image} alt={li.title}
+                          style={{width:40,height:40,objectFit:'cover',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg-card2)',flexShrink:0}}
+                          onError={e=>{e.target.style.display='none'}}
+                        />
+                      ))}
+                      {(o.line_items||[]).filter(li=>li.image).length===0 && <span style={{fontSize:11,color:'var(--text-dim)'}}>—</span>}
+                    </div>
+                  </td>
+                )}
+                <td style={{color:'var(--text-muted)',fontSize:12,maxWidth:160}}>
+                  {(o.line_items||[]).slice(0,2).map(li=>li.title).join(', ').slice(0,55)}{(o.line_items||[]).length>2?'…':''}
                 </td>
                 <td style={{fontWeight:600}}>{fmtMoney(o.total_price)}</td>
                 <td>

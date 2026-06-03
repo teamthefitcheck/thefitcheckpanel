@@ -93,7 +93,7 @@ async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
             email phone tags
             customer{firstName lastName email phone}
             shippingAddress{name address1 address2 city province zip phone}
-            lineItems(first:50){edges{node{id title quantity vendor sku originalUnitPriceSet{shopMoney{amount}}}}}
+            lineItems(first:50){edges{node{id title quantity vendor sku originalUnitPriceSet{shopMoney{amount}} image{url} variant{title}}}}
             fulfillments{status trackingInfo{number url company} createdAt}
             note
           }}
@@ -132,10 +132,12 @@ function normaliseOrder(node) {
     line_items: (node.lineItems?.edges || []).map(e => ({
       id: e.node.id.replace('gid://shopify/LineItem/', ''),
       title: e.node.title,
+      variant_title: e.node.variant?.title || '',
       quantity: e.node.quantity,
       vendor: e.node.vendor,
       sku: e.node.sku,
       price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || 0),
+      image: e.node.image?.url || null,
     })),
     fulfillments: (node.fulfillments || []).map(f => ({
       status: f.status,
