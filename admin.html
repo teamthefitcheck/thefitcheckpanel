@@ -317,7 +317,15 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
   const [activeTab,setActiveTab] = useState('details');
 
   useEffect(()=>{
-    apiFetch(`/orders/${initOrder.id}`).then(d=>{ if(d) setOrder(d); }).catch(()=>{});
+    apiFetch(`/orders/${initOrder.id}`).then(d=>{
+      if(!d?.line_items) return;
+      const imgMap = {};
+      (d.line_items||[]).forEach(li=>{ if(li.product_id && li.image_url) imgMap[li.product_id]=li.image_url; });
+      setOrder(prev=>({
+        ...prev,
+        line_items: (prev.line_items||[]).map(li=>({ ...li, image_url: imgMap[li.product_id]||li.image_url||null }))
+      }));
+    }).catch(()=>{});
   },[initOrder.id]);
 
   const addr = order.shipping_address || {};
