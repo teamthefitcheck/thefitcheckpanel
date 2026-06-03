@@ -11,7 +11,7 @@ const fs         = require('fs');
 // ─── Config ──────────────────────────────────────────────────────────────────
 const PORT        = process.env.PORT || 3001;
 const SHOP_NAME   = process.env.SHOP_NAME || '';
-const SHOP_DOMAIN = `${SHOP_NAME}.myshopify.com`;
+let SHOP_DOMAIN = `${SHOP_NAME}.myshopify.com`;
 const CLIENT_ID   = process.env.SHOPIFY_CLIENT_ID   || '';
 const CLIENT_SEC  = process.env.SHOPIFY_CLIENT_SECRET || '';
 const SERVER_URL  = (process.env.SERVER_URL || `http://localhost:${PORT}`).trim().replace(/\/+$/, '');
@@ -804,6 +804,50 @@ app.post('/admin/change-password', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Tag Mappings ─────────────────────────────────────────────────────────────
+// Maps Shopify order tags → internal stages. Admin configures these.
+app.get('/admin/tag-mappings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { tag_mappings: 1, _id: 0 } });
+  res.json(doc?.tag_mappings || {});
+});
+
+app.post('/admin/tag-mappings', adminAuth, async (req, res) => {
+  try {
+    const { tag_mappings } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: { tag_mappings, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Apply a Shopify tag to an order
+app.post('/admin/orders/:id/tag', adminAuth, async (req, res) => {
+  try {
+    const { tag, remove } = req.body || {};
+    const { order } = await shopifyREST(`/orders/${req.params.id}.json?fields=id,tags`);
+    const tags = (order.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    let newTags;
+    if (remove) newTags = tags.filter(t => t !== tag);
+    else if (!tags.includes(tag)) newTags = [...tags, tag];
+    else newTags = tags;
+    await shopifyREST(`/orders/${req.params.id}.json`, { method: 'PUT', body: JSON.stringify({ order: { id: req.params.id, tags: newTags.join(', ') } }) });
+    res.json({ ok: true, tags: newTags });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── R&R Settings ─────────────────────────────────────────────────────────────
+app.get('/admin/rr-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, _id: 0 } });
+  res.json({ exchange_enabled: doc?.exchange_enabled !== false, return_enabled: doc?.return_enabled !== false, return_window_days: doc?.return_window_days || 7 });
+});
+
+app.post('/admin/rr-settings', adminAuth, async (req, res) => {
+  try {
+    const { exchange_enabled, return_enabled, return_window_days } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: { exchange_enabled, return_enabled, return_window_days: parseInt(return_window_days) || 7, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, brand: BRAND_NAME, shop: SHOP_DOMAIN }));
 
@@ -1016,10 +1060,14 @@ app.get('/track', (req, res) => res.sendFile(path.join(__dirname, 'track.html'))
 // ─── Start ────────────────────────────────────────────────────────────────────
 connectMongo().then(async () => {
   // Load token from DB if not in env
+  const dbSettings = await mdb.collection('settings').findOne({}, { projection: { shopify_access_token: 1, shop: 1 } });
   if (!SHOPIFY_TOKEN) {
-    const s = await mdb.collection('settings').findOne({}, { projection: { shopify_access_token: 1 } });
-    if (s?.shopify_access_token) { SHOPIFY_TOKEN = s.shopify_access_token; console.log('✅  Shopify token loaded from DB'); }
+    if (dbSettings?.shopify_access_token) { SHOPIFY_TOKEN = dbSettings.shopify_access_token; console.log('✅  Shopify token loaded from DB'); }
     else console.warn('⚠️   No Shopify token. Visit /install to connect your store.');
+  }
+  if (!SHOP_NAME && dbSettings?.shop) {
+    SHOP_DOMAIN = dbSettings.shop;
+    console.log(`✅  Shop domain loaded from DB: ${SHOP_DOMAIN}`);
   }
   // Load password override from DB
   const s = await mdb.collection('settings').findOne({}, { projection: { admin_password_override: 1 } });
