@@ -575,7 +575,7 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/admin/email/preview', adminAuth, (req, res) => {
+app.get('/admin/email/preview', (req, res) => {
   const t = req.query.template || 'confirmed';
   const order = { name: '#TEST-001', customer: { firstName: 'Test' }, id: '0', line_items: [{ title: 'Sample Product', variant_title: 'Size M', price: '799.00', quantity: 1 }], total_price: '799.00' };
   let html;
