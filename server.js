@@ -360,6 +360,21 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
     if (note)         fields.note         = note;
     await OS.upsert(req.params.id, fields);
     auditLog('admin', 'update_stage', req.params.id, { stage, awb });
+    // Send stage email
+    if (stage) {
+      try {
+        const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
+        const email = order.email || order.contact_email;
+        const trackingUrl = tracking_url || (awb ? trackingUrlForCourier(courier, awb) : '');
+        if (email) {
+          let html, subject;
+          if (stage === 'pickup')    { html = templateShipped({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} has shipped! 🚚`; }
+          else if (stage === 'transit') { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
+          else if (stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+          if (html) sendEmail({ to: email, subject, html }).catch(() => {});
+        }
+      } catch {}
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -419,24 +434,76 @@ function trackButton(trackingUrl, awb, courier, label = 'Track Your Order →') 
   </div>`;
 }
 
+const BANNER_URL = 'https://i.ibb.co/0pRKRzhn/Gemini-Generated-Image-shj6mcshj6mcshj6-1.png';
+
 function emailBase(content, preheader = '') {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${BRAND_NAME}</title></head>
-  <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <body style="margin:0;padding:0;background:#f0f0f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-    <tr><td style="background:#111;border-radius:12px 12px 0 0;padding:24px 32px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;">${BRAND_NAME}</div>
+  <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+    <tr><td style="padding:0;line-height:0;">
+      <img src="${BANNER_URL}" alt="${BRAND_NAME}" width="600" style="width:100%;max-width:600px;display:block;border-radius:16px 16px 0 0;" />
     </td></tr>
-    <tr><td style="background:#fff;padding:32px;border-radius:0 0 12px 12px;">
+    <tr><td style="background:#ffffff;padding:32px 36px;">
       ${content}
       <div style="margin-top:32px;padding-top:20px;border-top:1px solid #f0f0f0;font-size:11px;color:#aaa;text-align:center;">
-        © ${new Date().getFullYear()} ${BRAND_NAME} · Powered by Arqontiq
+        © ${new Date().getFullYear()} ${BRAND_NAME} · All rights reserved
       </div>
+    </td></tr>
+    <tr><td style="background:#111;padding:16px 32px;text-align:center;border-radius:0 0 16px 16px;">
+      <div style="font-size:11px;color:#666;">Powered by <span style="color:#fff;font-weight:600;">Arqontiq</span></div>
     </td></tr>
   </table>
   </td></tr></table></body></html>`;
+}
+
+function templateOrderConfirmed(order) {
+  const items = (order.line_items || []).map(li => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;">
+        <strong>${li.title}</strong>${li.variant_title && li.variant_title !== 'Default Title' ? `<br/><span style="color:#888;font-size:12px;">${li.variant_title}</span>` : ''}
+      </td>
+      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#888;text-align:center;">×${li.quantity}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;text-align:right;font-weight:600;">₹${parseFloat(li.price * (li.quantity || 1)).toLocaleString('en-IN')}</td>
+    </tr>`).join('');
+
+  const addr = order.shipping_address || order.billing_address || {};
+  const addrLine = [addr.address1, addr.address2, addr.city, addr.province, addr.zip].filter(Boolean).join(', ');
+
+  return emailBase(`
+    <h2 style="font-size:22px;font-weight:800;color:#111;margin:0 0 4px">Order Confirmed! 🎉</h2>
+    <p style="color:#555;font-size:14px;margin:0 0 24px">Hey ${order.customer?.first_name || order.shipping_address?.first_name || 'there'}, thank you for shopping with us! Your order is confirmed and we're getting it ready.</p>
+
+    <div style="background:#f9f9f9;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Order Number</span>
+        <span style="font-size:14px;font-weight:800;color:#111;font-family:monospace;">${order.name}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Date</span>
+        <span style="font-size:13px;color:#555;">${new Date(order.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</span>
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Items Ordered</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      ${items}
+      <tr>
+        <td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:800;color:#111;">Total</td>
+        <td style="padding:12px 0 0;font-size:15px;font-weight:800;color:#111;text-align:right;">₹${parseFloat(order.total_price || 0).toLocaleString('en-IN')}</td>
+      </tr>
+    </table>
+
+    ${addrLine ? `
+    <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
+      <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Delivering To</div>
+      <div style="font-size:13px;color:#333;line-height:1.6;">${addr.name || (addr.first_name + ' ' + addr.last_name)}<br/>${addrLine}</div>
+    </div>` : ''}
+
+    <p style="color:#888;font-size:13px;margin:0;">We'll notify you as soon as your order ships. For any queries, just reply to this email.</p>
+  `, `Your order ${order.name} is confirmed!`);
 }
 
 function templateShipped({ order, awb, courier, trackingUrl }) {
@@ -777,6 +844,10 @@ app.post('/webhooks/orders/create', async (req, res) => {
   try {
     const order = JSON.parse(req.body);
     await OS.upsert(String(order.id), { stage: 'confirmed', updated_at: new Date().toISOString() });
+    const email = order.email || order.contact_email;
+    if (email) {
+      sendEmail({ to: email, subject: `Order Confirmed – ${order.name} 🎉`, html: templateOrderConfirmed(order) }).catch(() => {});
+    }
   } catch {}
 });
 
@@ -785,8 +856,24 @@ app.post('/webhooks/orders/updated', async (req, res) => {
   if (!verifyWebhook(req)) return;
   try {
     const order = JSON.parse(req.body);
+    const sid = String(order.id);
     if (order.cancelled_at) {
-      await OS.upsert(String(order.id), { stage: 'cancelled', updated_at: new Date().toISOString() });
+      await OS.upsert(sid, { stage: 'cancelled', updated_at: new Date().toISOString() });
+      return;
+    }
+    // Auto-map tags → stage
+    const cfg = await mdb.collection('settings').findOne({}, { projection: { tag_mappings: 1 } });
+    const tagMap = cfg?.tag_mappings || {};
+    const tags = order.tags ? order.tags.split(',').map(t => t.trim()) : [];
+    let mappedStage = null;
+    for (const tag of tags) {
+      if (tagMap[tag]) { mappedStage = tagMap[tag]; break; }
+    }
+    if (mappedStage) {
+      const current = await OS.get(sid);
+      if (current?.stage !== mappedStage) {
+        await OS.upsert(sid, { stage: mappedStage, updated_at: new Date().toISOString() });
+      }
     }
   } catch {}
 });
