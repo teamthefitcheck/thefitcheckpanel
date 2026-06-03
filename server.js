@@ -835,9 +835,12 @@ app.get('/shopify/callback', async (req, res) => {
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 function verifyWebhook(req) {
   const hmac = req.headers['x-shopify-hmac-sha256'];
-  if (!hmac) return false;
+  if (!hmac) { console.warn('[webhook] missing hmac header'); return false; }
+  if (!CLIENT_SEC) { console.warn('[webhook] SHOPIFY_CLIENT_SECRET not set — skipping verification'); return true; }
   const digest = crypto.createHmac('sha256', CLIENT_SEC).update(req.body).digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
+  const ok = crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
+  if (!ok) console.warn('[webhook] hmac mismatch — rejected');
+  return ok;
 }
 
 app.post('/webhooks/orders/create', async (req, res) => {
@@ -847,8 +850,11 @@ app.post('/webhooks/orders/create', async (req, res) => {
     const order = JSON.parse(req.body);
     await OS.upsert(String(order.id), { stage: 'confirmed', updated_at: new Date().toISOString() });
     const email = order.email || order.contact_email;
+    console.log(`[orders/create] ${order.name} email=${email||'none'}`);
     if (email) {
-      sendEmail({ to: email, subject: `Order Confirmed – ${order.name} 🎉`, html: templateOrderConfirmed(order) }).catch(() => {});
+      sendEmail({ to: email, subject: `Order Confirmed – ${order.name} 🎉`, html: templateOrderConfirmed(order) })
+        .then(()=>console.log(`[orders/create] confirmation email sent to ${email}`))
+        .catch(e=>console.error(`[orders/create] email failed:`, e.message));
     }
   } catch {}
 });
