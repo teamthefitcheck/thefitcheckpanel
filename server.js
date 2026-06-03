@@ -708,21 +708,20 @@ app.get('/staff/returns', staffAuth, async (req, res) => {
 });
 
 // ─── Shopify OAuth ────────────────────────────────────────────────────────────
-const oauthStates = new Set();
 const SCOPES = 'read_orders,write_orders,read_fulfillments,write_fulfillments,read_customers,read_products,write_products';
 
-app.get('/install', (req, res) => {
-  const shop   = req.query.shop || SHOP_DOMAIN;
-  const state  = crypto.randomBytes(16).toString('hex');
-  oauthStates.add(state);
+app.get('/install', async (req, res) => {
+  const shop  = req.query.shop || SHOP_DOMAIN;
+  const state = crypto.randomBytes(16).toString('hex');
+  await mdb.collection('oauth_states').insertOne({ state, created_at: new Date() });
   const redirectUri = encodeURIComponent(`${SERVER_URL}/shopify/callback`);
   res.redirect(`https://${shop}/admin/oauth/authorize?client_id=${CLIENT_ID}&scope=${SCOPES}&redirect_uri=${redirectUri}&state=${state}`);
 });
 
 app.get('/shopify/callback', async (req, res) => {
   const { code, state, shop } = req.query;
-  if (!oauthStates.has(state)) return res.status(403).send('Invalid state');
-  oauthStates.delete(state);
+  const found = await mdb.collection('oauth_states').findOneAndDelete({ state });
+  if (!found) return res.status(403).send('Invalid or expired state. Please visit /install again.');
   try {
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
