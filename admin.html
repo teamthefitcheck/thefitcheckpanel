@@ -535,48 +535,71 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
 
 /* ─── Orders ─────────────────────────────────────────────────── */
 function Orders() {
-  const [orders,setOrders]   = useState([]);
-  const [total,setTotal]     = useState(0);
-  const [page,setPage]       = useState(1);
-  const [pages,setPages]     = useState(1);
-  const [loading,setLoading] = useState(false);
-  const [q,setQ]             = useState('');
-  const [stage,setStage]     = useState('');
-  const [from,setFrom]       = useState(()=>new Date(Date.now()-30*86400000).toISOString().slice(0,10));
-  const [to,setTo]           = useState(()=>new Date().toISOString().slice(0,10));
-  const [modal,setModal]     = useState(null);
+  const [allOrders,setAllOrders] = useState([]);
+  const [loading,setLoading]     = useState(false);
+  const [q,setQ]                 = useState('');
+  const [stage,setStage]         = useState('');
+  const [from,setFrom]           = useState(()=>new Date(Date.now()-30*86400000).toISOString().slice(0,10));
+  const [to,setTo]               = useState(()=>new Date().toISOString().slice(0,10));
+  const [page,setPage]           = useState(1);
+  const [modal,setModal]         = useState(null);
+  const PAGE_SIZE = 100;
 
-  const load = useCallback(async (pg=1) => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if(q)     params.set('q',q);
-      if(stage) params.set('stage',stage);
-      if(from)  params.set('from',from);
-      if(to)    params.set('to',to);
-      params.set('page', pg);
-      const d = await apiFetch(`/orders?${params}`);
-      setOrders(d.orders||[]);
-      setTotal(d.total||0);
-      setPage(d.page||1);
-      setPages(d.pages||1);
+      if(from) params.set('from',from);
+      if(to)   params.set('to',to);
+      params.set('page','1');
+      // fetch all pages
+      let all = [];
+      let pg = 1, pages = 1;
+      do {
+        params.set('page', pg);
+        const d = await apiFetch(`/orders?${params}`);
+        all = all.concat(d.orders||[]);
+        pages = d.pages||1;
+        pg++;
+      } while(pg <= pages && pg <= 10); // cap at 10 pages = 1000 orders
+      setAllOrders(all);
+      setPage(1);
     } catch(e){ console.error(e); }
     finally { setLoading(false); }
-  },[q,stage,from,to]);
+  },[from,to]);
 
-  useEffect(()=>{ setPage(1); load(1); },[stage]);
+  useEffect(()=>{ load(); },[]);
+
+  // Client-side filter + search
+  const filtered = allOrders.filter(o=>{
+    if(stage && o._stage !== stage) return false;
+    if(q){
+      const lq=q.toLowerCase();
+      return o.name.toLowerCase().includes(lq) ||
+        ((o.customer?.firstName||'')+' '+(o.customer?.lastName||'')).toLowerCase().includes(lq) ||
+        (o.email||'').toLowerCase().includes(lq);
+    }
+    return true;
+  });
+
+  // Stage counts
+  const counts = {};
+  allOrders.forEach(o=>{ const s=o._stage||'new'; counts[s]=(counts[s]||0)+1; });
+
+  const paged = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+  const pages = Math.ceil(filtered.length/PAGE_SIZE);
 
   return (
     <div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
         <div>
           <h2 style={{fontSize:20,fontWeight:800}}>Orders</h2>
-          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{total.toLocaleString()} orders · page {page} of {pages}</p>
+          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{filtered.length.toLocaleString()} {stage||'total'} orders</p>
         </div>
-        <button className="btn-primary btn-sm" onClick={()=>load(page)}>{loading?'…':'↻ Refresh'}</button>
+        <button className="btn-primary btn-sm" onClick={load}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-        <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
+        <input placeholder="Search order, customer…" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} style={{flex:'1 1 200px',minWidth:150}}/>
         <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:140}}/>
         <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:140}}/>
         <button className="btn-primary btn-sm" onClick={load}>Search</button>
@@ -584,8 +607,18 @@ function Orders() {
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
         {['','confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>{
           const active = stage===s;
+          const count = s==='' ? allOrders.length : (counts[s]||0);
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
-          return <button key={s} onClick={()=>setStage(s)} style={{padding:'5px 14px',borderRadius:20,border:'1px solid '+(active?'#555':'var(--border)'),background:active?'#ffffff18':'transparent',color:active?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',transition:'all .15s'}}>{label}</button>;
+          return (
+            <button key={s} onClick={()=>{setStage(s);setPage(1);}} style={{
+              padding:'5px 12px',borderRadius:20,border:'1px solid '+(active?'#555':'var(--border)'),
+              background:active?'#ffffff18':'transparent',color:active?'#fff':'var(--text-muted)',
+              fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',transition:'all .15s',display:'flex',alignItems:'center',gap:5
+            }}>
+              {label}
+              <span style={{background:active?'#ffffff22':'var(--bg-card2)',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{count}</span>
+            </button>
+          );
         })}
       </div>
       <div className="card" style={{padding:0,overflow:'auto'}}>
@@ -595,7 +628,7 @@ function Orders() {
             <th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th>
           </tr></thead>
           <tbody>
-            {orders.map(o=>(
+            {paged.map(o=>(
               <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setModal(o)}>
                 <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
                 <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(o.created_at)}</td>
@@ -619,19 +652,19 @@ function Orders() {
                 </td>
               </tr>
             ))}
-            {!loading && orders.length===0 && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
+            {!loading && paged.length===0 && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
             {loading && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}><span className="spin">↻</span> Loading…</td></tr>}
           </tbody>
         </table>
       </div>
       {pages > 1 && (
         <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:14}}>
-          <button className="btn-ghost btn-sm" onClick={()=>{setPage(p=>p-1);load(page-1);}} disabled={page<=1 || loading}>← Prev</button>
+          <button className="btn-ghost btn-sm" onClick={()=>setPage(p=>p-1)} disabled={page<=1 || loading}>← Prev</button>
           <span style={{fontSize:12,color:'var(--text-muted)',padding:'0 8px'}}>Page {page} of {pages}</span>
-          <button className="btn-ghost btn-sm" onClick={()=>{setPage(p=>p+1);load(page+1);}} disabled={page>=pages || loading}>Next →</button>
+          <button className="btn-ghost btn-sm" onClick={()=>setPage(p=>p+1)} disabled={page>=pages || loading}>Next →</button>
         </div>
       )}
-      {modal && <OrderModal order={modal} onClose={()=>setModal(null)} onUpdated={()=>load(page)}/>}
+      {modal && <OrderModal order={modal} onClose={()=>setModal(null)} onUpdated={load}/>}
     </div>
   );
 }
