@@ -313,7 +313,11 @@ app.get('/orders', adminAuth, async (req, res) => {
       const lq = q.toLowerCase();
       orders = orders.filter(o => o.name.toLowerCase().includes(lq) || (o.customer?.firstName + ' ' + o.customer?.lastName).toLowerCase().includes(lq) || o.email?.toLowerCase().includes(lq));
     }
-    res.json({ orders, total: orders.length });
+    const total = orders.length;
+    const page  = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = 100;
+    orders = orders.slice((page - 1) * limit, page * limit);
+    res.json({ orders, total, page, pages: Math.ceil(total / limit) });
   } catch (e) { console.error('GET /orders:', e.message); res.status(500).json({ error: e.message }); }
 });
 
