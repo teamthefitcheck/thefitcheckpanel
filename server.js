@@ -434,7 +434,7 @@ function trackButton(trackingUrl, awb, courier, label = 'Track Your Order →') 
   </div>`;
 }
 
-const BANNER_URL = 'https://i.ibb.co/LXKTVY49/tfc-banner.png';
+const BANNER_URL = 'https://i.ibb.co/RpYqxnMK/tfc-banner-2.png';
 
 function emailBase(content, preheader = '') {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
