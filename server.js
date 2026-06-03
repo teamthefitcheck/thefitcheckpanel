@@ -313,8 +313,7 @@ app.get('/orders', adminAuth, async (req, res) => {
       const lq = q.toLowerCase();
       orders = orders.filter(o => o.name.toLowerCase().includes(lq) || (o.customer?.firstName + ' ' + o.customer?.lastName).toLowerCase().includes(lq) || o.email?.toLowerCase().includes(lq));
     }
-    const enriched = await Promise.all(orders.map(o => enrichOrderImages(o)));
-    res.json({ orders: enriched, total: enriched.length });
+    res.json({ orders, total: orders.length });
   } catch (e) { console.error('GET /orders:', e.message); res.status(500).json({ error: e.message }); }
 });
 
