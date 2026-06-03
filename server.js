@@ -714,8 +714,9 @@ app.get('/install', async (req, res) => {
   const shop  = req.query.shop || SHOP_DOMAIN;
   const state = crypto.randomBytes(16).toString('hex');
   await mdb.collection('oauth_states').insertOne({ state, created_at: new Date() });
-  const redirectUri = encodeURIComponent(`${SERVER_URL}/shopify/callback`);
-  res.redirect(`https://${shop}/admin/oauth/authorize?client_id=${CLIENT_ID}&scope=${SCOPES}&redirect_uri=${redirectUri}&state=${state}`);
+  const redirectUri = `${SERVER_URL}/shopify/callback`;
+  console.log(`[install] shop=${shop} client_id=${CLIENT_ID} redirect_uri=${redirectUri}`);
+  res.redirect(`https://${shop}/admin/oauth/authorize?client_id=${CLIENT_ID}&scope=${SCOPES}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`);
 });
 
 app.get('/shopify/callback', async (req, res) => {
