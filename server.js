@@ -564,7 +564,8 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
       try { const d = await shopifyREST(`/orders/${orderId}.json?fields=name,customer`); order = d.order; } catch {}
     }
     let html;
-    if (template === 'shipped')    html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
+    if (template === 'confirmed')  html = templateOrderConfirmed({ ...order, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: '799.00', quantity: 1 }], total_price: order.total_price || '799.00' });
+    else if (template === 'shipped')    html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
     else if (template === 'transit') html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
     else if (template === 'ofd')   html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
     else                           html = templateDelivered({ order });
@@ -1195,6 +1196,33 @@ connectMongo().then(async () => {
   // Load password override from DB
   const s = await mdb.collection('settings').findOne({}, { projection: { admin_password_override: 1 } });
   if (s?.admin_password_override) process.env.ADMIN_PASSWORD = s.admin_password_override;
+
+  // Auto-register Shopify webhooks (only if not already done for this SERVER_URL)
+  if (SHOPIFY_TOKEN && SHOP_DOMAIN && !SHOP_DOMAIN.startsWith('.')) {
+    const webhookKey = `webhooks_registered_${SERVER_URL}`;
+    const alreadyDone = await mdb.collection('settings').findOne({ [webhookKey]: true });
+    if (!alreadyDone) {
+      try {
+        const { webhooks: existing } = await shopifyREST('/webhooks.json?limit=250');
+        const needed = [
+          { topic: 'orders/create',        address: `${SERVER_URL}/webhooks/orders/create` },
+          { topic: 'orders/updated',       address: `${SERVER_URL}/webhooks/orders/updated` },
+          { topic: 'fulfillments/create',  address: `${SERVER_URL}/webhooks/fulfillments/create` },
+        ];
+        for (const wh of needed) {
+          const exists = (existing || []).some(e => e.topic === wh.topic && e.address === wh.address);
+          if (!exists) {
+            await shopifyREST('/webhooks.json', { method: 'POST', body: JSON.stringify({ webhook: { topic: wh.topic, address: wh.address, format: 'json' } }) });
+            console.log(`✅  Webhook registered: ${wh.topic}`);
+          }
+        }
+        await mdb.collection('settings').updateOne({}, { $set: { [webhookKey]: true } }, { upsert: true });
+        console.log('✅  Webhooks registered and saved to DB');
+      } catch (e) { console.warn('⚠️   Webhook registration failed:', e.message); }
+    } else {
+      console.log('✓   Webhooks already registered');
+    }
+  }
 
   app.listen(PORT, () => {
     console.log(`🚀  ${BRAND_NAME} · Powered by Arqontiq`);
