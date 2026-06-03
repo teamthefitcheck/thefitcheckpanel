@@ -1073,9 +1073,11 @@ function Settings() {
     setSaving(false);
   };
 
-  const addTagMapping = () => {
+  const addTagMapping = async () => {
     if(!newTag.trim()) return;
-    setTagMap({...tagMap,[newTag.trim()]:newStage}); setNewTag('');
+    const updated = {...tagMap,[newTag.trim()]:newStage};
+    setTagMap(updated); setNewTag('');
+    try { await apiFetch('/admin/tag-mappings',{method:'POST',body:JSON.stringify({tag_mappings:updated})}); setMsg({type:'success',text:'Mapping saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
   };
 
   const saveRRSettings = async () => {
@@ -1147,7 +1149,7 @@ function Settings() {
                 <span style={{color:'var(--text-muted)'}}>→</span>
                 {stageBadge(s)}
               </div>
-              <button className="btn-danger btn-sm" onClick={()=>{const n={...tagMap};delete n[t];setTagMap(n);}}>Remove</button>
+              <button className="btn-danger btn-sm" onClick={async()=>{const n={...tagMap};delete n[t];setTagMap(n);await apiFetch('/admin/tag-mappings',{method:'POST',body:JSON.stringify({tag_mappings:n})}).catch(()=>{});}}>Remove</button>
             </div>
           ))}
           <div style={{marginTop:16}}>
