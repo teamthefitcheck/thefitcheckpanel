@@ -93,7 +93,7 @@ async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
             email phone tags
             customer{firstName lastName email phone}
             shippingAddress{name address1 address2 city province zip phone}
-            lineItems(first:50){edges{node{id title quantity vendor sku originalUnitPriceSet{shopMoney{amount}} image{url} variant{title}}}}
+            lineItems(first:50){edges{node{id title quantity vendor sku product{id} originalUnitPriceSet{shopMoney{amount}} variant{title}}}}
             fulfillments{status trackingInfo{number url company} createdAt}
             note
           }}
@@ -137,7 +137,7 @@ function normaliseOrder(node) {
       vendor: e.node.vendor,
       sku: e.node.sku,
       price: parseFloat(e.node.originalUnitPriceSet?.shopMoney?.amount || 0),
-      image: e.node.image?.url || null,
+      product_id: e.node.product?.id?.replace('gid://shopify/Product/', '') || null,
     })),
     fulfillments: (node.fulfillments || []).map(f => ({
       status: f.status,
@@ -275,6 +275,26 @@ app.delete('/admin/staff/:username', adminAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Image Enrichment ────────────────────────────────────────────────────────
+const imageCache = new Map();
+async function enrichOrderImages(order) {
+  const productIds = [...new Set((order.line_items || []).map(li => li.product_id).filter(Boolean))];
+  await Promise.all(productIds.map(async pid => {
+    if (imageCache.has(pid)) return;
+    try {
+      const d = await shopifyREST(`/products/${pid}.json?fields=id,image,images`);
+      imageCache.set(pid, d.product?.image?.src || d.product?.images?.[0]?.src || null);
+    } catch { imageCache.set(pid, null); }
+  }));
+  return {
+    ...order,
+    line_items: (order.line_items || []).map(li => ({
+      ...li,
+      image_url: imageCache.get(li.product_id) || null,
+    })),
+  };
+}
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 app.get('/orders', adminAuth, async (req, res) => {
   try {
@@ -293,7 +313,8 @@ app.get('/orders', adminAuth, async (req, res) => {
       const lq = q.toLowerCase();
       orders = orders.filter(o => o.name.toLowerCase().includes(lq) || (o.customer?.firstName + ' ' + o.customer?.lastName).toLowerCase().includes(lq) || o.email?.toLowerCase().includes(lq));
     }
-    res.json({ orders, total: orders.length });
+    const enriched = await Promise.all(orders.map(o => enrichOrderImages(o)));
+    res.json({ orders: enriched, total: enriched.length });
   } catch (e) { console.error('GET /orders:', e.message); res.status(500).json({ error: e.message }); }
 });
 
@@ -320,7 +341,8 @@ app.get('/orders/:id', adminAuth, async (req, res) => {
   try {
     const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
     const st = await OS.get(req.params.id);
-    res.json({ ...order, _stage: st?.stage || 'new', _awb: st?.awb || '', _courier: st?.courier || '', _tracking_url: st?.tracking_url || '' });
+    const enriched = await enrichOrderImages(order);
+    res.json({ ...enriched, _stage: st?.stage || 'new', _awb: st?.awb || '', _courier: st?.courier || '', _tracking_url: st?.tracking_url || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
