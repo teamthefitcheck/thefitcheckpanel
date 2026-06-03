@@ -17,28 +17,9 @@
   --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--cyan:#06b6d4;--purple:#a78bfa;
   --radius:10px;--radius-sm:6px;
 }
-[data-theme="light"]{
-  --bg:#f0f0f0;--bg-card:#ffffff;--bg-card2:#f5f5f5;
-  --border:#e0e0e0;--border2:#d0d0d0;
-  --text:#111111;--text-muted:#666666;--text-dim:#aaaaaa;
-  --accent:#000000;--accent-dim:#333333;
-  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--cyan:#0891b2;--purple:#7c3aed;
-}
-[data-theme="light"] body{background:var(--bg)}
-[data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{background:#fff;border-color:var(--border2);color:var(--text)}
-[data-theme="light"] input:focus,[data-theme="light"] select:focus{border-color:#999}
-[data-theme="light"] select option{background:#fff;color:#111}
-[data-theme="light"] .btn-primary{background:#111;color:#fff}
-[data-theme="light"] .btn-primary:hover{background:#333}
-[data-theme="light"] .btn-ghost{border-color:var(--border2);color:var(--text-muted)}
-[data-theme="light"] .btn-ghost:hover{border-color:#999;color:var(--text)}
-[data-theme="light"] tr:hover td{background:#00000005}
-[data-theme="light"] .modal-overlay{background:rgba(0,0,0,.5)}
-[data-theme="light"] .modal{background:#fff}
-[data-theme="light"] ::-webkit-scrollbar-thumb{background:#ccc}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
-input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s}
-input:focus,select:focus,textarea:focus{border-color:#555}
+input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:#666}
 select option{background:#1c1c1c}
 button{cursor:pointer;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;padding:8px 16px;transition:all .15s}
 .btn-primary{background:#fff;color:#000;padding:9px 20px}
@@ -61,34 +42,38 @@ th{text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-t
 td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#ffffff04}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;backdrop-filter:blur(4px)}
-.modal{background:var(--bg-card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:640px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;backdrop-filter:blur(6px)}
+.modal{background:var(--bg-card);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:660px;position:relative}
 .modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.modal-body{padding:24px}
-.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+.modal-body{padding:22px 24px;max-height:78vh;overflow-y:auto}
 .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 label{font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 .alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px}
 .alert-error{background:#ef444415;border:1px solid #ef444430;color:var(--red)}
 .alert-success{background:#22c55e15;border:1px solid #22c55e30;color:var(--green)}
 .spin{display:inline-block;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-::-webkit-scrollbar{width:6px;height:6px}
+.toggle{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:#333;border-radius:22px;cursor:pointer;transition:.2s}
+.toggle input:checked+.toggle-slider{background:#fff}
+.toggle-slider::before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#888;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider::before{transform:translateX(18px);background:#000}
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script>
-  (function(){ var t=localStorage.getItem('fc_theme'); if(t) document.documentElement.setAttribute('data-theme',t); })();
-</script>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 const API = '';
 
-/* ── Helpers ──────────────────────────────────────────────── */
+/* ─── Helpers ──────────────────────────────────────────────── */
 function token() { return localStorage.getItem('fc_admin_token') || ''; }
 function setToken(t) { localStorage.setItem('fc_admin_token', t); }
 function clearToken() { localStorage.removeItem('fc_admin_token'); localStorage.removeItem('fc_brand'); }
@@ -97,7 +82,7 @@ function brand() { return localStorage.getItem('fc_brand') || 'Fit Check'; }
 async function apiFetch(url, opts = {}) {
   const r = await fetch(API + url, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}`, ...(opts.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}`, ...(opts.headers||{}) },
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
@@ -106,418 +91,546 @@ async function apiFetch(url, opts = {}) {
 
 function stageBadge(s) {
   const map = {
-    delivered: ['badge-green','Delivered'], transit: ['badge-cyan','In Transit'],
-    pickup: ['badge-cyan','Picked Up'], rto: ['badge-red','RTO'],
-    confirmed: ['badge-yellow','Confirmed'], ready: ['badge-yellow','Ready'],
-    cancelled: ['badge-red','Cancelled'], new: ['badge-gray','New'], misc: ['badge-gray','Misc'],
+    delivered:['badge-green','Delivered'], transit:['badge-cyan','In Transit'],
+    pickup:['badge-cyan','Picked Up'], rto:['badge-red','RTO'],
+    confirmed:['badge-yellow','Confirmed'], ready:['badge-yellow','Ready'],
+    cancelled:['badge-red','Cancelled'], new:['badge-gray','New'], misc:['badge-gray','Misc'],
   };
-  const [cls, label] = map[s] || ['badge-gray', s || 'Unknown'];
+  const [cls,label] = map[s] || ['badge-gray', s || 'Unknown'];
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
-function fmt(date) {
-  if (!date) return '—';
-  return new Date(date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
-}
+function fmt(d) { return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function fmtMoney(n) { return '₹'+parseFloat(n||0).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2}); }
+function fmtPct(n,d) { return d ? ((n/d)*100).toFixed(1)+'%' : '0%'; }
 
-function fmtMoney(n) { return '₹' + parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
-
-/* ── Login ────────────────────────────────────────────────── */
+/* ─── Login ─────────────────────────────────────────────────── */
 function Login({ onLogin }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const [loading, setLoading] = useState(false);
-
+  const [pw,setPw] = useState('');
+  const [err,setErr] = useState('');
+  const [loading,setLoading] = useState(false);
   const submit = async (e) => {
-    e.preventDefault();
-    setLoading(true); setErr('');
+    e.preventDefault(); setLoading(true); setErr('');
     try {
-      const d = await apiFetch('/admin/login', { method: 'POST', body: JSON.stringify({ password: pw }) });
-      setToken(d.token);
-      localStorage.setItem('fc_brand', d.brand || 'Fit Check');
-      onLogin();
-    } catch(e) { setErr(e.message); }
+      const d = await apiFetch('/admin/login',{method:'POST',body:JSON.stringify({password:pw})});
+      setToken(d.token); localStorage.setItem('fc_brand',d.brand||'Fit Check'); onLogin();
+    } catch(e){setErr(e.message);}
     setLoading(false);
   };
-
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20,background:'#0a0a0a'}}>
       <div style={{width:'100%',maxWidth:360}}>
         <div style={{textAlign:'center',marginBottom:32}}>
-          <div style={{display:'inline-flex',width:52,height:52,background:'#fff',borderRadius:14,alignItems:'center',justifyContent:'center',fontSize:26,marginBottom:14}}>✓</div>
-          <h1 style={{fontSize:22,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>{brand()}</h1>
-          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:4}}>Admin Panel · Powered by Arqontiq</p>
+          <div style={{display:'inline-flex',width:56,height:56,background:'#fff',borderRadius:16,alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:900,color:'#000',marginBottom:16,boxShadow:'0 0 0 1px #333'}}>✓</div>
+          <h1 style={{fontSize:24,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>{brand()}</h1>
+          <p style={{color:'#666',fontSize:13,marginTop:4}}>Admin Panel · Powered by Arqontiq</p>
         </div>
-        <div className="card">
+        <div className="card" style={{padding:24}}>
           <form onSubmit={submit}>
             {err && <div className="alert alert-error">{err}</div>}
             <div className="field">
               <label>Admin Password</label>
               <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Enter password" autoFocus/>
             </div>
-            <button className="btn-primary" type="submit" disabled={loading} style={{width:'100%',marginTop:4}}>
+            <button className="btn-primary" type="submit" disabled={loading} style={{width:'100%',marginTop:4,padding:'11px 20px',fontSize:14}}>
               {loading ? 'Signing in…' : 'Sign In →'}
             </button>
           </form>
         </div>
-        <p style={{textAlign:'center',color:'var(--text-dim)',fontSize:11,marginTop:20}}>Staff login at <a href="/staff" style={{color:'var(--text-muted)'}}>/staff</a></p>
+        <p style={{textAlign:'center',color:'#444',fontSize:11,marginTop:20}}>Warehouse staff login at <a href="/staff" style={{color:'#888'}}>/staff</a></p>
       </div>
     </div>
   );
 }
 
-/* ── Sidebar ──────────────────────────────────────────────── */
-function Sidebar({ tab, setTab, onLogout, light, setLight }) {
+/* ─── Sidebar ────────────────────────────────────────────────── */
+function Sidebar({ tab, setTab, onLogout }) {
   const items = [
-    ['dashboard','📊','Dashboard'],
-    ['orders','📦','Orders'],
-    ['returns','↩','Returns'],
-    ['emails','📧','Emails'],
-    ['shipping','🚚','Shipping'],
-    ['settings','⚙','Settings'],
+    ['dashboard','📊','Dashboard'],['orders','📦','Orders'],['returns','↩','Returns'],
+    ['emails','📧','Emails'],['shipping','🚚','Shipping'],['settings','⚙','Settings'],
   ];
   return (
-    <div style={{width:220,minHeight:'100vh',background:'#0d0d0d',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0}}>
-      <div style={{padding:'20px 18px 14px',borderBottom:'1px solid var(--border)'}}>
+    <div style={{width:220,minHeight:'100vh',background:'#0d0d0d',borderRight:'1px solid #1a1a1a',display:'flex',flexDirection:'column',flexShrink:0,position:'sticky',top:0,height:'100vh'}}>
+      <div style={{padding:'20px 16px 14px',borderBottom:'1px solid #1a1a1a'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:32,height:32,background:'#fff',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:800,color:'#000',flexShrink:0}}>✓</div>
+          <div style={{width:34,height:34,background:'#fff',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:900,color:'#000',flexShrink:0}}>✓</div>
           <div>
             <div style={{fontWeight:800,fontSize:14,color:'#fff',letterSpacing:'-0.3px'}}>{brand()}</div>
-            <div style={{fontSize:10,color:'var(--text-dim)'}}>by Arqontiq</div>
+            <div style={{fontSize:10,color:'#444'}}>by Arqontiq</div>
           </div>
         </div>
       </div>
-      <nav style={{flex:1,padding:'10px 10px'}}>
+      <nav style={{flex:1,padding:'8px 8px'}}>
         {items.map(([id,icon,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{
             width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,
-            background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',
-            border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===id?600:400,marginBottom:2,transition:'all .15s',textAlign:'left'
+            background:tab===id?'#1e1e1e':'transparent',color:tab===id?'#fff':'#666',
+            border:tab===id?'1px solid #2a2a2a':'1px solid transparent',
+            cursor:'pointer',fontSize:13,fontWeight:tab===id?600:400,marginBottom:2,transition:'all .12s',textAlign:'left'
           }}>
-            <span style={{fontSize:15,opacity:tab===id?1:.7}}>{icon}</span>{label}
+            <span style={{fontSize:14,opacity:tab===id?1:.6}}>{icon}</span>{label}
           </button>
         ))}
       </nav>
-      <div style={{padding:'12px 10px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:8}}>
-        <button onClick={()=>setLight(l=>!l)} style={{
-          width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',
-          padding:'8px 12px',borderRadius:8,border:'1px solid var(--border2)',
-          background:'transparent',color:'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'
-        }}>
-          <span>{light ? '☀️ Light' : '🌙 Dark'}</span>
-          <span style={{
-            width:34,height:18,borderRadius:9,background:light?'#111':'#333',
-            display:'inline-flex',alignItems:'center',padding:'0 2px',transition:'background .2s',flexShrink:0
-          }}>
-            <span style={{
-              width:14,height:14,borderRadius:'50%',background:'#fff',
-              transform:light?'translateX(16px)':'translateX(0)',transition:'transform .2s',display:'block'
-            }}/>
-          </span>
-        </button>
+      <div style={{padding:'10px 8px',borderTop:'1px solid #1a1a1a'}}>
         <button onClick={onLogout} className="btn-ghost" style={{width:'100%',fontSize:12}}>Sign Out</button>
       </div>
     </div>
   );
 }
 
-/* ── Dashboard ────────────────────────────────────────────── */
+/* ─── Dashboard ──────────────────────────────────────────────── */
 function Dashboard() {
-  const [stats, setStats] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [stats,setStats] = useState(null);
+  const [orders,setOrders] = useState([]);
+  const [loading,setLoading] = useState(true);
+  const [period,setPeriod] = useState('month');
 
-  useEffect(() => {
+  const load = async (p) => {
+    setLoading(true);
     const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
-    const to   = now.toISOString().slice(0,10);
-    Promise.all([
-      apiFetch(`/orders/stats?from=${from}&to=${to}`),
-      apiFetch(`/orders?from=${from}&to=${to}`),
-    ]).then(([s, o]) => { setStats(s); setOrders((o.orders||[]).slice(0,8)); }).finally(()=>setLoading(false));
-  }, []);
+    let from;
+    if(p==='week') from = new Date(now-7*86400000).toISOString().slice(0,10);
+    else if(p==='month') from = new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
+    else from = new Date(now.getFullYear(),0,1).toISOString().slice(0,10);
+    const to = now.toISOString().slice(0,10);
+    try {
+      const [s,o] = await Promise.all([
+        apiFetch(`/orders/stats?from=${from}&to=${to}`),
+        apiFetch(`/orders?from=${from}&to=${to}`),
+      ]);
+      setStats(s); setOrders((o.orders||[]).slice(0,10));
+    } finally { setLoading(false); }
+  };
 
-  if (loading) return <div style={{padding:40,color:'var(--text-muted)'}}>Loading…</div>;
+  useEffect(()=>{ load(period); },[period]);
 
   const statCards = [
-    { label:'Total Orders', value: stats?.total||0, color:'#fff' },
-    { label:'Delivered', value: stats?.delivered||0, color:'var(--green)' },
-    { label:'In Transit', value: stats?.transit||0, color:'var(--cyan)' },
-    { label:'RTO', value: stats?.rto||0, color:'var(--red)' },
-    { label:'Pending', value: stats?.pending||0, color:'var(--yellow)' },
-    { label:'Revenue (MTD)', value: fmtMoney(stats?.revenue||0), color:'var(--purple)' },
+    {label:'Total Orders',value:stats?.total||0,color:'#fff',icon:'📦'},
+    {label:'Delivered',value:stats?.delivered||0,color:'var(--green)',icon:'✅'},
+    {label:'In Transit',value:stats?.transit||0,color:'var(--cyan)',icon:'🚚'},
+    {label:'RTO',value:stats?.rto||0,color:'var(--red)',icon:'↩'},
+    {label:'Pending',value:stats?.pending||0,color:'var(--yellow)',icon:'⏳'},
+    {label:'Revenue',value:fmtMoney(stats?.revenue||0),color:'var(--purple)',icon:'💰'},
   ];
 
+  const deliveryRate = stats?.total ? ((stats.delivered/stats.total)*100).toFixed(1) : 0;
+  const fulfillmentRate = stats?.total ? (((stats.total-stats.pending)/stats.total)*100).toFixed(1) : 0;
+
   return (
     <div>
-      <div style={{marginBottom:24}}>
-        <h2 style={{fontSize:20,fontWeight:700,color:'#fff'}}>Dashboard</h2>
-        <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Month-to-date overview</p>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800,color:'#fff'}}>Dashboard</h2>
+          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Store performance overview</p>
+        </div>
+        <div style={{display:'flex',gap:4}}>
+          {[['week','7 days'],['month','This month'],['year','This year']].map(([k,l])=>(
+            <button key={k} onClick={()=>setPeriod(k)} style={{
+              padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
+              background:period===k?'#fff':'transparent',color:period===k?'#000':'var(--text-muted)',
+              border:period===k?'none':'1px solid var(--border)'
+            }}>{l}</button>
+          ))}
+        </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:14,marginBottom:28}}>
-        {statCards.map(({label,value,color})=>(
-          <div key={label} className="card" style={{padding:18}}>
-            <div style={{fontSize:11,color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>{label}</div>
-            <div style={{fontSize:26,fontWeight:800,color}}>{value}</div>
+
+      {loading ? <div style={{padding:40,color:'var(--text-muted)',textAlign:'center'}}>Loading…</div> : <>
+        {/* Stat cards */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))',gap:12,marginBottom:20}}>
+          {statCards.map(({label,value,color,icon})=>(
+            <div key={label} className="card" style={{padding:16}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                <span style={{fontSize:11,color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:.7}}>{label}</span>
+                <span style={{fontSize:16}}>{icon}</span>
+              </div>
+              <div style={{fontSize:24,fontWeight:800,color}}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Metrics row */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
+          <div className="card" style={{padding:18}}>
+            <div className="section-title">Delivery Rate</div>
+            <div style={{display:'flex',alignItems:'flex-end',gap:8}}>
+              <div style={{fontSize:32,fontWeight:800,color:'var(--green)'}}>{deliveryRate}%</div>
+              <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:6}}>of total orders</div>
+            </div>
+            <div style={{marginTop:10,height:6,background:'var(--bg-card2)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${deliveryRate}%`,background:'var(--green)',borderRadius:3,transition:'width .5s'}}/>
+            </div>
           </div>
-        ))}
-      </div>
-      <div className="card">
-        <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:'#fff'}}>Recent Orders</div>
-        <table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Stage</th></tr></thead>
-          <tbody>
-            {orders.map(o=>(
-              <tr key={o.id}>
-                <td style={{fontWeight:600,fontFamily:'monospace'}}>{o.name}</td>
-                <td style={{color:'var(--text-muted)'}}>{o.customer?.firstName} {o.customer?.lastName}</td>
-                <td style={{color:'var(--text-muted)'}}>{fmt(o.created_at)}</td>
-                <td>{fmtMoney(o.total_price)}</td>
-                <td>{stageBadge(o._stage)}</td>
-              </tr>
-            ))}
-            {orders.length===0 && <tr><td colSpan={5} style={{textAlign:'center',color:'var(--text-muted)',padding:24}}>No orders this month</td></tr>}
-          </tbody>
-        </table>
-      </div>
+          <div className="card" style={{padding:18}}>
+            <div className="section-title">Fulfillment Rate</div>
+            <div style={{display:'flex',alignItems:'flex-end',gap:8}}>
+              <div style={{fontSize:32,fontWeight:800,color:'var(--cyan)'}}>{fulfillmentRate}%</div>
+              <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:6}}>dispatched of total</div>
+            </div>
+            <div style={{marginTop:10,height:6,background:'var(--bg-card2)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${fulfillmentRate}%`,background:'var(--cyan)',borderRadius:3,transition:'width .5s'}}/>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent orders */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border)',fontWeight:700,fontSize:13}}>Recent Orders</div>
+          <table>
+            <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Stage</th></tr></thead>
+            <tbody>
+              {orders.map(o=>(
+                <tr key={o.id}>
+                  <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
+                  <td style={{color:'var(--text-muted)'}}>{o.customer?.firstName} {o.customer?.lastName}</td>
+                  <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(o.created_at)}</td>
+                  <td style={{fontWeight:600}}>{fmtMoney(o.total_price)}</td>
+                  <td>{stageBadge(o._stage)}</td>
+                </tr>
+              ))}
+              {orders.length===0 && <tr><td colSpan={5} style={{textAlign:'center',color:'var(--text-muted)',padding:28}}>No orders in this period</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </>}
     </div>
   );
 }
 
-/* ── Orders ───────────────────────────────────────────────── */
-function Orders() {
-  const [orders, setOrders]   = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [q, setQ]             = useState('');
-  const [stage, setStage]     = useState('');
-  const [from, setFrom]       = useState('');
-  const [to, setTo]           = useState('');
-  const [modal, setModal]     = useState(null);
+/* ─── Order Modal ────────────────────────────────────────────── */
+function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated }) {
+  const [stage,setStage]     = useState(initOrder._stage||'confirmed');
+  const [awb,setAwb]         = useState(initOrder._awb||'');
+  const [courier,setCourier] = useState(initOrder._courier||'');
+  const [partner,setPartner] = useState('delhivery');
+  const [shipMode,setMode]   = useState('Surface');
+  const [weight,setWeight]   = useState('0.5');
+  const [length,setLength]   = useState('15');
+  const [breadth,setBreadth] = useState('12');
+  const [height,setHeight]   = useState('8');
+  const [tag,setTag]         = useState('');
+  const [saving,setSaving]   = useState(false);
+  const [creating,setCreating] = useState(false);
+  const [tagging,setTagging] = useState(false);
+  const [msg,setMsg]         = useState(null);
+  const [activeTab,setActiveTab] = useState('details');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (q)     params.set('q', q);
-      if (stage) params.set('stage', stage);
-      if (from)  params.set('from', from);
-      if (to)    params.set('to', to);
-      const d = await apiFetch(`/orders?${params}`);
-      setOrders(d.orders || []);
-    } finally { setLoading(false); }
-  }, [q, stage, from, to]);
-
-  useEffect(() => { load(); }, [stage]);
-
-  return (
-    <div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-        <div><h2 style={{fontSize:20,fontWeight:700}}>Orders</h2><p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{orders.length} orders</p></div>
-        <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
-      </div>
-      <div style={{display:'flex',gap:10,marginBottom:12,flexWrap:'wrap'}}>
-        <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
-        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:145}}/>
-        <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:145}}/>
-        <button className="btn-primary btn-sm" onClick={load}>Search</button>
-      </div>
-      <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
-        {['','confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>{
-          const active = stage === s;
-          const label = s === '' ? 'All' : s.charAt(0).toUpperCase()+s.slice(1);
-          return (
-            <button key={s} onClick={()=>setStage(s)} style={{padding:'5px 14px',borderRadius:20,border:'1px solid '+(active?'#555':'var(--border)'),background:active?'#ffffff18':'transparent',color:active?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',transition:'all .15s'}}>{label}</button>
-          );
-        })}
-      </div>
-      <div className="card" style={{padding:0,overflow:'auto'}}>
-        <table>
-          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th></tr></thead>
-          <tbody>
-            {orders.map(o=>(
-              <tr key={o.id}>
-                <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
-                <td style={{color:'var(--text-muted)'}}>{fmt(o.created_at)}</td>
-                <td>{o.customer?.firstName} {o.customer?.lastName}</td>
-                <td>{fmtMoney(o.total_price)}</td>
-                <td><span className={`badge ${o.financial_status==='paid'?'badge-green':o.financial_status?.includes('pending')?'badge-yellow':'badge-gray'}`}>{o.financial_status==='paid'?'Prepaid':'COD'}</span></td>
-                <td>{stageBadge(o._stage)}</td>
-                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
-                <td><button className="btn-ghost btn-sm" onClick={()=>setModal(o)}>View</button></td>
-              </tr>
-            ))}
-            {!loading && orders.length===0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
-            {loading && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>Loading…</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      {modal && <OrderModal order={modal} onClose={()=>{setModal(null);load();}}/>}
-    </div>
-  );
-}
-
-function OrderModal({ order: initOrder, onClose }) {
-  const [order, setOrder]     = useState(initOrder);
-  const [stage, setStage]     = useState(initOrder._stage||'confirmed');
-  const [awb, setAwb]         = useState(initOrder._awb||'');
-  const [courier, setCourier] = useState(initOrder._courier||'');
-  const [partner, setPartner] = useState('delhivery');
-  const [shipMode, setShipMode] = useState('Surface');
-  const [weight, setWeight]   = useState('0.5');
-  const [saving, setSaving]   = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [msg, setMsg]         = useState(null);
+  const addr = initOrder.shipping_address || {};
 
   const saveStage = async () => {
     setSaving(true); setMsg(null);
     try {
-      await apiFetch(`/admin/orders/${order.id}/stage`, { method:'PUT', body: JSON.stringify({ stage, awb, courier }) });
-      setMsg({ type:'success', text:'Stage updated!' });
-    } catch(e) { setMsg({ type:'error', text: e.message }); }
+      await apiFetch(`/admin/orders/${initOrder.id}/stage`,{method:'PUT',body:JSON.stringify({stage,awb,courier})});
+      setMsg({type:'success',text:'Stage updated!'});
+      onUpdated && onUpdated();
+    } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   const createShipment = async () => {
     setCreating(true); setMsg(null);
     try {
-      const d = await apiFetch(`/admin/orders/${order.id}/create-shipment`, { method:'POST', body: JSON.stringify({ partner, shipMode, weight: parseFloat(weight)||0.5, length:15, breadth:12, height:8 }) });
-      setMsg({ type:'success', text:`Shipment created! AWB: ${d.awb}` });
+      const d = await apiFetch(`/admin/orders/${initOrder.id}/create-shipment`,{method:'POST',body:JSON.stringify({
+        partner,shipMode,weight:parseFloat(weight)||0.5,length:parseFloat(length)||15,breadth:parseFloat(breadth)||12,height:parseFloat(height)||8
+      })});
+      setMsg({type:'success',text:`✅ Shipment created! AWB: ${d.awb}`});
       setAwb(d.awb); setCourier(d.courier); setStage('pickup');
-    } catch(e) { setMsg({ type:'error', text: e.message }); }
+      onUpdated && onUpdated();
+    } catch(e){setMsg({type:'error',text:e.message});}
     setCreating(false);
   };
 
-  const addr = order.shipping_address || {};
+  const applyTag = async () => {
+    if(!tag.trim()) return;
+    setTagging(true); setMsg(null);
+    try {
+      await apiFetch(`/admin/orders/${initOrder.id}/tag`,{method:'POST',body:JSON.stringify({tag:tag.trim()})});
+      setMsg({type:'success',text:`Tag "${tag}" applied!`}); setTag('');
+    } catch(e){setMsg({type:'error',text:e.message});}
+    setTagging(false);
+  };
+
+  const tabs = [['details','Details'],['stage','Stage & Shipping'],['tags','Tags']];
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-header">
           <div>
-            <div style={{fontWeight:700,fontSize:16}}>{order.name}</div>
-            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{fmt(order.created_at)} · {order.customer?.firstName} {order.customer?.lastName}</div>
+            <div style={{fontWeight:800,fontSize:17}}>{initOrder.name}</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>
+              {fmt(initOrder.created_at)} · {initOrder.customer?.firstName} {initOrder.customer?.lastName}
+              {' · '}{stageBadge(initOrder._stage)}
+            </div>
           </div>
-          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <button onClick={onClose} style={{background:'transparent',border:'1px solid var(--border2)',borderRadius:6,color:'var(--text-muted)',padding:'4px 10px',cursor:'pointer',fontSize:16,lineHeight:1}}>✕</button>
         </div>
-        <div className="modal-body" style={{maxHeight:'75vh',overflowY:'auto'}}>
-          {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
 
-          {/* Items */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Items</div>
-            {(order.line_items||[]).map((li,i)=>(
-              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
-                <span>{li.title} {li.quantity > 1 ? `×${li.quantity}` : ''}</span>
-                <span style={{color:'var(--text-muted)'}}>{fmtMoney(li.price * li.quantity)}</span>
+        <div style={{display:'flex',gap:0,padding:'0 24px',borderBottom:'1px solid var(--border)'}}>
+          {tabs.map(([id,label])=>(
+            <button key={id} onClick={()=>setActiveTab(id)} style={{
+              padding:'10px 14px',background:'transparent',border:'none',borderBottom:`2px solid ${activeTab===id?'#fff':'transparent'}`,
+              color:activeTab===id?'#fff':'var(--text-muted)',fontSize:13,fontWeight:activeTab===id?700:400,cursor:'pointer',transition:'all .15s'
+            }}>{label}</button>
+          ))}
+        </div>
+
+        <div className="modal-body">
+          {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+
+          {activeTab==='details' && (
+            <>
+              {/* Items */}
+              <div className="section-title">Order Items</div>
+              <div style={{marginBottom:18}}>
+                {(initOrder.line_items||[]).map((li,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+                    <div>
+                      <div style={{fontWeight:600}}>{li.title}</div>
+                      {li.sku && <div style={{fontSize:11,color:'var(--text-muted)',fontFamily:'monospace',marginTop:2}}>{li.sku}</div>}
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontWeight:600}}>{fmtMoney(li.price*(li.quantity||1))}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)'}}>Qty: {li.quantity}</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontWeight:700,fontSize:14}}>
+                  <span>Total</span><span>{fmtMoney(initOrder.total_price)}</span>
+                </div>
               </div>
-            ))}
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontWeight:700}}>
-              <span>Total</span><span>{fmtMoney(order.total_price)}</span>
-            </div>
-          </div>
 
-          {/* Address */}
-          {addr.address1 && (
-            <div style={{marginBottom:18,background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px',fontSize:12,color:'var(--text-muted)'}}>
-              <div style={{fontWeight:700,color:'var(--text)',marginBottom:4}}>📍 Shipping Address</div>
-              <div>{addr.name}</div>
-              <div>{addr.address1}{addr.address2?', '+addr.address2:''}</div>
-              <div>{addr.city}, {addr.province} {addr.zip}</div>
-              {addr.phone && <div>{addr.phone}</div>}
-            </div>
+              {/* Address */}
+              {addr.address1 && (
+                <div>
+                  <div className="section-title">Shipping Address</div>
+                  <div style={{background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px',fontSize:13,color:'var(--text-muted)',lineHeight:1.7}}>
+                    <div style={{fontWeight:700,color:'var(--text)',marginBottom:4}}>{addr.name||addr.first_name+' '+addr.last_name}</div>
+                    <div>{addr.address1}{addr.address2?', '+addr.address2:''}</div>
+                    <div>{addr.city}, {addr.province||addr.state} {addr.zip}</div>
+                    {addr.phone && <div style={{marginTop:4}}><a href={`tel:${addr.phone}`} style={{color:'var(--cyan)'}}>{addr.phone}</a></div>}
+                    <button onClick={()=>navigator.clipboard?.writeText(`${addr.address1}, ${addr.city} ${addr.zip}`)} style={{marginTop:8,background:'transparent',border:'1px solid var(--border)',borderRadius:4,color:'var(--text-muted)',padding:'3px 8px',fontSize:11,cursor:'pointer'}}>Copy Address</button>
+                  </div>
+                </div>
+              )}
+
+              {/* AWB info */}
+              {initOrder._awb && (
+                <div style={{marginTop:14}}>
+                  <div className="section-title">Tracking</div>
+                  <div style={{background:'var(--bg-card2)',borderRadius:8,padding:'10px 14px',fontSize:13}}>
+                    <div style={{fontFamily:'monospace',fontWeight:700,color:'var(--cyan)'}}>{initOrder._awb}</div>
+                    {initOrder._courier && <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{initOrder._courier}</div>}
+                    {initOrder._tracking_url && <a href={initOrder._tracking_url} target="_blank" style={{fontSize:12,color:'var(--cyan)',display:'block',marginTop:4}}>Track →</a>}
+                  </div>
+                </div>
+              )}
+
+              {/* Tags */}
+              {(initOrder.tags||[]).length > 0 && (
+                <div style={{marginTop:14}}>
+                  <div className="section-title">Order Tags</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {(initOrder.tags||[]).map((t,i)=>(
+                      <span key={i} style={{padding:'3px 10px',background:'var(--bg-card2)',border:'1px solid var(--border)',borderRadius:20,fontSize:11,color:'var(--text-muted)'}}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Stage */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Update Stage</div>
-            <div className="grid-2" style={{marginBottom:10}}>
-              <div className="field">
-                <label>Stage</label>
-                <select value={stage} onChange={e=>setStage(e.target.value)}>
-                  {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-                  ))}
-                </select>
+          {activeTab==='stage' && (
+            <>
+              <div className="section-title">Update Stage</div>
+              <div className="grid-2" style={{marginBottom:12}}>
+                <div className="field">
+                  <label>Stage</label>
+                  <select value={stage} onChange={e=>setStage(e.target.value)}>
+                    {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
+                      <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>AWB / Tracking Number</label>
+                  <input value={awb} onChange={e=>setAwb(e.target.value)} placeholder="Tracking number"/>
+                </div>
               </div>
-              <div className="field">
-                <label>AWB / Tracking</label>
-                <input value={awb} onChange={e=>setAwb(e.target.value)} placeholder="Tracking number"/>
+              <div className="field" style={{marginBottom:14}}>
+                <label>Courier</label>
+                <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="e.g. Delhivery, Shiprocket"/>
               </div>
-            </div>
-            <div className="field" style={{marginBottom:10}}>
-              <label>Courier</label>
-              <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="e.g. Delhivery"/>
-            </div>
-            <button className="btn-primary btn-sm" onClick={saveStage} disabled={saving}>{saving?'Saving…':'Save Stage'}</button>
-          </div>
+              <button className="btn-primary btn-sm" onClick={saveStage} disabled={saving}>{saving?'Saving…':'Save Stage'}</button>
 
-          {/* Create Shipment */}
-          <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Create Shipment</div>
-            <div className="grid-2" style={{marginBottom:10}}>
-              <div className="field">
-                <label>Partner</label>
-                <select value={partner} onChange={e=>setPartner(e.target.value)}>
-                  <option value="delhivery">Delhivery</option>
-                  <option value="shiprocket">Shiprocket</option>
-                </select>
+              <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'20px 0'}}/>
+
+              <div className="section-title">Create Shipment via Courier API</div>
+              <div className="grid-2" style={{marginBottom:10}}>
+                <div className="field">
+                  <label>Partner</label>
+                  <select value={partner} onChange={e=>setPartner(e.target.value)}>
+                    <option value="delhivery">Delhivery</option>
+                    <option value="shiprocket">Shiprocket</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Mode</label>
+                  <select value={shipMode} onChange={e=>setMode(e.target.value)}>
+                    <option value="Surface">Surface</option>
+                    <option value="Express">Express</option>
+                  </select>
+                </div>
               </div>
-              <div className="field">
-                <label>Mode</label>
-                <select value={shipMode} onChange={e=>setShipMode(e.target.value)}>
-                  <option value="Surface">Surface</option>
-                  <option value="Express">Express</option>
-                </select>
+              <div className="grid-3" style={{marginBottom:14}}>
+                <div className="field"><label>Weight (kg)</label><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} step="0.1" min="0.1"/></div>
+                <div className="field"><label>Length (cm)</label><input type="number" value={length} onChange={e=>setLength(e.target.value)} min="1"/></div>
+                <div className="field"><label>Breadth (cm)</label><input type="number" value={breadth} onChange={e=>setBreadth(e.target.value)} min="1"/></div>
               </div>
-              <div className="field">
-                <label>Weight (kg)</label>
-                <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} step="0.1" min="0.1"/>
+              <button className="btn-ghost btn-sm" onClick={createShipment} disabled={creating}>
+                {creating?<><span className="spin">↻</span> Creating…</>:'🚚 Create Shipment'}
+              </button>
+            </>
+          )}
+
+          {activeTab==='tags' && (
+            <>
+              <div className="section-title">Apply Tag to Order</div>
+              <div style={{display:'flex',gap:8,marginBottom:16}}>
+                <input value={tag} onChange={e=>setTag(e.target.value)} placeholder="Tag name e.g. fit-processed" onKeyDown={e=>e.key==='Enter'&&applyTag()}/>
+                <button className="btn-primary btn-sm" style={{flexShrink:0}} onClick={applyTag} disabled={tagging}>{tagging?'…':'Apply'}</button>
               </div>
-            </div>
-            <button className="btn-ghost btn-sm" onClick={createShipment} disabled={creating}>
-              {creating ? <><span className="spin">↻</span> Creating…</> : '🚚 Create Shipment'}
-            </button>
-          </div>
+              <p style={{fontSize:11,color:'var(--text-muted)'}}>Tags on this order:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+                {(initOrder.tags||[]).length===0 && <span style={{fontSize:12,color:'var(--text-dim)'}}>No tags</span>}
+                {(initOrder.tags||[]).map((t,i)=>(
+                  <span key={i} style={{padding:'3px 10px',background:'var(--bg-card2)',border:'1px solid var(--border)',borderRadius:20,fontSize:11,color:'var(--text-muted)'}}>{t}</span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Returns ──────────────────────────────────────────────── */
+/* ─── Orders ─────────────────────────────────────────────────── */
+function Orders() {
+  const [orders,setOrders]   = useState([]);
+  const [loading,setLoading] = useState(false);
+  const [q,setQ]             = useState('');
+  const [stage,setStage]     = useState('');
+  const [from,setFrom]       = useState('');
+  const [to,setTo]           = useState('');
+  const [modal,setModal]     = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if(q)     params.set('q',q);
+      if(stage) params.set('stage',stage);
+      if(from)  params.set('from',from);
+      if(to)    params.set('to',to);
+      const d = await apiFetch(`/orders?${params}`);
+      setOrders(d.orders||[]);
+    } catch(e){ console.error(e); }
+    finally { setLoading(false); }
+  },[q,stage,from,to]);
+
+  useEffect(()=>{ load(); },[]);
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800}}>Orders</h2>
+          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{orders.length} orders</p>
+        </div>
+        <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+        <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
+        <select value={stage} onChange={e=>setStage(e.target.value)} style={{width:140}}>
+          <option value="">All Stages</option>
+          {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
+            <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+          ))}
+        </select>
+        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:140}}/>
+        <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:140}}/>
+        <button className="btn-primary btn-sm" onClick={load}>Search</button>
+      </div>
+      <div className="card" style={{padding:0,overflow:'auto'}}>
+        <table>
+          <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th></tr></thead>
+          <tbody>
+            {orders.map(o=>(
+              <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setModal(o)}>
+                <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
+                <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(o.created_at)}</td>
+                <td>
+                  <div>{o.customer?.firstName} {o.customer?.lastName}</div>
+                  {o.email && <div style={{fontSize:11,color:'var(--text-muted)'}}>{o.email}</div>}
+                </td>
+                <td style={{color:'var(--text-muted)',fontSize:12,maxWidth:180}}>
+                  {(o.line_items||[]).slice(0,2).map(li=>li.title).join(', ').slice(0,60)}{(o.line_items||[]).length>2?'…':''}
+                </td>
+                <td style={{fontWeight:600}}>{fmtMoney(o.total_price)}</td>
+                <td>
+                  <span className={`badge ${o.financial_status==='paid'?'badge-green':o.financial_status?.includes('pending')?'badge-yellow':'badge-gray'}`}>
+                    {o.financial_status==='paid'?'Prepaid':'COD'}
+                  </span>
+                </td>
+                <td>{stageBadge(o._stage)}</td>
+                <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
+                <td onClick={e=>e.stopPropagation()}>
+                  <button className="btn-ghost btn-sm" onClick={()=>setModal(o)}>Open</button>
+                </td>
+              </tr>
+            ))}
+            {!loading && orders.length===0 && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
+            {loading && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}><span className="spin">↻</span> Loading…</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && <OrderModal order={modal} onClose={()=>setModal(null)} onUpdated={load}/>}
+    </div>
+  );
+}
+
+/* ─── Returns ────────────────────────────────────────────────── */
 function Returns() {
-  const [rrs, setRrs]         = useState([]);
-  const [tab, setTab]         = useState('pending');
-  const [loading, setLoading] = useState(false);
-  const [modal, setModal]     = useState(null);
+  const [rrs,setRrs]         = useState([]);
+  const [tab,setTab]         = useState('pending');
+  const [loading,setLoading] = useState(false);
+  const [modal,setModal]     = useState(null);
 
   const load = async () => {
     setLoading(true);
-    try { const d = await apiFetch(`/admin/returns?status=${tab}`); setRrs(d||[]); } finally { setLoading(false); }
+    try { const d = await apiFetch(`/admin/returns?status=${tab}`); setRrs(d||[]); } finally {setLoading(false);}
   };
-
-  useEffect(()=>{ load(); }, [tab]);
-
-  const tabs = ['pending','approved','rejected','completed'];
+  useEffect(()=>{ load(); },[tab]);
 
   return (
     <div>
       <div style={{marginBottom:20}}>
-        <h2 style={{fontSize:20,fontWeight:700}}>Returns & Exchanges</h2>
+        <h2 style={{fontSize:20,fontWeight:800}}>Returns & Exchanges</h2>
         <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{rrs.length} requests</p>
       </div>
-      <div style={{display:'flex',gap:6,marginBottom:16}}>
-        {tabs.map(t=>(
+      <div style={{display:'flex',gap:4,marginBottom:16}}>
+        {['pending','approved','rejected','in_progress','completed'].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{
-            padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),
-            background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',
-            fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'
-          }}>{t}</button>
+            padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
+            border:'1px solid '+(tab===t?'#555':'var(--border)'),
+            background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',textTransform:'capitalize'
+          }}>{t.replace('_',' ')}</button>
         ))}
       </div>
       <div className="card" style={{padding:0,overflow:'auto'}}>
         <table>
-          <thead><tr><th>ID</th><th>Order</th><th>Type</th><th>Customer</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Order</th><th>Type</th><th>Customer</th><th>Reason</th><th>Date</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rrs.map(rr=>(
               <tr key={rr.request_id}>
@@ -525,12 +638,13 @@ function Returns() {
                 <td style={{fontWeight:600}}>{rr.order_name||'—'}</td>
                 <td><span className={`badge ${rr.type==='exchange'?'badge-purple':'badge-cyan'}`}>{rr.type||'return'}</span></td>
                 <td style={{color:'var(--text-muted)'}}>{rr.customer_name||'—'}</td>
-                <td style={{color:'var(--text-muted)'}}>{fmt(rr.created_at)}</td>
+                <td style={{color:'var(--text-muted)',fontSize:12,maxWidth:140}}>{(rr.reason||'').slice(0,40)}</td>
+                <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(rr.created_at)}</td>
                 <td>{stageBadge(rr.status)}</td>
                 <td><button className="btn-ghost btn-sm" onClick={()=>setModal(rr)}>Manage</button></td>
               </tr>
             ))}
-            {!loading && rrs.length===0 && <tr><td colSpan={7} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No {tab} requests</td></tr>}
+            {!loading && rrs.length===0 && <tr><td colSpan={8} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No {tab.replace('_',' ')} requests</td></tr>}
           </tbody>
         </table>
       </div>
@@ -539,39 +653,44 @@ function Returns() {
   );
 }
 
-function RRModal({ rr: initRr, onClose }) {
-  const [rr, setRr]           = useState(initRr);
-  const [status, setStatus]   = useState(initRr.status||'pending');
-  const [note, setNote]       = useState(initRr.admin_note||'');
-  const [partner, setPartner] = useState('delhivery');
-  const [saving, setSaving]   = useState(false);
-  const [creating, setCreating] = useState('');
-  const [msg, setMsg]         = useState(null);
+function RRModal({ rr, onClose }) {
+  const [status,setStatus]   = useState(rr.status||'pending');
+  const [note,setNote]       = useState(rr.admin_note||'');
+  const [partner,setPartner] = useState('delhivery');
+  const [saving,setSaving]   = useState(false);
+  const [creating,setCreating] = useState('');
+  const [msg,setMsg]         = useState(null);
+  const [localRr,setLocalRr] = useState(rr);
 
   const save = async () => {
     setSaving(true); setMsg(null);
     try {
-      await apiFetch(`/admin/returns/${rr.request_id}`, { method:'PUT', body: JSON.stringify({ status, admin_note: note }) });
-      setMsg({ type:'success', text:'Saved!' });
-    } catch(e) { setMsg({ type:'error', text: e.message }); }
+      await apiFetch(`/admin/returns/${rr.request_id}`,{method:'PUT',body:JSON.stringify({status,admin_note:note})});
+      setMsg({type:'success',text:'Saved!'});
+    } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   const createShipment = async (direction) => {
     setCreating(direction); setMsg(null);
     try {
-      const d = await apiFetch(`/admin/returns/${rr.request_id}/create-shipment`, { method:'POST', body: JSON.stringify({ direction, partner, weight:0.5, length:15, breadth:12, height:8 }) });
-      setMsg({ type:'success', text:`${direction} shipment created! AWB: ${d.awb}` });
-    } catch(e) { setMsg({ type:'error', text: e.message }); }
+      const d = await apiFetch(`/admin/returns/${rr.request_id}/create-shipment`,{method:'POST',body:JSON.stringify({direction,partner,weight:0.5,length:15,breadth:12,height:8})});
+      setMsg({type:'success',text:`${direction} shipment created! AWB: ${d.awb}`});
+      // Refresh local data
+      const field = direction==='reverse'?'reverse_shipment':'forward_shipment';
+      setLocalRr(prev=>({...prev,[field]:{awb:d.awb,courier:d.courier,partner,created_at:new Date().toISOString()}}));
+    } catch(e){setMsg({type:'error',text:e.message});}
     setCreating('');
   };
 
   const removeShipment = async (dir) => {
-    if (!confirm(`Remove ${dir} shipment?`)) return;
+    if(!confirm(`Remove ${dir} shipment?`)) return;
     try {
-      await apiFetch(`/admin/returns/${rr.request_id}/shipment/${dir}`, { method:'DELETE' });
-      setMsg({ type:'success', text:'Removed.' });
-    } catch(e) { setMsg({ type:'error', text: e.message }); }
+      await apiFetch(`/admin/returns/${rr.request_id}/shipment/${dir}`,{method:'DELETE'});
+      const field = dir==='reverse'?'reverse_shipment':'forward_shipment';
+      setLocalRr(prev=>{const n={...prev};delete n[field];return n;});
+      setMsg({type:'success',text:'Removed.'});
+    } catch(e){setMsg({type:'error',text:e.message});}
   };
 
   return (
@@ -580,13 +699,35 @@ function RRModal({ rr: initRr, onClose }) {
         <div className="modal-header">
           <div>
             <div style={{fontWeight:700,fontSize:15}}>{rr.request_id}</div>
-            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{rr.type||'Return'} · {rr.order_name||''}</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginTop:2}}>{rr.type||'Return'} · Order {rr.order_name||''} · {rr.customer_name}</div>
           </div>
-          <button className="btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <button onClick={onClose} style={{background:'transparent',border:'1px solid var(--border2)',borderRadius:6,color:'var(--text-muted)',padding:'4px 10px',cursor:'pointer'}}>✕</button>
         </div>
-        <div className="modal-body" style={{maxHeight:'75vh',overflowY:'auto'}}>
+        <div className="modal-body">
           {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
-          <div className="grid-2" style={{marginBottom:14}}>
+
+          {/* Items */}
+          {(rr.items||[]).length>0 && (
+            <div style={{marginBottom:14}}>
+              <div className="section-title">Requested Items</div>
+              {(rr.items||[]).map((it,i)=>(
+                <div key={i} style={{padding:'7px 0',borderBottom:'1px solid var(--border)',fontSize:13,color:'var(--text-muted)'}}>
+                  {it.title}{it.qty>1?` ×${it.qty}`:''}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Address */}
+          {rr.customer_address1 && (
+            <div style={{marginBottom:14,background:'var(--bg-card2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--text-muted)'}}>
+              <div style={{fontWeight:700,color:'var(--text)',marginBottom:3}}>📍 Pickup Address</div>
+              <div>{rr.customer_address1}, {rr.customer_city} {rr.customer_pincode}</div>
+              {rr.customer_phone && <div>{rr.customer_phone}</div>}
+            </div>
+          )}
+
+          <div className="grid-2" style={{marginBottom:12}}>
             <div className="field">
               <label>Status</label>
               <select value={status} onChange={e=>setStatus(e.target.value)}>
@@ -594,36 +735,45 @@ function RRModal({ rr: initRr, onClose }) {
               </select>
             </div>
             <div className="field">
-              <label>Reason</label>
+              <label>Reason from Customer</label>
               <input value={rr.reason||''} readOnly style={{opacity:.6}}/>
             </div>
           </div>
-          <div className="field" style={{marginBottom:14}}>
+          <div className="field" style={{marginBottom:12}}>
             <label>Admin Note</label>
             <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2}/>
           </div>
           <button className="btn-primary btn-sm" onClick={save} disabled={saving} style={{marginBottom:18}}>{saving?'Saving…':'Save'}</button>
 
-          <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Shipments</div>
-            <div className="field" style={{marginBottom:10}}>
-              <label>Partner</label>
-              <select value={partner} onChange={e=>setPartner(e.target.value)} style={{width:160}}>
-                <option value="delhivery">Delhivery</option>
-                <option value="shiprocket">Shiprocket</option>
-              </select>
-            </div>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {rr.reverse_shipment
-                ? <div style={{fontSize:12,color:'var(--cyan)',padding:'6px 12px',border:'1px solid var(--cyan)33',borderRadius:6}}>↩ {rr.reverse_shipment.awb} <button onClick={()=>removeShipment('reverse')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:11,marginLeft:4}}>✕</button></div>
-                : <button className="btn-ghost btn-sm" onClick={()=>createShipment('reverse')} disabled={!!creating}>{creating==='reverse'?'Creating…':'↩ Create Reverse Pickup'}</button>
-              }
-              {rr.type==='exchange' && (
-                rr.forward_shipment
-                  ? <div style={{fontSize:12,color:'var(--green)',padding:'6px 12px',border:'1px solid var(--green)33',borderRadius:6}}>→ {rr.forward_shipment.awb} <button onClick={()=>removeShipment('forward')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:11,marginLeft:4}}>✕</button></div>
-                  : <button className="btn-ghost btn-sm" onClick={()=>createShipment('forward')} disabled={!!creating}>{creating==='forward'?'Creating…':'→ Create Forward Dispatch'}</button>
-              )}
-            </div>
+          <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'0 0 14px'}}/>
+          <div className="section-title">Shipments</div>
+          <div className="field" style={{marginBottom:10}}>
+            <label>Courier Partner</label>
+            <select value={partner} onChange={e=>setPartner(e.target.value)} style={{width:180}}>
+              <option value="delhivery">Delhivery</option>
+              <option value="shiprocket">Shiprocket</option>
+            </select>
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {localRr.reverse_shipment
+              ? <div style={{fontSize:12,color:'var(--cyan)',padding:'6px 12px',border:'1px solid var(--cyan)33',borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+                  ↩ {localRr.reverse_shipment.awb}
+                  <button onClick={()=>removeShipment('reverse')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:12}}>✕</button>
+                </div>
+              : <button className="btn-ghost btn-sm" onClick={()=>createShipment('reverse')} disabled={!!creating}>
+                  {creating==='reverse'?<><span className="spin">↻</span> Creating…</>:'↩ Create Reverse Pickup'}
+                </button>
+            }
+            {rr.type==='exchange' && (
+              localRr.forward_shipment
+                ? <div style={{fontSize:12,color:'var(--green)',padding:'6px 12px',border:'1px solid var(--green)33',borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+                    → {localRr.forward_shipment.awb}
+                    <button onClick={()=>removeShipment('forward')} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:12}}>✕</button>
+                  </div>
+                : <button className="btn-ghost btn-sm" onClick={()=>createShipment('forward')} disabled={!!creating}>
+                    {creating==='forward'?<><span className="spin">↻</span> Creating…</>:'→ Create Forward Dispatch'}
+                  </button>
+            )}
           </div>
         </div>
       </div>
@@ -631,50 +781,82 @@ function RRModal({ rr: initRr, onClose }) {
   );
 }
 
-/* ── Emails ───────────────────────────────────────────────── */
+/* ─── Emails ─────────────────────────────────────────────────── */
 function Emails() {
-  const [cfg, setCfg]   = useState(null);
-  const [form, setForm] = useState({ host:'', port:'587', user:'', pass:'', from:'' });
-  const [testTo, setTestTo]       = useState('');
-  const [testTemplate, setTmpl]   = useState('shipped');
-  const [logs, setLogs]           = useState([]);
-  const [saving, setSaving]       = useState(false);
-  const [testing, setTesting]     = useState(false);
-  const [msg, setMsg]             = useState(null);
-  const [tab, setTab]             = useState('config');
+  const [tab,setTab] = useState('config');
+  const [cfg,setCfg] = useState(null);
+  const [form,setForm] = useState({host:'',port:'587',user:'',pass:'',from:''});
+  const [testTo,setTestTo] = useState('');
+  const [testTemplate,setTmpl] = useState('shipped');
+  const [logs,setLogs] = useState([]);
+  const [saving,setSaving] = useState(false);
+  const [testing,setTesting] = useState(false);
+  const [msg,setMsg] = useState(null);
 
   useEffect(()=>{
-    apiFetch('/admin/email-config').then(d=>{ if(d){ setCfg(d); setForm({host:d.host||'',port:d.port||587,user:d.user||'',pass:'',from:d.from||''}); } });
+    apiFetch('/admin/email-config').then(d=>{if(d){setCfg(d);setForm({host:d.host||'',port:d.port||587,user:d.user||'',pass:'',from:d.from||''});}});
     apiFetch('/admin/email-logs').then(d=>setLogs(d||[]));
   },[]);
 
   const save = async () => {
     setSaving(true); setMsg(null);
-    try { await apiFetch('/admin/email-config', { method:'POST', body: JSON.stringify(form) }); setMsg({type:'success',text:'Email config saved!'}); } catch(e) { setMsg({type:'error',text:e.message}); }
+    try { await apiFetch('/admin/email-config',{method:'POST',body:JSON.stringify(form)}); setMsg({type:'success',text:'Email config saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   const sendTest = async () => {
-    if (!testTo) return;
+    if(!testTo) return;
     setTesting(true); setMsg(null);
-    try { await apiFetch('/admin/email/test', { method:'POST', body: JSON.stringify({ to: testTo, template: testTemplate }) }); setMsg({type:'success',text:`Test email sent to ${testTo}`}); } catch(e) { setMsg({type:'error',text:e.message}); }
+    try { await apiFetch('/admin/email/test',{method:'POST',body:JSON.stringify({to:testTo,template:testTemplate})}); setMsg({type:'success',text:`Test email sent to ${testTo}`}); } catch(e){setMsg({type:'error',text:e.message});}
     setTesting(false);
   };
 
+  // Email preview renderer
+  const previews = {
+    shipped: {
+      subject: 'Your order has shipped! 🚚',
+      body: `<div style="font-size:22px;font-weight:800;margin-bottom:8px">Your order is on its way! 🚚</div>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi <strong>there</strong>, great news — your order <strong>#1234</strong> has been dispatched and is heading your way.</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#444;border-left:3px solid #111"><strong>Tracking:</strong> DL2345678901 · Delhivery</div>
+      <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track Your Order →</a></div>`,
+    },
+    transit: {
+      subject: "Your order is in transit 📦",
+      body: `<div style="font-size:22px;font-weight:800;margin-bottom:8px">Moving fast! 📦</div>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1234</strong> is in transit and moving towards you. Our courier is working hard to get it to you on time.</p>
+      <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track My Order →</a></div>`,
+    },
+    ofd: {
+      subject: "Out for delivery today! 🛵",
+      body: `<div style="font-size:22px;font-weight:800;margin-bottom:8px">Almost there! 🛵</div>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1234</strong> is out for delivery today. Keep your phone handy — our delivery partner will be at your door soon!</p>
+      <div style="background:#fff8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#92400e;border-left:3px solid #f59e0b">📍 Make sure someone is available to receive the delivery.</div>
+      <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track My Order →</a></div>`,
+    },
+    delivered: {
+      subject: "Delivered! Hope you love it ✅",
+      body: `<div style="font-size:22px;font-weight:800;margin-bottom:8px">Delivered! ✅</div>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1234</strong> has been successfully delivered. We hope you absolutely love it!</p>
+      <div style="background:#f0fdf4;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#166534;border-left:3px solid #22c55e">If you have any issues with your order, simply reply to this email and we'll make it right.</div>`,
+    },
+  };
+
+  const currentPreview = previews[testTemplate] || previews.shipped;
+
   return (
     <div>
-      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Emails</h2></div>
-      <div style={{display:'flex',gap:6,marginBottom:18}}>
-        {['config','test','logs'].map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>{t==='config'?'SMTP Config':t==='test'?'Send Test':'Email Logs'}</button>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Emails</h2></div>
+      <div style={{display:'flex',gap:4,marginBottom:18}}>
+        {[['config','SMTP Config'],['test','Preview & Test'],['logs','Email Logs']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
 
       {tab==='config' && (
-        <div className="card" style={{maxWidth:500}}>
+        <div className="card" style={{maxWidth:480}}>
           <div style={{fontWeight:700,marginBottom:16}}>SMTP Configuration</div>
-          {[['Host','host','smtp.gmail.com'],['Port','port','587'],['Username','user','you@gmail.com'],['Password','pass',''],['From Address','from','noreply@fitcheck.com']].map(([label,key,ph])=>(
+          {[['Host','host','smtp.gmail.com'],['Port','port','587'],['Username','user','you@gmail.com'],['Password','pass',''],['From Address','from','orders@fitcheck.com']].map(([label,key,ph])=>(
             <div className="field" key={key}>
               <label>{label}</label>
               <input type={key==='pass'?'password':'text'} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={ph}/>
@@ -685,19 +867,38 @@ function Emails() {
       )}
 
       {tab==='test' && (
-        <div className="card" style={{maxWidth:440}}>
-          <div style={{fontWeight:700,marginBottom:16}}>Send Test Email</div>
-          <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
-          <div className="field">
-            <label>Template</label>
-            <select value={testTemplate} onChange={e=>setTmpl(e.target.value)}>
-              <option value="shipped">Order Shipped</option>
-              <option value="transit">In Transit</option>
-              <option value="ofd">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-            </select>
+        <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'flex-start'}}>
+          <div className="card" style={{flex:'0 0 280px'}}>
+            <div style={{fontWeight:700,marginBottom:14}}>Send Test Email</div>
+            <div className="field"><label>Template</label>
+              <select value={testTemplate} onChange={e=>setTmpl(e.target.value)}>
+                <option value="shipped">Order Shipped 🚚</option>
+                <option value="transit">In Transit 📦</option>
+                <option value="ofd">Out for Delivery 🛵</option>
+                <option value="delivered">Delivered ✅</option>
+              </select>
+            </div>
+            <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
+            <button className="btn-primary" onClick={sendTest} disabled={testing}>{testing?'Sending…':'Send Test Email'}</button>
+            <div style={{marginTop:14,padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,fontSize:11,color:'var(--text-muted)'}}>
+              Subject: <strong style={{color:'var(--text)'}}>{currentPreview.subject}</strong>
+            </div>
           </div>
-          <button className="btn-primary" onClick={sendTest} disabled={testing}>{testing?'Sending…':'Send Test Email'}</button>
+          {/* Preview */}
+          <div style={{flex:'1 1 340px'}}>
+            <div style={{fontWeight:700,marginBottom:10,fontSize:12,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8}}>Email Preview</div>
+            <div style={{background:'#f4f4f5',borderRadius:12,padding:20}}>
+              <div style={{maxWidth:520,margin:'0 auto',background:'#fff',borderRadius:10,overflow:'hidden',boxShadow:'0 2px 12px rgba(0,0,0,.08)'}}>
+                <div style={{background:'#111',padding:'20px 28px',textAlign:'center'}}>
+                  <div style={{fontSize:20,fontWeight:800,color:'#fff',letterSpacing:'-0.3px'}}>Fit Check</div>
+                </div>
+                <div style={{padding:'28px 28px',fontFamily:'-apple-system,sans-serif'}} dangerouslySetInnerHTML={{__html:currentPreview.body}}/>
+                <div style={{padding:'16px 28px',borderTop:'1px solid #f0f0f0',textAlign:'center',fontSize:11,color:'#aaa'}}>
+                  © 2025 Fit Check · Powered by Arqontiq
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -710,7 +911,7 @@ function Emails() {
                 <tr key={i}>
                   <td style={{color:'var(--text-muted)'}}>{l.to}</td>
                   <td>{l.subject}</td>
-                  <td style={{color:'var(--text-muted)'}}>{fmt(l.sent_at)}</td>
+                  <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(l.sent_at)}</td>
                 </tr>
               ))}
               {logs.length===0 && <tr><td colSpan={3} style={{textAlign:'center',color:'var(--text-muted)',padding:24}}>No emails sent yet</td></tr>}
@@ -722,53 +923,38 @@ function Emails() {
   );
 }
 
-/* ── Shipping ─────────────────────────────────────────────── */
+/* ─── Shipping ────────────────────────────────────────────────── */
 function Shipping() {
-  const [creds, setCreds]   = useState([]);
-  const [partner, setPartner] = useState('delhivery');
-  const [form, setForm]     = useState({});
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg]       = useState(null);
+  const [creds,setCreds]     = useState([]);
+  const [partner,setPartner] = useState('delhivery');
+  const [form,setForm]       = useState({});
+  const [saving,setSaving]   = useState(false);
+  const [msg,setMsg]         = useState(null);
 
-  const delhiveryFields = [
-    ['API Token','api_token','Your Delhivery API token'],
-    ['Pickup Location Name','pickup_location','Warehouse name on Delhivery'],
-    ['Company Name','company_name','Your brand/company name'],
-    ['Return Address','return_address','Warehouse address'],
-    ['Return City','return_city','City'],
-    ['Return State','return_state','State'],
-    ['Return Pincode','return_pincode','Pincode'],
-    ['Return Phone','return_phone','Contact number'],
-  ];
-  const shiprocketFields = [
-    ['Email','email','Shiprocket account email'],
-    ['Password','password','Shiprocket account password'],
-    ['Pickup Location','pickup_location','Pickup location name'],
-    ['Company Name','company_name','Your brand name'],
-  ];
-  const fields = partner === 'delhivery' ? delhiveryFields : shiprocketFields;
+  const delhiveryFields=[['API Token','api_token','Your Delhivery API token'],['Pickup Location Name','pickup_location','Warehouse name on Delhivery'],['Company Name','company_name','Your brand/company name'],['Return Address','return_address','Warehouse address'],['Return City','return_city','City'],['Return State','return_state','State'],['Return Pincode','return_pincode','Pincode'],['Return Phone','return_phone','Contact number']];
+  const shiprocketFields=[['Email','email','Shiprocket account email'],['Password','password','Shiprocket account password'],['Pickup Location','pickup_location','Pickup location name'],['Company Name','company_name','Your brand name']];
+  const fields = partner==='delhivery'?delhiveryFields:shiprocketFields;
 
   useEffect(()=>{ apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[])); },[]);
 
   const save = async () => {
     setSaving(true); setMsg(null);
     try {
-      await apiFetch('/admin/shipping-creds', { method:'POST', body: JSON.stringify({ partner, credentials: form }) });
+      await apiFetch('/admin/shipping-creds',{method:'POST',body:JSON.stringify({partner,credentials:form})});
       setMsg({type:'success',text:`${partner} credentials saved!`});
       apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[]));
-    } catch(e) { setMsg({type:'error',text:e.message}); }
+    } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   return (
     <div>
-      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Shipping</h2></div>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Shipping</h2></div>
       <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}}>
         <div className="card" style={{maxWidth:460,flex:'1 1 340px'}}>
           <div style={{fontWeight:700,marginBottom:16}}>Connect Courier Partner</div>
           {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
-          <div className="field">
-            <label>Partner</label>
+          <div className="field"><label>Partner</label>
             <select value={partner} onChange={e=>{setPartner(e.target.value);setForm({});}}>
               <option value="delhivery">Delhivery</option>
               <option value="shiprocket">Shiprocket</option>
@@ -788,10 +974,7 @@ function Shipping() {
             {creds.length===0 && <div style={{color:'var(--text-muted)',fontSize:13}}>None connected yet</div>}
             {creds.map(c=>(
               <div key={c.partner} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-                <div>
-                  <div style={{fontWeight:600,fontSize:13,textTransform:'capitalize'}}>{c.partner}</div>
-                  <div style={{fontSize:11,color:'var(--green)'}}>● Connected</div>
-                </div>
+                <div><div style={{fontWeight:600,fontSize:13,textTransform:'capitalize'}}>{c.partner}</div><div style={{fontSize:11,color:'var(--green)'}}>● Connected</div></div>
                 <button className="btn-danger btn-sm" onClick={async()=>{await apiFetch(`/admin/shipping-creds/${c.partner}`,{method:'DELETE'});apiFetch('/admin/shipping-creds').then(d=>setCreds(d||[]));}}>Remove</button>
               </div>
             ))}
@@ -802,49 +985,71 @@ function Shipping() {
   );
 }
 
-/* ── Settings ─────────────────────────────────────────────── */
+/* ─── Settings ────────────────────────────────────────────────── */
 function Settings() {
-  const [staff, setStaff]   = useState([]);
-  const [newUser, setNewUser] = useState({ username:'', name:'', password:'' });
-  const [newPw, setNewPw]   = useState('');
-  const [tab, setTab]       = useState('staff');
-  const [msg, setMsg]       = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [tab,setTab]         = useState('staff');
+  const [staff,setStaff]     = useState([]);
+  const [newUser,setNewUser] = useState({username:'',name:'',password:''});
+  const [newPw,setNewPw]     = useState('');
+  const [tagMap,setTagMap]   = useState({});
+  const [newTag,setNewTag]   = useState('');
+  const [newStage,setNewStage] = useState('confirmed');
+  const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7});
+  const [msg,setMsg]         = useState(null);
+  const [saving,setSaving]   = useState(false);
 
-  useEffect(()=>{ apiFetch('/admin/staff').then(d=>setStaff(d||[])); },[]);
+  useEffect(()=>{
+    apiFetch('/admin/staff').then(d=>setStaff(d||[]));
+    apiFetch('/admin/tag-mappings').then(d=>setTagMap(d||{}));
+    apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
+  },[]);
 
   const addStaff = async () => {
     setSaving(true); setMsg(null);
     try {
-      await apiFetch('/admin/staff', { method:'POST', body: JSON.stringify(newUser) });
+      await apiFetch('/admin/staff',{method:'POST',body:JSON.stringify(newUser)});
       setMsg({type:'success',text:'Staff added!'}); setNewUser({username:'',name:'',password:''});
       apiFetch('/admin/staff').then(d=>setStaff(d||[]));
-    } catch(e) { setMsg({type:'error',text:e.message}); }
+    } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   const removeStaff = async (username) => {
-    if (!confirm(`Remove ${username}?`)) return;
-    await apiFetch(`/admin/staff/${username}`, { method:'DELETE' });
+    if(!confirm(`Remove ${username}?`)) return;
+    await apiFetch(`/admin/staff/${username}`,{method:'DELETE'});
     apiFetch('/admin/staff').then(d=>setStaff(d||[]));
   };
 
   const changePw = async () => {
-    if (newPw.length < 6) { setMsg({type:'error',text:'Password too short'}); return; }
+    if(newPw.length<6){setMsg({type:'error',text:'Password too short'});return;}
     setSaving(true);
-    try {
-      const d = await apiFetch('/admin/change-password', { method:'POST', body: JSON.stringify({ newPassword: newPw }) });
-      setMsg({type:'success',text:d.message||'Password updated!'}); setNewPw('');
-    } catch(e) { setMsg({type:'error',text:e.message}); }
+    try { const d = await apiFetch('/admin/change-password',{method:'POST',body:JSON.stringify({newPassword:newPw})}); setMsg({type:'success',text:d.message||'Password updated!'}); setNewPw(''); } catch(e){setMsg({type:'error',text:e.message});}
+    setSaving(false);
+  };
+
+  const saveTagMap = async () => {
+    setSaving(true); setMsg(null);
+    try { await apiFetch('/admin/tag-mappings',{method:'POST',body:JSON.stringify({tag_mappings:tagMap})}); setMsg({type:'success',text:'Tag mappings saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
+    setSaving(false);
+  };
+
+  const addTagMapping = () => {
+    if(!newTag.trim()) return;
+    setTagMap({...tagMap,[newTag.trim()]:newStage}); setNewTag('');
+  };
+
+  const saveRRSettings = async () => {
+    setSaving(true); setMsg(null);
+    try { await apiFetch('/admin/rr-settings',{method:'POST',body:JSON.stringify(rrSettings)}); setMsg({type:'success',text:'Return settings saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
   };
 
   return (
     <div>
-      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:700}}>Settings</h2></div>
-      <div style={{display:'flex',gap:6,marginBottom:18}}>
-        {['staff','security','store'].map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===t?'#555':'var(--border)'),background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>{t==='staff'?'Staff Accounts':t==='security'?'Security':'Store Info'}</button>
+      <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
+      <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
+        {[['staff','Staff'],['tags','Tag Mapping'],['returns','Returns & Exchanges'],['security','Security'],['store','Store']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
@@ -854,14 +1059,11 @@ function Settings() {
           <div className="card" style={{maxWidth:380,flex:'1 1 300px'}}>
             <div style={{fontWeight:700,marginBottom:14}}>Add Staff Account</div>
             {[['Username','username','johndoe'],['Full Name','name','John Doe'],['Password','password','']].map(([label,key,ph])=>(
-              <div className="field" key={key}>
-                <label>{label}</label>
-                <input type={key==='password'?'password':'text'} value={newUser[key]} onChange={e=>setNewUser({...newUser,[key]:e.target.value})} placeholder={ph}/>
-              </div>
+              <div className="field" key={key}><label>{label}</label><input type={key==='password'?'password':'text'} value={newUser[key]} onChange={e=>setNewUser({...newUser,[key]:e.target.value})} placeholder={ph}/></div>
             ))}
             <button className="btn-primary" onClick={addStaff} disabled={saving}>{saving?'Adding…':'Add Staff'}</button>
           </div>
-          <div className="card" style={{flex:'1 1 260px'}}>
+          <div className="card" style={{flex:'1 1 240px'}}>
             <div style={{fontWeight:700,marginBottom:12}}>Staff Accounts</div>
             {staff.length===0 && <div style={{color:'var(--text-muted)',fontSize:13}}>No staff added yet</div>}
             {staff.map(s=>(
@@ -874,25 +1076,88 @@ function Settings() {
         </div>
       )}
 
+      {tab==='tags' && (
+        <div className="card" style={{maxWidth:560}}>
+          <div style={{fontWeight:700,marginBottom:6}}>Tag → Stage Mapping</div>
+          <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>When a Shopify order has a tag, automatically map it to a stage in your panel. Use this when vendors or fulfillers add tags to orders.</p>
+          <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+            <input value={newTag} onChange={e=>setNewTag(e.target.value)} placeholder="Shopify tag e.g. dispatched" style={{flex:'1 1 150px'}} onKeyDown={e=>e.key==='Enter'&&addTagMapping()}/>
+            <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
+              {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="btn-ghost btn-sm" onClick={addTagMapping}>Add Mapping</button>
+          </div>
+          {Object.keys(tagMap).length===0 && <div style={{color:'var(--text-muted)',fontSize:13,marginBottom:14}}>No mappings configured yet.</div>}
+          {Object.entries(tagMap).map(([t,s])=>(
+            <div key={t} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontFamily:'monospace',background:'var(--bg-card2)',padding:'2px 8px',borderRadius:4,fontSize:11}}>{t}</span>
+                <span style={{color:'var(--text-muted)'}}>→</span>
+                {stageBadge(s)}
+              </div>
+              <button className="btn-danger btn-sm" onClick={()=>{const n={...tagMap};delete n[t];setTagMap(n);}}>Remove</button>
+            </div>
+          ))}
+          <div style={{marginTop:16}}>
+            <button className="btn-primary btn-sm" onClick={saveTagMap} disabled={saving}>{saving?'Saving…':'Save Mappings'}</button>
+          </div>
+        </div>
+      )}
+
+      {tab==='returns' && (
+        <div className="card" style={{maxWidth:480}}>
+          <div style={{fontWeight:700,marginBottom:6}}>Return & Exchange Settings</div>
+          <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:18}}>Control whether customers can submit return or exchange requests from the track page.</p>
+          {[
+            ['exchange_enabled','Allow Exchanges','Customers can request product exchanges'],
+            ['return_enabled','Allow Returns','Customers can request returns / refunds'],
+          ].map(([key,label,desc])=>(
+            <div key={key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+              <div>
+                <div style={{fontWeight:600,fontSize:13}}>{label}</div>
+                <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{desc}</div>
+              </div>
+              <label className="toggle">
+                <input type="checkbox" checked={rrSettings[key]} onChange={e=>setRrSettings({...rrSettings,[key]:e.target.checked})}/>
+                <span className="toggle-slider"/>
+              </label>
+            </div>
+          ))}
+          <div style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Return Window (days)</div>
+            <input type="number" value={rrSettings.return_window_days} onChange={e=>setRrSettings({...rrSettings,return_window_days:parseInt(e.target.value)||7})} style={{width:100}} min="1" max="90"/>
+          </div>
+          <div style={{marginTop:14}}>
+            <button className="btn-primary btn-sm" onClick={saveRRSettings} disabled={saving}>{saving?'Saving…':'Save Settings'}</button>
+          </div>
+        </div>
+      )}
+
       {tab==='security' && (
         <div className="card" style={{maxWidth:380}}>
           <div style={{fontWeight:700,marginBottom:14}}>Change Admin Password</div>
           <div className="field"><label>New Password</label><input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Min 6 characters"/></div>
           <button className="btn-primary" onClick={changePw} disabled={saving}>{saving?'Updating…':'Update Password'}</button>
-          <p style={{fontSize:11,color:'var(--text-muted)',marginTop:10}}>⚠ Also update ADMIN_PASSWORD in your Render environment variables to persist after restart.</p>
+          <p style={{fontSize:11,color:'var(--text-muted)',marginTop:10}}>⚠ Also update ADMIN_PASSWORD in your Render environment variables.</p>
         </div>
       )}
 
       {tab==='store' && (
         <div className="card" style={{maxWidth:440}}>
-          <div style={{fontWeight:700,marginBottom:14}}>Store Setup</div>
-          <div style={{marginBottom:12,padding:'12px 14px',background:'var(--bg-card2)',borderRadius:8,fontSize:13}}>
-            <div style={{fontWeight:600,marginBottom:4}}>Connect Shopify Store</div>
-            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:10}}>Visit the install URL to connect or reconnect your Shopify store.</div>
+          <div style={{fontWeight:700,marginBottom:14}}>Shopify Store Connection</div>
+          <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-card2)',borderRadius:8,fontSize:13}}>
+            <div style={{fontWeight:600,marginBottom:4}}>Connect / Reconnect Store</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:10}}>Visit the install page to connect your Shopify store via OAuth.</div>
             <a href="/install" style={{color:'var(--cyan)',fontSize:13,fontWeight:600}}>Go to /install →</a>
           </div>
-          <div style={{fontSize:12,color:'var(--text-muted)'}}>Add these URLs to your Shopify app redirect whitelist:<br/>
-            <code style={{fontFamily:'monospace',color:'var(--accent-dim)'}}>{window.location.origin}/shopify/callback</code>
+          <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-card2)',borderRadius:8,fontSize:13}}>
+            <div style={{fontWeight:600,marginBottom:4}}>Customer Track Page</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:8}}>Share this link with customers to track orders and submit returns.</div>
+            <a href="/track" target="_blank" style={{color:'var(--cyan)',fontSize:13,fontWeight:600}}>{window.location.origin}/track →</a>
+          </div>
+          <div style={{fontSize:12,color:'var(--text-muted)',padding:'10px 14px',background:'var(--bg-card2)',borderRadius:8}}>
+            <div style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>Shopify App Redirect URL</div>
+            <code style={{fontFamily:'monospace',color:'var(--accent-dim)',fontSize:11}}>{window.location.origin}/shopify/callback</code>
           </div>
         </div>
       )}
@@ -900,30 +1165,27 @@ function Settings() {
   );
 }
 
-/* ── App Shell ────────────────────────────────────────────── */
+/* ─── App Shell ───────────────────────────────────────────────── */
 function App() {
-  const [authed, setAuthed] = useState(!!token());
-  const [tab, setTab]       = useState('dashboard');
-  const [light, setLight]   = useState(() => localStorage.getItem('fc_theme') === 'light');
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-    localStorage.setItem('fc_theme', light ? 'light' : 'dark');
-  }, [light]);
+  const [authed,setAuthed] = useState(!!token());
+  const [tab,setTab]       = useState('dashboard');
 
   const logout = async () => {
-    try { await apiFetch('/admin/logout', { method:'POST' }); } catch {}
+    try { await apiFetch('/admin/logout',{method:'POST'}); } catch {}
     clearToken(); setAuthed(false);
   };
 
   if (!authed) return <Login onLogin={()=>setAuthed(true)}/>;
 
-  const views = { dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>, emails: <Emails/>, shipping: <Shipping/>, settings: <Settings/> };
+  const views = {
+    dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>,
+    emails: <Emails/>, shipping: <Shipping/>, settings: <Settings/>,
+  };
 
   return (
     <div style={{display:'flex',minHeight:'100vh'}}>
-      <Sidebar tab={tab} setTab={setTab} onLogout={logout} light={light} setLight={setLight}/>
-      <main style={{flex:1,overflow:'auto'}}>
+      <Sidebar tab={tab} setTab={setTab} onLogout={logout}/>
+      <main style={{flex:1,overflow:'auto',minHeight:'100vh'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 28px'}}>
           {views[tab] || <Dashboard/>}
         </div>

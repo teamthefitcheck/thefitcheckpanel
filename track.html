@@ -334,7 +334,8 @@ function showOrderDetail(order){
     </div>
   `).join('');
 
-  const canRR=(order.exchange_enabled!==false||order.return_enabled!==false)&&['delivered'].includes(order.stage||'');
+  const notCancelled = !['cancelled','rto'].includes(order.stage||'');
+  const canRR=(order.exchange_enabled!==false||order.return_enabled!==false)&&notCancelled;
 
   el.innerHTML=`
     <button class="btn btn-outline btn-sm" style="margin-bottom:16px" onclick="document.getElementById('searchSection').style.display='block';document.getElementById('orderSection').style.display='none'">← Track Another</button>
