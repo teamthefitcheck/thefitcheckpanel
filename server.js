@@ -563,13 +563,14 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
     if (orderId) {
       try { const d = await shopifyREST(`/orders/${orderId}.json?fields=name,customer`); order = d.order; } catch {}
     }
-    let html;
-    if (template === 'confirmed')  html = templateOrderConfirmed({ ...order, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: '799.00', quantity: 1 }], total_price: order.total_price || '799.00' });
-    else if (template === 'shipped')    html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
-    else if (template === 'transit') html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
-    else if (template === 'ofd')   html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
-    else                           html = templateDelivered({ order });
-    await sendEmail({ to, subject: `[TEST] ${BRAND_NAME} Email Preview`, html });
+    let html, subject;
+    if (template === 'confirmed')  { html = templateOrderConfirmed({ ...order, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: '799.00', quantity: 1 }], total_price: order.total_price || '799.00' }); subject = `[TEST] Order Confirmed 🎉`; }
+    else if (template === 'shipped')  { html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Your order has shipped 🚚`; }
+    else if (template === 'transit')  { html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Your order is in transit 📦`; }
+    else if (template === 'ofd')      { html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Out for delivery today 🛵`; }
+    else if (template === 'delivered'){ html = templateDelivered({ order }); subject = `[TEST] Your order has been delivered ✅`; }
+    else                              { html = templateDelivered({ order }); subject = `[TEST] ${BRAND_NAME} Email Preview`; }
+    await sendEmail({ to, subject, html });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
