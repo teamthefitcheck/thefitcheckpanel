@@ -539,7 +539,7 @@ function Orders() {
     finally { setLoading(false); }
   },[q,stage,from,to]);
 
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{ load(); },[stage]);
 
   return (
     <div>
@@ -550,17 +550,18 @@ function Orders() {
         </div>
         <button className="btn-primary btn-sm" onClick={load}>{loading?'…':'↻ Refresh'}</button>
       </div>
-      <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         <input placeholder="Search order, customer…" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:150}}/>
-        <select value={stage} onChange={e=>setStage(e.target.value)} style={{width:140}}>
-          <option value="">All Stages</option>
-          {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
-            <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-          ))}
-        </select>
         <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:140}}/>
         <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:140}}/>
         <button className="btn-primary btn-sm" onClick={load}>Search</button>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {['','confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>{
+          const active = stage===s;
+          const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
+          return <button key={s} onClick={()=>setStage(s)} style={{padding:'5px 14px',borderRadius:20,border:'1px solid '+(active?'#555':'var(--border)'),background:active?'#ffffff18':'transparent',color:active?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',transition:'all .15s'}}>{label}</button>;
+        })}
       </div>
       <div className="card" style={{padding:0,overflow:'auto'}}>
         <table>
