@@ -575,6 +575,19 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/admin/email/preview', adminAuth, (req, res) => {
+  const t = req.query.template || 'confirmed';
+  const order = { name: '#TEST-001', customer: { firstName: 'Test' }, id: '0', line_items: [{ title: 'Sample Product', variant_title: 'Size M', price: '799.00', quantity: 1 }], total_price: '799.00' };
+  let html;
+  if (t === 'confirmed') html = templateOrderConfirmed(order);
+  else if (t === 'shipped') html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
+  else if (t === 'transit') html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
+  else if (t === 'ofd') html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
+  else html = templateDelivered({ order });
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
+});
+
 app.get('/admin/email-logs', adminAuth, async (req, res) => {
   const logs = await mdb.collection('email_log').find({}).sort({ sent_at: -1 }).limit(100).toArray();
   res.json(logs);
