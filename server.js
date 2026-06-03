@@ -833,6 +833,15 @@ app.post('/admin/change-password', adminAuth, async (req, res) => {
 
 // ─── Tag Mappings ─────────────────────────────────────────────────────────────
 // Maps Shopify order tags → internal stages. Admin configures these.
+app.get('/admin/shopify-tags', adminAuth, async (req, res) => {
+  try {
+    const from = new Date(Date.now() - 90 * 86400000).toISOString();
+    const orders = await fetchAllOrders('any', from, null);
+    const tags = [...new Set(orders.flatMap(o => o.tags || []))].filter(Boolean).sort();
+    res.json(tags);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/tag-mappings', adminAuth, async (req, res) => {
   const doc = await mdb.collection('settings').findOne({}, { projection: { tag_mappings: 1, _id: 0 } });
   res.json(doc?.tag_mappings || {});

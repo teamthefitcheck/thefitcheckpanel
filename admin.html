@@ -1030,6 +1030,8 @@ function Settings() {
   const [tagMap,setTagMap]   = useState({});
   const [newTag,setNewTag]   = useState('');
   const [newStage,setNewStage] = useState('confirmed');
+  const [shopifyTags,setShopifyTags] = useState([]);
+  const [tagsLoading,setTagsLoading] = useState(false);
   const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7});
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
@@ -1038,6 +1040,8 @@ function Settings() {
     apiFetch('/admin/staff').then(d=>setStaff(d||[]));
     apiFetch('/admin/tag-mappings').then(d=>setTagMap(d||{}));
     apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
+    setTagsLoading(true);
+    apiFetch('/admin/shopify-tags').then(d=>setShopifyTags(d||[])).finally(()=>setTagsLoading(false));
   },[]);
 
   const addStaff = async () => {
@@ -1116,12 +1120,24 @@ function Settings() {
         <div className="card" style={{maxWidth:560}}>
           <div style={{fontWeight:700,marginBottom:6}}>Tag → Stage Mapping</div>
           <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>When a Shopify order has a tag, automatically map it to a stage in your panel. Use this when vendors or fulfillers add tags to orders.</p>
-          <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
-            <input value={newTag} onChange={e=>setNewTag(e.target.value)} placeholder="Shopify tag e.g. dispatched" style={{flex:'1 1 150px'}} onKeyDown={e=>e.key==='Enter'&&addTagMapping()}/>
-            <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
-              {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-            <button className="btn-ghost btn-sm" onClick={addTagMapping}>Add Mapping</button>
+          <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
+            <div style={{flex:'1 1 180px',display:'flex',flexDirection:'column',gap:4}}>
+              <label>Shopify Tag</label>
+              {shopifyTags.length > 0
+                ? <select value={newTag} onChange={e=>setNewTag(e.target.value)} style={{width:'100%'}}>
+                    <option value="">— Select a tag —</option>
+                    {shopifyTags.filter(t=>!tagMap[t]).map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                : <input value={newTag} onChange={e=>setNewTag(e.target.value)} placeholder={tagsLoading?'Loading tags…':'e.g. dispatched'} disabled={tagsLoading} style={{width:'100%'}}/>
+              }
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <label>Maps to Stage</label>
+              <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
+                {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+              </select>
+            </div>
+            <button className="btn-ghost btn-sm" onClick={addTagMapping} disabled={!newTag}>Add Mapping</button>
           </div>
           {Object.keys(tagMap).length===0 && <div style={{color:'var(--text-muted)',fontSize:13,marginBottom:14}}>No mappings configured yet.</div>}
           {Object.entries(tagMap).map(([t,s])=>(
