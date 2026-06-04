@@ -79,32 +79,24 @@ async function shopifyGQL(query, variables = {}) {
 }
 
 async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
-  let orders = [], pageInfo = null, first = true;
-  while (first || pageInfo?.hasNextPage) {
-    first = false;
-    const vars = { first: 250, query: buildOrderQuery(status, createdAtMin, createdAtMax), after: pageInfo?.endCursor || null };
-    const data = await shopifyGQL(`
-      query($first:Int!,$query:String,$after:String){
-        orders(first:$first,query:$query,after:$after,sortKey:CREATED_AT,reverse:true){
-          pageInfo{hasNextPage endCursor}
-          edges{node{
-            id name createdAt totalPriceSet{shopMoney{amount}}
-            displayFinancialStatus displayFulfillmentStatus
-            email phone tags
-            customer{firstName lastName email phone}
-            shippingAddress{name address1 address2 city province zip phone}
-            lineItems(first:50){edges{node{id title quantity vendor sku product{id} originalUnitPriceSet{shopMoney{amount}} variant{title}}}}
-            fulfillments{status trackingInfo{number url company} createdAt}
-            note
-          }}
-        }
-      }`, vars);
-    const conn = data?.data?.orders;
-    if (!conn) break;
-    orders.push(...conn.edges.map(e => normaliseOrder(e.node)));
-    pageInfo = conn.pageInfo;
-  }
-  return orders;
+  const vars = { first: 250, query: buildOrderQuery(status, createdAtMin, createdAtMax) };
+  const data = await shopifyGQL(`
+    query($first:Int!,$query:String){
+      orders(first:$first,query:$query,sortKey:CREATED_AT,reverse:true){
+        edges{node{
+          id name createdAt totalPriceSet{shopMoney{amount}}
+          displayFinancialStatus displayFulfillmentStatus
+          email phone tags
+          customer{firstName lastName email phone}
+          lineItems(first:10){edges{node{id title quantity vendor sku product{id} originalUnitPriceSet{shopMoney{amount}} variant{title}}}}
+          fulfillments{status trackingInfo{number url company} createdAt}
+          note
+        }}
+      }
+    }`, vars);
+  const conn = data?.data?.orders;
+  if (!conn) return [];
+  return conn.edges.map(e => normaliseOrder(e.node));
 }
 
 function buildOrderQuery(status, min, max) {

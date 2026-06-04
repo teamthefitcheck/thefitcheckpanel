@@ -551,18 +551,8 @@ function Orders() {
       const params = new URLSearchParams();
       if(from) params.set('from',from);
       if(to)   params.set('to',to);
-      params.set('page','1');
-      // fetch all pages
-      let all = [];
-      let pg = 1, pages = 1;
-      do {
-        params.set('page', pg);
-        const d = await apiFetch(`/orders?${params}`);
-        all = all.concat(d.orders||[]);
-        pages = d.pages||1;
-        pg++;
-      } while(pg <= pages && pg <= 10); // cap at 10 pages = 1000 orders
-      setAllOrders(all);
+      const d = await apiFetch(`/orders?${params}`);
+      setAllOrders(d.orders||[]);
       setPage(1);
     } catch(e){ console.error(e); }
     finally { setLoading(false); }
