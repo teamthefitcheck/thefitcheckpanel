@@ -357,15 +357,26 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
       try {
         const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
         const email = order.email || order.contact_email;
-        const trackingUrl = tracking_url || (awb ? trackingUrlForCourier(courier, awb) : '');
+        const awbVal = awb || (await OS.get(req.params.id))?.awb || '';
+        const courierVal = courier || (await OS.get(req.params.id))?.courier || '';
+        const trackingUrl = tracking_url || (awbVal ? trackingUrlForCourier(courierVal, awbVal) : '');
+        console.log(`[stage-email] order=${order.name} stage=${stage} email=${email||'none'}`);
         if (email) {
           let html, subject;
-          if (stage === 'pickup')    { html = templateShipped({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} has shipped! 🚚`; }
-          else if (stage === 'transit') { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
-          else if (stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
-          if (html) sendEmail({ to: email, subject, html }).catch(() => {});
+          if (stage === 'confirmed') { html = templateOrderConfirmed(order); subject = `Your order ${order.name} is confirmed! 🎉`; }
+          else if (stage === 'pickup')   { html = templateShipped({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} has shipped! 🚚`; }
+          else if (stage === 'transit')  { html = templateInTransit({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
+          else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+          else if (stage === 'delivered'){ html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+          if (html) {
+            sendEmail({ to: email, subject, html })
+              .then(() => console.log(`[stage-email] sent ${stage} email to ${email}`))
+              .catch(e => console.error(`[stage-email] failed for ${stage}:`, e.message));
+          } else {
+            console.log(`[stage-email] no template for stage=${stage}, skipping`);
+          }
         }
-      } catch {}
+      } catch(e) { console.error('[stage-email] error:', e.message); }
     }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
