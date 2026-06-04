@@ -465,17 +465,21 @@ function templateOrderConfirmed(order) {
   const addrLine = [addr.address1, addr.address2, addr.city, addr.province, addr.zip].filter(Boolean).join(', ');
 
   return emailBase(`
-    <h2 style="font-size:22px;font-weight:800;color:#111;margin:0 0 4px">Order Confirmed! 🎉</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 24px">Hey ${order.customer?.first_name || order.shipping_address?.first_name || 'there'}, thank you for shopping with us! Your order is confirmed and we're getting it ready.</p>
+    <h2 style="font-size:22px;font-weight:800;color:#111;margin:0 0 4px">Order Placed Successfully! 🎉</h2>
+    <p style="color:#555;font-size:14px;margin:0 0 24px">Hey ${order.customer?.first_name || order.shipping_address?.first_name || 'there'}, thank you for your order! We've received it and you'll get updates as it moves forward.</p>
 
     <div style="background:#f9f9f9;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Order Number</span>
         <span style="font-size:14px;font-weight:800;color:#111;font-family:monospace;">${order.name}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Date</span>
         <span style="font-size:13px;color:#555;">${new Date(order.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Payment</span>
+        <span style="font-size:13px;color:#555;font-weight:600;">${order.financial_status === 'paid' ? '✅ Prepaid' : '💵 Cash on Delivery'}</span>
       </div>
     </div>
 
@@ -483,7 +487,7 @@ function templateOrderConfirmed(order) {
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
       ${items}
       <tr>
-        <td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:800;color:#111;">Total</td>
+        <td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:800;color:#111;">Total Amount</td>
         <td style="padding:12px 0 0;font-size:15px;font-weight:800;color:#111;text-align:right;">₹${parseFloat(order.total_price || 0).toLocaleString('en-IN')}</td>
       </tr>
     </table>
@@ -491,11 +495,11 @@ function templateOrderConfirmed(order) {
     ${addrLine ? `
     <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
       <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Delivering To</div>
-      <div style="font-size:13px;color:#333;line-height:1.6;">${addr.name || (addr.first_name + ' ' + addr.last_name)}<br/>${addrLine}</div>
+      <div style="font-size:13px;color:#333;line-height:1.6;">${addr.name || ((addr.first_name||'') + ' ' + (addr.last_name||''))}<br/>${addrLine}</div>
     </div>` : ''}
 
-    <p style="color:#888;font-size:13px;margin:0;">We'll notify you as soon as your order ships. For any queries, just reply to this email.</p>
-  `, `Your order ${order.name} is confirmed!`);
+    <p style="color:#888;font-size:13px;margin:0;">We'll keep you updated every step of the way. For any queries, just reply to this email.</p>
+  `, `Order placed! ${order.name} is on its way 🎉`);
 }
 
 function templateShipped({ order, awb, courier, trackingUrl }) {
@@ -853,11 +857,11 @@ app.post('/webhooks/orders/create', async (req, res) => {
   if (!verifyWebhook(req)) return;
   try {
     const order = JSON.parse(req.body);
-    await OS.upsert(String(order.id), { stage: 'confirmed', updated_at: new Date().toISOString() });
+    await OS.upsert(String(order.id), { stage: 'new', updated_at: new Date().toISOString() });
     const email = order.email || order.contact_email;
     console.log(`[orders/create] ${order.name} email=${email||'none'}`);
     if (email) {
-      sendEmail({ to: email, subject: `Order Confirmed – ${order.name} 🎉`, html: templateOrderConfirmed(order) })
+      sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order) })
         .then(()=>console.log(`[orders/create] confirmation email sent to ${email}`))
         .catch(e=>console.error(`[orders/create] email failed:`, e.message));
     }
