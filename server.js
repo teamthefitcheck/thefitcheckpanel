@@ -85,7 +85,7 @@ async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
     const vars = { first: 250, query: buildOrderQuery(status, createdAtMin, createdAtMax), after: pageInfo?.endCursor || null };
     const data = await shopifyGQL(`
       query($first:Int!,$query:String,$after:String){
-        orders(first:$first,query:$query,after:$after){
+        orders(first:$first,query:$query,after:$after,sortKey:CREATED_AT,reverse:true){
           pageInfo{hasNextPage endCursor}
           edges{node{
             id name createdAt totalPriceSet{shopMoney{amount}}
@@ -315,7 +315,7 @@ app.get('/orders', adminAuth, async (req, res) => {
     }
     const total = orders.length;
     const page  = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = 100;
+    const limit = 50;
     orders = orders.slice((page - 1) * limit, page * limit);
     res.json({ orders, total, page, pages: Math.ceil(total / limit) });
   } catch (e) { console.error('GET /orders:', e.message); res.status(500).json({ error: e.message }); }
