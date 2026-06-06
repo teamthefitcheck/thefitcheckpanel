@@ -374,9 +374,18 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
           else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
           else if (stage === 'delivered'){ html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
           if (html) {
-            sendEmail({ to: email, subject, html })
-              .then(() => console.log(`[stage-email] sent ${stage} email to ${email}`))
-              .catch(e => console.error(`[stage-email] failed for ${stage}:`, e.message));
+            const rec2 = await OS.get(req.params.id);
+            const alreadySent = (rec2?.emails_sent || []).includes(stage);
+            if (!alreadySent) {
+              sendEmail({ to: email, subject, html })
+                .then(async () => {
+                  await mdb.collection('order_stage').updateOne({ shopify_id: String(req.params.id) }, { $addToSet: { emails_sent: stage } });
+                  console.log(`[stage-email] sent ${stage} email to ${email}`);
+                })
+                .catch(e => console.error(`[stage-email] failed for ${stage}:`, e.message));
+            } else {
+              console.log(`[stage-email] skipped ${stage} email — already sent`);
+            }
           } else {
             console.log(`[stage-email] no template for stage=${stage}, skipping`);
           }
@@ -993,28 +1002,34 @@ async function runTrackingSync() {
       if (!result || !result.stage) continue;
       if (result.stage === rec.stage) continue; // no change
 
-      console.log(`[tracking-sync] ${rec.shopify_id}: ${rec.stage} → ${result.stage} (${result.subtag})`);
+      // Check if email already sent for this stage
+      const emailsSent = rec.emails_sent || [];
+      const alreadyEmailed = emailsSent.includes(result.stage);
+
+      console.log(`[tracking-sync] ${rec.shopify_id}: ${rec.stage} → ${result.stage} (${result.subtag}) email_already_sent=${alreadyEmailed}`);
       await OS.upsert(rec.shopify_id, { stage: result.stage, updated_at: new Date().toISOString() });
 
-      // Send customer email for the new stage
-      try {
-        const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
-        const email = order.email || order.contact_email;
-        const awb = rec.awb || '';
-        const courier = rec.courier || '';
-        const trackingUrl = rec.tracking_url || '';
-        if (email) {
-          let html, subject;
-          if (result.stage === 'transit')  { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
-          else if (result.stage === 'ofd') { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
-          else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
-          else if (result.stage === 'rto') { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
-          if (html) {
-            await sendEmail({ to: email, subject, html });
-            console.log(`[tracking-sync] email sent to ${email} for stage=${result.stage}`);
+      if (!alreadyEmailed) {
+        try {
+          const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
+          const email = order.email || order.contact_email;
+          const awb = rec.awb || '';
+          const courier = rec.courier || '';
+          const trackingUrl = rec.tracking_url || '';
+          if (email) {
+            let html, subject;
+            if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
+            else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+            else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+            else if (result.stage === 'rto')   { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
+            if (html) {
+              await sendEmail({ to: email, subject, html });
+              await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: result.stage } });
+              console.log(`[tracking-sync] email sent to ${email} for stage=${result.stage}`);
+            }
           }
-        }
-      } catch(e) { console.error(`[tracking-sync] email error for ${rec.shopify_id}:`, e.message); }
+        } catch(e) { console.error(`[tracking-sync] email error for ${rec.shopify_id}:`, e.message); }
+      }
       updated++;
     }
     console.log(`[tracking-sync] done. ${updated} orders updated.`);
