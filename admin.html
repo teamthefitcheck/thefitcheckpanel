@@ -1274,8 +1274,10 @@ function SyncLogs() {
 
   const load = async () => {
     setLoading(true);
-    try { const d = await apiFetch('/admin/sync-tracking/logs'); setLogs(d); }
-    catch(e) { console.error(e); }
+    try {
+      const d = await apiFetch('/admin/sync-tracking/logs');
+      setLogs(Array.isArray(d) ? d : []);
+    } catch(e) { console.error('sync logs fetch error:', e); }
     finally { setLoading(false); }
   };
 
@@ -1283,7 +1285,21 @@ function SyncLogs() {
     setSyncing(true);
     try {
       await apiFetch('/admin/sync-tracking', { method: 'POST' });
-      setTimeout(() => { load(); setSyncing(false); }, 8000);
+      // Poll every 3s for up to 60s until a new log appears
+      const before = logs[0]?.started_at || null;
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const d = await apiFetch('/admin/sync-tracking/logs');
+          if (d.length > 0 && d[0].started_at !== before) {
+            setLogs(d);
+            setSyncing(false);
+            clearInterval(poll);
+          }
+        } catch {}
+        if (attempts >= 20) { setSyncing(false); clearInterval(poll); load(); }
+      }, 3000);
     } catch(e) { alert('Error: ' + e.message); setSyncing(false); }
   };
 
