@@ -297,7 +297,12 @@ app.get('/orders', adminAuth, async (req, res) => {
     let orders = allOrders.map(o => {
       const sid = String(o.id);
       const st = stageMap[sid] || {};
-      return { ...o, _stage: st.stage || 'new', _awb: st.awb || '', _courier: st.courier || '', _tracking_url: st.tracking_url || '' };
+      // Fall back to Shopify fulfillment data if panel has no AWB saved
+      const shopifyFulfillment = (o.fulfillments || []).find(f => f.tracking_number);
+      const awb = st.awb || shopifyFulfillment?.tracking_number || '';
+      const courier = st.courier || shopifyFulfillment?.company || '';
+      const tracking_url = st.tracking_url || shopifyFulfillment?.tracking_url || '';
+      return { ...o, _stage: st.stage || 'new', _awb: awb, _courier: courier, _tracking_url: tracking_url };
     });
     if (stage)   orders = orders.filter(o => o._stage === stage);
     if (payment) orders = orders.filter(o => o.financial_status?.includes(payment.toLowerCase()));
@@ -337,7 +342,11 @@ app.get('/orders/:id', adminAuth, async (req, res) => {
     const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
     const st = await OS.get(req.params.id);
     const enriched = await enrichOrderImages(order);
-    res.json({ ...enriched, _stage: st?.stage || 'new', _awb: st?.awb || '', _courier: st?.courier || '', _tracking_url: st?.tracking_url || '' });
+    const shopifyFulfillment = (order.fulfillments || []).find(f => f.tracking_number);
+    const awb = st?.awb || shopifyFulfillment?.tracking_number || '';
+    const courier = st?.courier || shopifyFulfillment?.tracking_company || '';
+    const tracking_url = st?.tracking_url || shopifyFulfillment?.tracking_url || '';
+    res.json({ ...enriched, _stage: st?.stage || 'new', _awb: awb, _courier: courier, _tracking_url: tracking_url });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -389,7 +398,11 @@ app.get('/staff/orders', staffAuth, async (req, res) => {
     const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, _id: 0 } }).toArray();
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
     const orders = allOrders
-      .map(o => { const st = stageMap[String(o.id)] || {}; return { ...o, _stage: st.stage || 'new', _awb: st.awb || '', _courier: st.courier || '' }; })
+      .map(o => {
+        const st = stageMap[String(o.id)] || {};
+        const sf = (o.fulfillments || []).find(f => f.tracking_number);
+        return { ...o, _stage: st.stage || 'new', _awb: st.awb || sf?.tracking_number || '', _courier: st.courier || sf?.company || '' };
+      })
       .filter(o => ['confirmed','ready','pickup','transit'].includes(o._stage));
     res.json({ orders });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -914,9 +927,20 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
     const sid = String(ful.order_id);
     const tracking = ful.tracking_numbers?.[0] || ful.tracking_number || '';
     const trackUrl = ful.tracking_urls?.[0] || ful.tracking_url || '';
-    const courier  = ful.tracking_company || '';
+    const courier = ful.tracking_company || '';
     await OS.upsert(sid, { stage: 'pickup', awb: tracking, courier, tracking_url: trackUrl, updated_at: new Date().toISOString() });
-  } catch {}
+    console.log(`[fulfillments/create] order=${sid} awb=${tracking} courier=${courier}`);
+    if (tracking) {
+      try {
+        const { order } = await shopifyREST(`/orders/${sid}.json`);
+        const email = order.email || order.contact_email;
+        if (email) {
+          await sendEmail({ to: email, subject: `Your order ${order.name} has shipped! 🚚`, html: templateShipped({ order, awb: tracking, courier, trackingUrl: trackUrl }) });
+          console.log(`[fulfillments/create] shipped email sent to ${email}`);
+        }
+      } catch(e) { console.error('[fulfillments/create] email error:', e.message); }
+    }
+  } catch(e) { console.error('[fulfillments/create] error:', e.message); }
 });
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
