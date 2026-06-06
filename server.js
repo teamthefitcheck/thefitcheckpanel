@@ -437,7 +437,9 @@ async function getSmtpConfig() {
 async function sendEmail({ to, subject, html, replyTo }) {
   const cfg = await getSmtpConfig();
   if (!cfg) throw new Error('Email not configured. Go to Settings → Email.');
-  const transporter = nodemailer.createTransport({ host: cfg.host, port: cfg.port || 587, secure: cfg.secure || false, auth: { user: cfg.user, pass: cfg.pass } });
+  const port = cfg.port || 587;
+  const secure = cfg.secure != null ? cfg.secure : (port === 465);
+  const transporter = nodemailer.createTransport({ host: cfg.host, port, secure, auth: { user: cfg.user, pass: cfg.pass }, tls: { rejectUnauthorized: false } });
   await transporter.sendMail({ from: `"${BRAND_NAME}" <${cfg.from || cfg.user}>`, to, subject, html, replyTo: replyTo || cfg.from || cfg.user });
   await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date() });
 }
@@ -574,7 +576,8 @@ app.get('/admin/email-config', adminAuth, async (req, res) => {
 app.post('/admin/email-config', adminAuth, async (req, res) => {
   try {
     const { host, port, secure, user, pass, from } = req.body || {};
-    const update = { host, port: parseInt(port) || 587, secure: !!secure, user, from, updated_at: new Date() };
+    const parsedPort = parseInt(port) || 587;
+    const update = { host, port: parsedPort, secure: parsedPort === 465 ? true : !!secure, user, from, updated_at: new Date() };
     if (pass) update.pass = pass;
     await mdb.collection('email_config').updateOne({}, { $set: update }, { upsert: true });
     res.json({ ok: true });
