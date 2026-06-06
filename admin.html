@@ -586,7 +586,13 @@ function Orders() {
           <h2 style={{fontSize:20,fontWeight:800}}>Orders</h2>
           <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{filtered.length.toLocaleString()} {stage||'total'} orders</p>
         </div>
-        <button className="btn-primary btn-sm" onClick={load}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
+        <div style={{display:'flex',gap:6}}>
+          <button className="btn-primary btn-sm" onClick={load}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
+          <button className="btn-ghost btn-sm" onClick={async()=>{
+            try{ await apiFetch('/admin/sync-tracking',{method:'POST'}); alert('Tracking sync started — stages will update in the background.'); }
+            catch(e){ alert('Sync failed: '+e.message); }
+          }} title="Sync shipment status from eShipz">🔄 Sync Tracking</button>
+        </div>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
         <input placeholder="Search order, customer…" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} style={{flex:'1 1 200px',minWidth:150}}/>

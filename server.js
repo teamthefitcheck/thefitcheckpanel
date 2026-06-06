@@ -939,6 +939,97 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
   } catch(e) { console.error('[fulfillments/create] error:', e.message); }
 });
 
+// ─── Tracking Sync ───────────────────────────────────────────────────────────
+
+const ESHIPZ_TAG_TO_STAGE = {
+  InfoReceived:    'confirmed',
+  PickupRegistered:'confirmed',
+  OutForPickup:    'confirmed',
+  PickedUp:        'pickup',
+  InTransit:       'transit',
+  OutForDelivery:  'ofd',
+  Delivered:       'delivered',
+  ReturnToOrigin:  'rto',
+  Return:          'rto',
+  Cancelled:       'cancelled',
+};
+
+async function scrapeEshipzStatus(trackingUrl) {
+  try {
+    const res = await fetch(trackingUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+    const html = await res.text();
+    // Extract response_data JSON embedded in the page
+    const m = html.match(/var\s+response_data\s*=\s*(\[.*?\]);/s);
+    if (!m) return null;
+    const events = JSON.parse(m[1]);
+    if (!events.length) return null;
+    // Latest event is first
+    const latest = events[0];
+    const stage = ESHIPZ_TAG_TO_STAGE[latest.subtag] || ESHIPZ_TAG_TO_STAGE[latest.tag] || null;
+    return { stage, tag: latest.tag, subtag: latest.subtag, message: latest.message, city: latest.city, checkpoint_time: latest.checkpoint_time };
+  } catch(e) {
+    return null;
+  }
+}
+
+async function runTrackingSync() {
+  if (!SHOPIFY_TOKEN || !SHOP_DOMAIN || SHOP_DOMAIN.startsWith('.')) return;
+  console.log('[tracking-sync] starting...');
+  try {
+    // Get all orders in active shipping stages that have a tracking URL
+    const activeStages = await mdb.collection('order_stage').find({
+      stage: { $in: ['pickup', 'transit', 'ofd'] },
+      tracking_url: { $exists: true, $ne: '' }
+    }).toArray();
+
+    console.log(`[tracking-sync] ${activeStages.length} orders to check`);
+    let updated = 0;
+
+    for (const rec of activeStages) {
+      if (!rec.tracking_url?.includes('eshipz') && !rec.tracking_url?.includes('eshipz')) continue;
+      const result = await scrapeEshipzStatus(rec.tracking_url);
+      if (!result || !result.stage) continue;
+      if (result.stage === rec.stage) continue; // no change
+
+      console.log(`[tracking-sync] ${rec.shopify_id}: ${rec.stage} → ${result.stage} (${result.subtag})`);
+      await OS.upsert(rec.shopify_id, { stage: result.stage, updated_at: new Date().toISOString() });
+
+      // Send customer email for the new stage
+      try {
+        const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
+        const email = order.email || order.contact_email;
+        const awb = rec.awb || '';
+        const courier = rec.courier || '';
+        const trackingUrl = rec.tracking_url || '';
+        if (email) {
+          let html, subject;
+          if (result.stage === 'transit')  { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
+          else if (result.stage === 'ofd') { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+          else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+          else if (result.stage === 'rto') { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
+          if (html) {
+            await sendEmail({ to: email, subject, html });
+            console.log(`[tracking-sync] email sent to ${email} for stage=${result.stage}`);
+          }
+        }
+      } catch(e) { console.error(`[tracking-sync] email error for ${rec.shopify_id}:`, e.message); }
+      updated++;
+    }
+    console.log(`[tracking-sync] done. ${updated} orders updated.`);
+  } catch(e) { console.error('[tracking-sync] error:', e.message); }
+}
+
+// Manual trigger endpoint
+app.post('/admin/sync-tracking', adminAuth, async (req, res) => {
+  res.json({ ok: true, message: 'Tracking sync started' });
+  runTrackingSync();
+});
+
+app.get('/admin/sync-tracking/status', adminAuth, async (req, res) => {
+  const active = await mdb.collection('order_stage').countDocuments({ stage: { $in: ['pickup','transit','ofd'] }, tracking_url: { $exists: true, $ne: '' } });
+  res.json({ active_shipments: active });
+});
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 app.get('/admin/settings', adminAuth, async (req, res) => {
   const settings = await mdb.collection('settings').findOne({}, { projection: { _id: 0, shopify_access_token: 0 } });
@@ -1278,4 +1369,13 @@ connectMongo().then(async () => {
     console.log(`    Staff: ${SERVER_URL}/staff`);
     console.log(`    Install: ${SERVER_URL}/install`);
   });
+
+  // Auto-sync tracking every 2 hours
+  if (SHOPIFY_TOKEN && SHOP_DOMAIN && !SHOP_DOMAIN.startsWith('.')) {
+    setTimeout(() => {
+      runTrackingSync();
+      setInterval(runTrackingSync, 2 * 60 * 60 * 1000);
+    }, 30000); // wait 30s after startup before first sync
+    console.log('✅  Tracking auto-sync enabled (every 2 hours)');
+  }
 }).catch(err => { console.error('❌  Startup error:', err.message); process.exit(1); });
