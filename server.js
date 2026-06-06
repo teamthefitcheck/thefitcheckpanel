@@ -985,55 +985,92 @@ async function scrapeEshipzStatus(trackingUrl) {
 
 async function runTrackingSync() {
   if (!SHOPIFY_TOKEN || !SHOP_DOMAIN || SHOP_DOMAIN.startsWith('.')) return;
-  console.log('[tracking-sync] starting...');
+  const startedAt = new Date();
+  const logLines = [];
+  const log = (msg) => { console.log(`[tracking-sync] ${msg}`); logLines.push(msg); };
+
+  log(`━━━ Sync started at ${startedAt.toISOString()} ━━━`);
   try {
-    // Get all orders in active shipping stages that have a tracking URL
     const activeStages = await mdb.collection('order_stage').find({
       stage: { $in: ['pickup', 'transit', 'ofd'] },
       tracking_url: { $exists: true, $ne: '' }
     }).toArray();
 
-    console.log(`[tracking-sync] ${activeStages.length} orders to check`);
-    let updated = 0;
+    log(`Found ${activeStages.length} active shipments to check`);
+    let checked = 0, updated = 0, skipped = 0, errors = 0;
 
     for (const rec of activeStages) {
-      if (!rec.tracking_url?.includes('eshipz') && !rec.tracking_url?.includes('eshipz')) continue;
-      const result = await scrapeEshipzStatus(rec.tracking_url);
-      if (!result || !result.stage) continue;
-      if (result.stage === rec.stage) continue; // no change
+      if (!rec.tracking_url?.includes('eshipz')) {
+        log(`⏭  ${rec.shopify_id} | AWB: ${rec.awb||'?'} | skipped — not eShipz URL`);
+        skipped++;
+        continue;
+      }
 
-      // Check if email already sent for this stage
+      checked++;
+      const result = await scrapeEshipzStatus(rec.tracking_url);
+
+      if (!result) {
+        log(`❌  ${rec.shopify_id} | AWB: ${rec.awb||'?'} | scrape failed`);
+        errors++;
+        continue;
+      }
+      if (!result.stage) {
+        log(`❓  ${rec.shopify_id} | AWB: ${rec.awb||'?'} | unknown tag: ${result.tag}/${result.subtag}`);
+        continue;
+      }
+
+      if (result.stage === rec.stage) {
+        log(`✓   ${rec.shopify_id} | AWB: ${rec.awb||'?'} | ${rec.stage} → ${result.stage} (no change) | ${result.message?.trim()} | ${result.city}`);
+        continue;
+      }
+
+      log(`🔄  ${rec.shopify_id} | AWB: ${rec.awb||'?'} | ${rec.stage} → ${result.stage} | ${result.message?.trim()} | ${result.city}`);
+      await OS.upsert(rec.shopify_id, { stage: result.stage, updated_at: new Date().toISOString() });
+      updated++;
+
       const emailsSent = rec.emails_sent || [];
       const alreadyEmailed = emailsSent.includes(result.stage);
 
-      console.log(`[tracking-sync] ${rec.shopify_id}: ${rec.stage} → ${result.stage} (${result.subtag}) email_already_sent=${alreadyEmailed}`);
-      await OS.upsert(rec.shopify_id, { stage: result.stage, updated_at: new Date().toISOString() });
-
-      if (!alreadyEmailed) {
-        try {
-          const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
-          const email = order.email || order.contact_email;
-          const awb = rec.awb || '';
-          const courier = rec.courier || '';
-          const trackingUrl = rec.tracking_url || '';
-          if (email) {
-            let html, subject;
-            if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
-            else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
-            else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
-            else if (result.stage === 'rto')   { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
-            if (html) {
-              await sendEmail({ to: email, subject, html });
-              await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: result.stage } });
-              console.log(`[tracking-sync] email sent to ${email} for stage=${result.stage}`);
-            }
-          }
-        } catch(e) { console.error(`[tracking-sync] email error for ${rec.shopify_id}:`, e.message); }
+      if (alreadyEmailed) {
+        log(`📧  ${rec.shopify_id} | email already sent for stage=${result.stage} — skipping`);
+        continue;
       }
-      updated++;
+
+      try {
+        const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
+        const email = order.email || order.contact_email;
+        if (!email) { log(`⚠️  ${rec.shopify_id} | no customer email on file`); continue; }
+        const awb = rec.awb || '', courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
+        let html, subject;
+        if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
+        else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+        else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+        else if (result.stage === 'rto')   { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
+        if (html) {
+          await sendEmail({ to: email, subject, html });
+          await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: result.stage } });
+          log(`📨  ${rec.shopify_id} | email sent → ${email} | subject: ${subject}`);
+        }
+      } catch(e) { log(`❌  ${rec.shopify_id} | email error: ${e.message}`); errors++; }
     }
-    console.log(`[tracking-sync] done. ${updated} orders updated.`);
-  } catch(e) { console.error('[tracking-sync] error:', e.message); }
+
+    const summary = `━━━ Sync done | checked: ${checked} | updated: ${updated} | skipped: ${skipped} | errors: ${errors} | duration: ${((Date.now()-startedAt)/1000).toFixed(1)}s ━━━`;
+    log(summary);
+
+    // Save full log to MongoDB for admin panel viewing
+    await mdb.collection('tracking_sync_logs').insertOne({
+      started_at: startedAt,
+      finished_at: new Date(),
+      checked, updated, skipped, errors,
+      lines: logLines,
+    });
+    // Keep only last 20 sync logs
+    const all = await mdb.collection('tracking_sync_logs').find({}, { projection: { _id: 1 } }).sort({ started_at: -1 }).toArray();
+    if (all.length > 20) {
+      const toDelete = all.slice(20).map(d => d._id);
+      await mdb.collection('tracking_sync_logs').deleteMany({ _id: { $in: toDelete } });
+    }
+  } catch(e) { console.error('[tracking-sync] fatal error:', e.message); }
 }
 
 // Manual trigger endpoint
@@ -1044,7 +1081,13 @@ app.post('/admin/sync-tracking', adminAuth, async (req, res) => {
 
 app.get('/admin/sync-tracking/status', adminAuth, async (req, res) => {
   const active = await mdb.collection('order_stage').countDocuments({ stage: { $in: ['pickup','transit','ofd'] }, tracking_url: { $exists: true, $ne: '' } });
-  res.json({ active_shipments: active });
+  const lastRun = await mdb.collection('tracking_sync_logs').findOne({}, { sort: { started_at: -1 } });
+  res.json({ active_shipments: active, last_run: lastRun || null });
+});
+
+app.get('/admin/sync-tracking/logs', adminAuth, async (req, res) => {
+  const logs = await mdb.collection('tracking_sync_logs').find({}).sort({ started_at: -1 }).limit(10).toArray();
+  res.json(logs);
 });
 
 // ─── Settings ─────────────────────────────────────────────────────────────────

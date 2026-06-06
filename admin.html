@@ -147,7 +147,7 @@ function Login({ onLogin }) {
 function Sidebar({ tab, setTab, onLogout }) {
   const items = [
     ['dashboard','📊','Dashboard'],['orders','📦','Orders'],['returns','↩','Returns'],
-    ['emails','📧','Emails'],['shipping','🚚','Shipping'],['settings','⚙','Settings'],
+    ['emails','📧','Emails'],['shipping','🚚','Shipping'],['synclogs','🔄','Sync Logs'],['settings','⚙','Settings'],
   ];
   return (
     <div style={{width:220,minHeight:'100vh',background:'#0d0d0d',borderRight:'1px solid #1a1a1a',display:'flex',flexDirection:'column',flexShrink:0,position:'sticky',top:0,height:'100vh'}}>
@@ -1265,6 +1265,79 @@ function Settings() {
   );
 }
 
+/* ─── Sync Logs ───────────────────────────────────────────────── */
+function SyncLogs() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await apiFetch('/admin/sync-tracking/logs'); setLogs(d); }
+    catch(e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  const triggerSync = async () => {
+    setSyncing(true);
+    try {
+      await apiFetch('/admin/sync-tracking', { method: 'POST' });
+      setTimeout(() => { load(); setSyncing(false); }, 8000);
+    } catch(e) { alert('Error: ' + e.message); setSyncing(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const stageColor = s => s==='delivered'?'#22c55e':s==='transit'||s==='ofd'?'#f59e0b':s==='rto'?'#ef4444':'#888';
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800}}>Tracking Sync Logs</h2>
+          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Auto-syncs every 2 hours from eShipz</p>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn-ghost btn-sm" onClick={load} disabled={loading}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
+          <button className="btn-primary btn-sm" onClick={triggerSync} disabled={syncing}>{syncing?<span className="spin">↻</span>+' Running…':'▶ Run Sync Now'}</button>
+        </div>
+      </div>
+
+      {logs.length === 0 && !loading && (
+        <div className="card" style={{textAlign:'center',color:'var(--text-muted)',padding:40}}>No sync runs yet. Click "Run Sync Now" to start.</div>
+      )}
+
+      {logs.map((run, i) => (
+        <div key={i} className="card" style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',cursor:'pointer',borderBottom: expanded===i ? '1px solid var(--border)' : 'none'}}
+            onClick={()=>setExpanded(expanded===i?null:i)}>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <span style={{fontSize:18}}>{run.errors>0?'⚠️':run.updated>0?'🔄':'✅'}</span>
+              <div>
+                <div style={{fontWeight:700,fontSize:13}}>{new Date(run.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+                <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>
+                  {run.checked} checked · <span style={{color:'#22c55e',fontWeight:600}}>{run.updated} updated</span> · {run.skipped} skipped · {run.errors>0?<span style={{color:'#ef4444'}}>{run.errors} errors</span>:<span>0 errors</span>} · {((new Date(run.finished_at)-new Date(run.started_at))/1000).toFixed(1)}s
+                </div>
+              </div>
+            </div>
+            <span style={{color:'var(--text-muted)',fontSize:12}}>{expanded===i?'▲ Hide':'▼ Show'} logs</span>
+          </div>
+
+          {expanded===i && (
+            <div style={{padding:'12px 18px',background:'var(--bg-card2)',fontFamily:'monospace',fontSize:12,maxHeight:400,overflowY:'auto'}}>
+              {(run.lines||[]).map((line, j) => {
+                const color = line.startsWith('🔄')?'#f59e0b':line.startsWith('📨')?'#22c55e':line.startsWith('❌')?'#ef4444':line.startsWith('✓')?'var(--text-muted)':line.startsWith('━')?'var(--text)':'var(--text)';
+                return <div key={j} style={{color,padding:'2px 0',borderBottom:'1px solid var(--border)',lineHeight:1.6}}>{line}</div>;
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ─── App Shell ───────────────────────────────────────────────── */
 function App() {
   const [authed,setAuthed] = useState(!!token());
@@ -1279,7 +1352,7 @@ function App() {
 
   const views = {
     dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>,
-    emails: <Emails/>, shipping: <Shipping/>, settings: <Settings/>,
+    emails: <Emails/>, shipping: <Shipping/>, synclogs: <SyncLogs/>, settings: <Settings/>,
   };
 
   return (
