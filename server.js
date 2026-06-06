@@ -884,8 +884,10 @@ app.post('/webhooks/orders/create', async (req, res) => {
       sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order) })
         .then(()=>console.log(`[orders/create] confirmation email sent to ${email}`))
         .catch(e=>console.error(`[orders/create] email failed:`, e.message));
+    } else {
+      console.warn(`[orders/create] ${order.name} has no email — skipping`);
     }
-  } catch {}
+  } catch(e) { console.error('[orders/create] error:', e.message); }
 });
 
 app.post('/webhooks/orders/updated', async (req, res) => {
@@ -1082,6 +1084,31 @@ app.post('/admin/tag-mappings', adminAuth, async (req, res) => {
 });
 
 // Apply a Shopify tag to an order
+app.post('/admin/reregister-webhooks', adminAuth, async (req, res) => {
+  try {
+    const webhookKey = `webhooks_registered_${SERVER_URL}`;
+    await mdb.collection('settings').updateOne({}, { $unset: { [webhookKey]: '' } }, { upsert: true });
+    const { webhooks: existing } = await shopifyREST('/webhooks.json?limit=250');
+    const needed = [
+      { topic: 'orders/create',       address: `${SERVER_URL}/webhooks/orders/create` },
+      { topic: 'orders/updated',      address: `${SERVER_URL}/webhooks/orders/updated` },
+      { topic: 'fulfillments/create', address: `${SERVER_URL}/webhooks/fulfillments/create` },
+    ];
+    const results = [];
+    for (const wh of needed) {
+      const exists = (existing || []).some(e => e.topic === wh.topic && e.address === wh.address);
+      if (!exists) {
+        await shopifyREST('/webhooks.json', { method: 'POST', body: JSON.stringify({ webhook: { topic: wh.topic, address: wh.address, format: 'json' } }) });
+        results.push(`registered: ${wh.topic}`);
+      } else {
+        results.push(`already exists: ${wh.topic}`);
+      }
+    }
+    await mdb.collection('settings').updateOne({}, { $set: { [webhookKey]: true } }, { upsert: true });
+    res.json({ ok: true, results });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/admin/orders/:id/tag', adminAuth, async (req, res) => {
   try {
     const { tag, remove } = req.body || {};
