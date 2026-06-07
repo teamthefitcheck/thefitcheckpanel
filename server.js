@@ -434,14 +434,55 @@ async function getSmtpConfig() {
   return mdb.collection('email_config').findOne({}, { projection: { _id: 0 } });
 }
 
+let _smtpTransporter = null;
+let _smtpTransporterKey = null;
+
+function getSmtpTransporter(cfg) {
+  const port = cfg.port || 587;
+  const secure = cfg.secure != null ? cfg.secure : (port === 465);
+  const key = `${cfg.host}:${port}:${cfg.user}`;
+  if (_smtpTransporter && _smtpTransporterKey === key) return _smtpTransporter;
+  if (_smtpTransporter) _smtpTransporter.close();
+  _smtpTransporter = nodemailer.createTransport({
+    host: cfg.host, port, secure,
+    auth: { user: cfg.user, pass: cfg.pass },
+    tls: { rejectUnauthorized: false },
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 20000,  // time to establish TCP connection
+    greetingTimeout: 20000,    // time to receive SMTP greeting
+    socketTimeout: 30000,      // time of inactivity on the socket
+  });
+  _smtpTransporterKey = key;
+  return _smtpTransporter;
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function sendEmail({ to, subject, html, replyTo }) {
   const cfg = await getSmtpConfig();
   if (!cfg) throw new Error('Email not configured. Go to Settings → Email.');
-  const port = cfg.port || 587;
-  const secure = cfg.secure != null ? cfg.secure : (port === 465);
-  const transporter = nodemailer.createTransport({ host: cfg.host, port, secure, auth: { user: cfg.user, pass: cfg.pass }, tls: { rejectUnauthorized: false } });
-  await transporter.sendMail({ from: `"${BRAND_NAME}" <${cfg.from || cfg.user}>`, to, subject, html, replyTo: replyTo || cfg.from || cfg.user });
-  await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date() });
+  const transporter = getSmtpTransporter(cfg);
+  const mail = { from: `"${BRAND_NAME}" <${cfg.from || cfg.user}>`, to, subject, html, replyTo: replyTo || cfg.from || cfg.user };
+
+  const MAX_ATTEMPTS = 4;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await transporter.sendMail(mail);
+      await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date(), attempts: attempt });
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[sendEmail] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${to} (${subject}): ${e.message}`);
+      // a stale pooled connection can cause spurious timeouts — drop it and reconnect fresh on retry
+      _smtpTransporter && _smtpTransporter.close();
+      _smtpTransporter = null;
+      if (attempt < MAX_ATTEMPTS) await sleep(attempt * 5000); // 5s, 10s, 15s backoff
+    }
+  }
+  await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date(), failed: true, error: lastErr.message, attempts: MAX_ATTEMPTS });
+  throw lastErr;
 }
 
 function trackButton(trackingUrl, awb, courier, label = 'Track Your Order →') {
