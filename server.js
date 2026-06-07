@@ -997,12 +997,13 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
 // ─── Tracking Sync ───────────────────────────────────────────────────────────
 
 const ESHIPZ_TAG_TO_STAGE = {
-  InfoReceived:    'confirmed',
+  InfoReceived:    'ready',
   PickupRegistered:'confirmed',
   OutForPickup:    'confirmed',
   PickedUp:        'pickup',
   InTransit:       'transit',
   OutForDelivery:  'ofd',
+  Exception:       'ofd',
   Delivered:       'delivered',
   ReturnToOrigin:  'rto',
   Return:          'rto',
