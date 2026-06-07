@@ -465,7 +465,7 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
                 <div className="field">
                   <label>Stage</label>
                   <select value={stage} onChange={e=>setStage(e.target.value)}>
-                    {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>(
+                    {['confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>(
                       <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
                     ))}
                   </select>
@@ -601,7 +601,7 @@ function Orders() {
         <button className="btn-primary btn-sm" onClick={load}>Search</button>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        {['','confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=>{
+        {['','confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
           const active = stage===s;
           const count = s==='' ? allOrders.length : (counts[s]||0);
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
@@ -1182,7 +1182,7 @@ function Settings() {
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <label>Maps to Stage</label>
               <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
-                {['confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                {['confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
               </select>
             </div>
             <button className="btn-ghost btn-sm" onClick={addTagMapping} disabled={!newTag}>Add Mapping</button>
