@@ -78,11 +78,12 @@ async function shopifyGQL(query, variables = {}) {
   return res.json();
 }
 
-async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
-  const vars = { first: 250, query: buildOrderQuery(status, createdAtMin, createdAtMax) };
-  const data = await shopifyGQL(`
-    query($first:Int!,$query:String){
-      orders(first:$first,query:$query,sortKey:CREATED_AT,reverse:true){
+async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax, { onPage } = {}) {
+  const query = buildOrderQuery(status, createdAtMin, createdAtMax);
+  const gql = `
+    query($first:Int!,$query:String,$after:String){
+      orders(first:$first,query:$query,after:$after,sortKey:CREATED_AT,reverse:true){
+        pageInfo{hasNextPage endCursor}
         edges{node{
           id name createdAt totalPriceSet{shopMoney{amount}}
           displayFinancialStatus displayFulfillmentStatus
@@ -93,10 +94,20 @@ async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax) {
           note
         }}
       }
-    }`, vars);
-  const conn = data?.data?.orders;
-  if (!conn) return [];
-  return conn.edges.map(e => normaliseOrder(e.node));
+    }`;
+  let after = null;
+  let all = [];
+  for (let i = 0; i < 40; i++) { // safety cap: 40 * 250 = 10,000 orders max
+    const data = await shopifyGQL(gql, { first: 250, query, after });
+    const conn = data?.data?.orders;
+    if (!conn) break;
+    const orders = conn.edges.map(e => normaliseOrder(e.node));
+    all = all.concat(orders);
+    if (i === 0 && onPage) onPage(all.slice()); // fire callback with first page so caller can respond fast
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return all;
 }
 
 function buildOrderQuery(status, min, max) {
@@ -288,10 +299,22 @@ async function enrichOrderImages(order) {
 }
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
+const _ordersCache = new Map(); // `${from}|${to}` -> { orders, ts }
+const ORDERS_CACHE_TTL = 3 * 60 * 1000;
+
+async function getCachedOrders(from, to) {
+  const key = `${from || ''}|${to || ''}`;
+  const cached = _ordersCache.get(key);
+  if (cached && (Date.now() - cached.ts) < ORDERS_CACHE_TTL) return cached.orders;
+  const orders = await fetchAllOrders('any', from ? from + 'T00:00:00Z' : null, to ? to + 'T23:59:59Z' : null);
+  _ordersCache.set(key, { orders, ts: Date.now() });
+  return orders;
+}
+
 app.get('/orders', adminAuth, async (req, res) => {
   try {
     const { from, to, stage, q, payment } = req.query;
-    const allOrders = await fetchAllOrders('any', from ? from + 'T00:00:00Z' : null, to ? to + 'T23:59:59Z' : null);
+    const allOrders = await getCachedOrders(from, to);
     const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, tracking_url: 1, _id: 0 } }).toArray();
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
     let orders = allOrders.map(o => {
@@ -317,7 +340,7 @@ app.get('/orders', adminAuth, async (req, res) => {
 app.get('/orders/stats', adminAuth, async (req, res) => {
   try {
     const { from, to } = req.query;
-    const allOrders = await fetchAllOrders('any', from ? from + 'T00:00:00Z' : null, to ? to + 'T23:59:59Z' : null);
+    const allOrders = await getCachedOrders(from, to);
     const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray();
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
     const stats = { total: allOrders.length, delivered: 0, transit: 0, rto: 0, pending: 0, revenue: 0 };
@@ -399,7 +422,7 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
 // Staff order routes
 app.get('/staff/orders', staffAuth, async (req, res) => {
   try {
-    const allOrders = await fetchAllOrders('any', null, null);
+    const allOrders = await getCachedOrders(null, null);
     const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, _id: 0 } }).toArray();
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
     const orders = allOrders
