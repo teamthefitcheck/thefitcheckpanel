@@ -878,6 +878,24 @@ function Emails() {
 
   // Email preview renderer
   const BANNER = 'https://i.ibb.co/RpYqxnMK/tfc-banner-2.png';
+  const sampleItems = `
+    <div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Items in your order</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="padding:10px 12px 10px 0;border-bottom:1px solid #f0f0f0;width:56px;vertical-align:middle;"><div style="width:52px;height:52px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">👕</div></td>
+        <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;vertical-align:middle;">
+          <div style="font-size:13px;font-weight:600;color:#111;">Sample Product</div>
+          <div style="font-size:12px;color:#888;margin-top:2px;">Size: M</div>
+          <div style="font-size:12px;color:#aaa;margin-top:1px;">Qty: 1</div>
+        </td>
+        <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;font-weight:700;color:#333;text-align:right;vertical-align:middle;">₹799</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="padding:12px 0 4px;font-size:13px;font-weight:800;color:#111;border-top:2px solid #111;">Order Total</td>
+        <td style="padding:12px 0 4px;font-size:15px;font-weight:800;color:#111;text-align:right;border-top:2px solid #111;">₹799</td>
+      </tr>
+    </table>`;
+
   const previews = {
     confirmed: {
       subject: 'Order Placed Successfully – #1001 🎉',
@@ -885,42 +903,41 @@ function Emails() {
       <p style="color:#555;font-size:14px;margin:0 0 20px">Hey there, thank you for your order! We've received it and you'll get updates as it moves forward.</p>
       <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span style="color:#888;font-weight:600;">ORDER NUMBER</span><span style="font-weight:800;font-family:monospace;">#1001</span></div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span style="color:#888;font-weight:600;">DATE</span><span style="color:#555;">04 June 2025</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span style="color:#888;font-weight:600;">DATE</span><span style="color:#555;">04 June 2026</span></div>
         <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#888;font-weight:600;">PAYMENT</span><span style="color:#555;font-weight:600;">✅ Prepaid</span></div>
       </div>
-      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Items Ordered</div>
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
-        <tr><td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;"><strong>Sample Product</strong><br/><span style="color:#888;font-size:12px;">Size M</span></td><td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#888;text-align:center;">×1</td><td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;font-weight:600;text-align:right;">₹799</td></tr>
-        <tr><td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:800;color:#111;">Total Amount</td><td style="padding:12px 0 0;font-size:15px;font-weight:800;text-align:right;">₹799</td></tr>
-      </table>
+      ${sampleItems}
       <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:16px;"><div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Delivering To</div><div style="font-size:13px;color:#333;line-height:1.6;">Sample Customer<br/>123 Main St, Mumbai, Maharashtra 400001</div></div>
       <p style="color:#888;font-size:13px;margin:0;">We'll keep you updated every step of the way. For any queries, just reply to this email.</p>`,
     },
     shipped: {
       subject: 'Your order has shipped! 🚚',
-      body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Your order is on its way! 🚚</h2>
-      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> has been dispatched and is heading your way.</p>
-      <div style="background:#f9f9f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#444;border-left:3px solid #111"><strong>Tracking:</strong> DL2345678901 · Delhivery</div>
+      body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Your order has shipped! 🚚</h2>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> is on its way.</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#444;"><strong>Tracking:</strong> DL2345678901 · Delhivery</div>
+      ${sampleItems}
       <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track Your Order →</a></div>`,
     },
     transit: {
       subject: 'Your order is in transit 📦',
       body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">On the way! 📦</h2>
-      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1001</strong> is in transit and moving towards you.</p>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> is in transit and moving towards you.</p>
+      ${sampleItems}
       <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track My Order →</a></div>`,
     },
     ofd: {
       subject: 'Out for delivery today! 🛵',
       body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Out for delivery today! 🛵</h2>
-      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1001</strong> is out for delivery. Keep your phone handy!</p>
-      <div style="background:#fff8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#92400e;border-left:3px solid #f59e0b">📍 Make sure someone is available to receive the delivery.</div>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> is out for delivery. Keep your phone handy!</p>
+      ${sampleItems}
       <div style="text-align:center;margin:24px 0"><a style="background:#111;color:#fff;padding:13px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;display:inline-block">Track My Order →</a></div>`,
     },
     delivered: {
       subject: 'Delivered! Hope you love it ✅',
       body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Delivered! ✅</h2>
-      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Your order <strong>#1001</strong> has been delivered. We hope you love it!</p>
-      <div style="background:#f0fdf4;border-radius:8px;padding:14px 18px;font-size:13px;color:#166534;border-left:3px solid #22c55e">If you have any issues, reply to this email and we'll sort it out.</div>`,
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> has been delivered. We hope you love it!</p>
+      ${sampleItems}
+      <p style="color:#555;font-size:13px;">If you have any issues, reply to this email and we'll sort it out.</p>`,
     },
   };
 
