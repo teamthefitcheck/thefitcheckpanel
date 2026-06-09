@@ -304,6 +304,7 @@ function Dashboard() {
   const [stats,setStats] = useState(null);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(true);
+  const [audience,setAudience] = useState(null);
   const now = new Date();
   const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
   const [to,setTo]     = useState(()=>now.toISOString().slice(0,10));
@@ -311,11 +312,12 @@ function Dashboard() {
   const load = useCallback(async (f,t) => {
     setLoading(true);
     try {
-      const [s,o] = await Promise.all([
+      const [s,o,a] = await Promise.all([
         apiFetch(`/orders/stats?from=${f}&to=${t}`),
         apiFetch(`/orders?from=${f}&to=${t}`),
+        apiFetch(`/orders/audience?from=${f}&to=${t}`),
       ]);
-      setStats(s); setOrders((o.orders||[]).slice(0,10));
+      setStats(s); setOrders((o.orders||[]).slice(0,10)); setAudience(a);
     } finally { setLoading(false); }
   }, []);
 
@@ -380,6 +382,48 @@ function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Audience card */}
+        {audience && audience.segments && audience.segments.length > 0 && (
+          <div className="card" style={{padding:18,marginBottom:20}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+              <div className="section-title" style={{marginBottom:0}}>Audience Breakdown</div>
+              <div style={{fontSize:12,color:'var(--text-muted)'}}>{(audience.total||0).toLocaleString()} orders total</div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {audience.segments.map(seg=>{
+                const pct = audience.total ? Math.round((seg.count/audience.total)*100) : 0;
+                return (
+                  <div key={seg.id}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{width:8,height:8,borderRadius:'50%',background:seg.color,flexShrink:0}}/>
+                        <span style={{fontSize:13,fontWeight:600}}>{seg.name}</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:12,fontSize:12}}>
+                        <span style={{color:'var(--text-muted)'}}>{fmtMoney(seg.revenue)}</span>
+                        <span style={{fontWeight:700,minWidth:32,textAlign:'right'}}>{seg.count.toLocaleString()}</span>
+                        <span style={{color:'var(--text-muted)',minWidth:36,textAlign:'right'}}>{pct}%</span>
+                      </div>
+                    </div>
+                    <div style={{height:5,background:'var(--bg-card2)',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${pct}%`,background:seg.color,borderRadius:3,transition:'width .6s',opacity:.85}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:12,fontSize:11,color:'var(--text-dim)'}}>
+              Configure segments in Settings → Audience
+            </div>
+          </div>
+        )}
+        {audience && audience.segments && audience.segments.length === 0 && (
+          <div className="card" style={{padding:18,marginBottom:20,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>
+            <div style={{marginBottom:6}}>👥 No audience segments configured</div>
+            <div style={{fontSize:12}}>Go to <strong>Settings → Audience</strong> to create segments by Shopify tags</div>
+          </div>
+        )}
 
         {/* Recent orders */}
         <div className="card" style={{padding:0}}>
@@ -1240,6 +1284,172 @@ function Shipping() {
   );
 }
 
+/* ─── AudienceSettings ────────────────────────────────────────── */
+const AUDIENCE_COLORS = ['#ef4444','#f59e0b','#22c55e','#06b6d4','#a78bfa','#f97316','#ec4899','#64748b'];
+
+function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }) {
+  const [segs, setSegs] = React.useState(segments);
+  const [editIdx, setEditIdx] = React.useState(null);
+  const [editName, setEditName] = React.useState('');
+  const [editColor, setEditColor] = React.useState(AUDIENCE_COLORS[0]);
+  const [editTags, setEditTags] = React.useState([]);
+  const [tagInput, setTagInput] = React.useState('');
+
+  React.useEffect(()=>{ setSegs(segments); },[segments]);
+
+  function openNew() {
+    setEditIdx('new');
+    setEditName('');
+    setEditColor(AUDIENCE_COLORS[segs.length % AUDIENCE_COLORS.length]);
+    setEditTags([]);
+    setTagInput('');
+  }
+
+  function openEdit(i) {
+    setEditIdx(i);
+    const s = segs[i];
+    setEditName(s.name);
+    setEditColor(s.color);
+    setEditTags([...(s.tags||[])]);
+    setTagInput('');
+  }
+
+  function addTag(t) {
+    const trimmed = t.trim();
+    if (!trimmed || editTags.includes(trimmed)) return;
+    setEditTags(prev=>[...prev, trimmed]);
+    setTagInput('');
+  }
+
+  function saveEdit() {
+    if (!editName.trim()) return;
+    const seg = { id: editIdx==='new' ? Date.now().toString() : segs[editIdx].id, name: editName.trim(), color: editColor, tags: editTags };
+    let updated;
+    if (editIdx === 'new') updated = [...segs, seg];
+    else { updated = segs.map((s,i)=>i===editIdx?seg:s); }
+    setSegs(updated);
+    onSave(updated);
+    setEditIdx(null);
+  }
+
+  function removeSegment(i) {
+    const updated = segs.filter((_,idx)=>idx!==i);
+    setSegs(updated);
+    onSave(updated);
+  }
+
+  const allKnownTags = shopifyTags.length > 0 ? shopifyTags : [];
+  const filteredTags = tagInput
+    ? allKnownTags.filter(t=>t.toLowerCase().includes(tagInput.toLowerCase()) && !editTags.includes(t))
+    : allKnownTags.filter(t=>!editTags.includes(t)).slice(0,80);
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}}>
+        {/* Segment list */}
+        <div style={{flex:'1 1 280px'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:14}}>Audience Segments</div>
+            <button className="btn-primary btn-sm" onClick={openNew}>+ New Segment</button>
+          </div>
+          {segs.length===0 && (
+            <div className="card" style={{padding:24,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>
+              No segments yet. Create one to start categorising your audience.
+            </div>
+          )}
+          {segs.map((s,i)=>(
+            <div key={s.id} className="card" style={{padding:'12px 16px',marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+              <div style={{width:10,height:10,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13}}>{s.name}</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
+                  {(s.tags||[]).slice(0,6).map(t=>(
+                    <span key={t} style={{background:'var(--bg-card2)',border:'1px solid var(--border)',borderRadius:3,padding:'1px 5px',fontFamily:'monospace'}}>{t}</span>
+                  ))}
+                  {(s.tags||[]).length>6 && <span style={{color:'var(--text-dim)'}}>+{s.tags.length-6} more</span>}
+                  {(s.tags||[]).length===0 && <span style={{fontStyle:'italic'}}>no tags assigned</span>}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <button className="btn-ghost btn-sm" onClick={()=>openEdit(i)}>Edit</button>
+                <button className="btn-danger btn-sm" onClick={()=>removeSegment(i)}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Editor panel */}
+        {editIdx !== null && (
+          <div className="card" style={{flex:'1 1 300px',maxWidth:420}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>{editIdx==='new'?'New Segment':'Edit Segment'}</div>
+            <div className="field">
+              <label>Segment Name</label>
+              <input value={editName} onChange={e=>setEditName(e.target.value)} placeholder="e.g. High Risk, VIP, COD Loyal"/>
+            </div>
+            <div className="field">
+              <label>Color</label>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+                {AUDIENCE_COLORS.map(c=>(
+                  <div key={c} onClick={()=>setEditColor(c)} style={{
+                    width:24,height:24,borderRadius:'50%',background:c,cursor:'pointer',
+                    border: editColor===c ? '2px solid #fff' : '2px solid transparent',
+                    boxShadow: editColor===c ? '0 0 0 2px '+c : 'none',
+                    transition:'all .15s',
+                  }}/>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>Tags in this segment</label>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8,minHeight:28}}>
+                {editTags.map(t=>(
+                  <span key={t} style={{
+                    display:'inline-flex',alignItems:'center',gap:4,
+                    background:'var(--bg-card2)',border:'1px solid var(--border2)',
+                    borderRadius:4,padding:'2px 8px',fontSize:12,
+                  }}>
+                    <span style={{fontFamily:'monospace'}}>{t}</span>
+                    <span onClick={()=>setEditTags(prev=>prev.filter(x=>x!==t))} style={{cursor:'pointer',color:'var(--text-muted)',fontSize:14,lineHeight:1}}>×</span>
+                  </span>
+                ))}
+                {editTags.length===0 && <span style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>No tags yet</span>}
+              </div>
+              <input
+                value={tagInput}
+                onChange={e=>setTagInput(e.target.value)}
+                onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addTag(tagInput); }}}
+                placeholder={tagsLoading?'Loading tags…':'Search or type a tag, press Enter'}
+                style={{marginBottom:6}}
+              />
+              {filteredTags.length>0 && (
+                <div style={{
+                  maxHeight:160,overflowY:'auto',border:'1px solid var(--border)',
+                  borderRadius:6,background:'var(--bg-card2)',
+                }}>
+                  {filteredTags.slice(0,50).map(t=>(
+                    <div key={t} onClick={()=>addTag(t)} style={{
+                      padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'monospace',
+                    }}
+                    onMouseEnter={e=>e.currentTarget.style.background='#ffffff0d'}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <button className="btn-primary btn-sm" onClick={saveEdit} disabled={saving||!editName.trim()}>{saving?'Saving…':'Save Segment'}</button>
+              <button className="btn-ghost btn-sm" onClick={()=>setEditIdx(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+      <p style={{fontSize:12,color:'var(--text-muted)',marginTop:16}}>Segments are matched by order tags. An order counts for a segment if it has <em>any</em> of the assigned tags. The audience card on the dashboard reflects the selected date range.</p>
+    </div>
+  );
+}
+
 /* ─── Settings ────────────────────────────────────────────────── */
 function Settings() {
   const [tab,setTab]         = useState('staff');
@@ -1252,6 +1462,7 @@ function Settings() {
   const [shopifyTags,setShopifyTags] = useState([]);
   const [tagsLoading,setTagsLoading] = useState(false);
   const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7});
+  const [segments,setSegments]   = useState([]);
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
 
@@ -1259,6 +1470,7 @@ function Settings() {
     apiFetch('/admin/staff').then(d=>setStaff(d||[]));
     apiFetch('/admin/tag-mappings').then(d=>setTagMap(d||{}));
     apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
+    apiFetch('/admin/audience-segments').then(d=>setSegments(d||[]));
     setTagsLoading(true);
     apiFetch('/admin/shopify-tags').then(d=>setShopifyTags(d||[])).finally(()=>setTagsLoading(false));
   },[]);
@@ -1309,7 +1521,7 @@ function Settings() {
     <div>
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
-        {[['staff','Staff'],['tags','Tag Mapping'],['returns','Returns & Exchanges'],['security','Security'],['store','Store']].map(([id,label])=>(
+        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['security','Security'],['store','Store']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
@@ -1375,6 +1587,23 @@ function Settings() {
             <button className="btn-primary btn-sm" onClick={saveTagMap} disabled={saving}>{saving?'Saving…':'Save Mappings'}</button>
           </div>
         </div>
+      )}
+
+      {tab==='audience' && (
+        <AudienceSettings
+          segments={segments}
+          shopifyTags={shopifyTags}
+          tagsLoading={tagsLoading}
+          onSave={async (segs) => {
+            setSaving(true); setMsg(null);
+            try {
+              await apiFetch('/admin/audience-segments',{method:'POST',body:JSON.stringify({segments:segs})});
+              setSegments(segs); setMsg({type:'success',text:'Audience segments saved!'});
+            } catch(e){setMsg({type:'error',text:e.message});}
+            setSaving(false);
+          }}
+          saving={saving}
+        />
       )}
 
       {tab==='returns' && (

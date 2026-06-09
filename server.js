@@ -1540,6 +1540,48 @@ app.post('/admin/tag-mappings', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Audience Segments ───────────────────────────────────────────────────────
+app.get('/admin/audience-segments', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { audience_segments: 1, _id: 0 } });
+  res.json(doc?.audience_segments || []);
+});
+
+app.post('/admin/audience-segments', adminAuth, async (req, res) => {
+  try {
+    const { segments } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: { audience_segments: segments, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Returns audience breakdown for a date range using orders in DB
+app.get('/orders/audience', adminAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const doc = await mdb.collection('settings').findOne({}, { projection: { audience_segments: 1, _id: 0 } });
+    const segments = doc?.audience_segments || [];
+    if (!segments.length) return res.json({ segments: [] });
+
+    const query = {};
+    const df = buildMongoDateFilter(from, to);
+    if (df) query.created_at = df;
+    const orders = await mdb.collection('orders').find(query, { projection: { tags: 1, total_price: 1, _id: 0 } }).toArray();
+
+    const result = segments.map(seg => {
+      const tagSet = new Set((seg.tags || []).map(t => t.toLowerCase()));
+      const matched = orders.filter(o => {
+        const orderTags = Array.isArray(o.tags) ? o.tags : (o.tags||'').split(',');
+        return orderTags.some(t => tagSet.has(t.trim().toLowerCase()));
+      });
+      const revenue = matched.reduce((s, o) => s + (o.total_price || 0), 0);
+      return { id: seg.id, name: seg.name, color: seg.color, count: matched.length, revenue };
+    });
+
+    const total = orders.length;
+    res.json({ segments: result, total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Apply a Shopify tag to an order
 app.post('/admin/reregister-webhooks', adminAuth, async (req, res) => {
   try {
