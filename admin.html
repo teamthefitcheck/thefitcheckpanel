@@ -312,12 +312,12 @@ function Dashboard() {
   const load = useCallback(async (f,t) => {
     setLoading(true);
     try {
-      const [s,o,a] = await Promise.all([
+      const [s,o] = await Promise.all([
         apiFetch(`/orders/stats?from=${f}&to=${t}`),
         apiFetch(`/orders?from=${f}&to=${t}`),
-        apiFetch(`/orders/audience?from=${f}&to=${t}`),
       ]);
-      setStats(s); setOrders((o.orders||[]).slice(0,10)); setAudience(a);
+      setStats(s); setOrders((o.orders||[]).slice(0,10));
+      apiFetch(`/orders/audience?from=${f}&to=${t}`).then(setAudience).catch(()=>{});
     } finally { setLoading(false); }
   }, []);
 
