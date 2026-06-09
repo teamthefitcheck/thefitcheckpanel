@@ -449,16 +449,42 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
       mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray(),
     ]);
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
-    const stats = { total: allOrders.length, delivered: 0, transit: 0, rto: 0, pending: 0, ready: 0, revenue: 0 };
+    const stats = {
+      total: allOrders.length,
+      delivered: 0, transit: 0, ofd: 0, pickup: 0, rto: 0,
+      pending: 0, ready: 0, cancelled: 0, misc: 0,
+      revenue: 0, revenue_dispatched: 0, revenue_pending: 0, revenue_delivered: 0, revenue_rto: 0,
+      cod: 0, prepaid: 0, partial: 0,
+      cod_revenue: 0, prepaid_revenue: 0, partial_revenue: 0, partial_outstanding: 0,
+      aov: 0,
+    };
     for (const o of allOrders) {
       const st = stageMap[o.shopify_id || String(o.id)] || 'new';
-      if (st === 'delivered') stats.delivered++;
-      else if (st === 'transit' || st === 'ofd') stats.transit++;
-      else if (st === 'rto') stats.rto++;
-      else if (st === 'ready' || st === 'pickup') stats.ready++;
-      else if (['new','confirmed','partial_collected'].includes(st)) stats.pending++;
-      stats.revenue += o.total_price || 0;
+      const price = o.total_price || 0;
+      const fs = (o.financial_status || '').toLowerCase();
+
+      // Stage buckets
+      if (st === 'delivered')                               { stats.delivered++; stats.revenue_delivered += price; }
+      else if (st === 'transit')                            { stats.transit++; stats.revenue_dispatched += price; }
+      else if (st === 'ofd')                                { stats.ofd++; stats.revenue_dispatched += price; }
+      else if (st === 'pickup')                             { stats.pickup++; stats.revenue_dispatched += price; }
+      else if (st === 'rto')                                { stats.rto++; stats.revenue_rto += price; }
+      else if (st === 'ready')                              { stats.ready++; stats.revenue_dispatched += price; }
+      else if (st === 'cancelled')                          { stats.cancelled++; }
+      else if (st === 'misc')                               { stats.misc++; stats.revenue_pending += price; }
+      else /* new, confirmed, partial_collected */          { stats.pending++; stats.revenue_pending += price; }
+
+      // delivered revenue also counts as dispatched value
+      if (st === 'delivered') stats.revenue_dispatched += price;
+
+      // Payment mix
+      if (fs === 'partially_paid')      { stats.partial++; stats.partial_revenue += price; stats.partial_outstanding += (o.total_outstanding || 0); }
+      else if (fs === 'paid')           { stats.prepaid++; stats.prepaid_revenue += price; }
+      else                              { stats.cod++; stats.cod_revenue += price; }
+
+      stats.revenue += price;
     }
+    stats.aov = stats.total ? stats.revenue / stats.total : 0;
     res.json(stats);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
