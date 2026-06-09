@@ -449,13 +449,14 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
       mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray(),
     ]);
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
-    const stats = { total: allOrders.length, delivered: 0, transit: 0, rto: 0, pending: 0, revenue: 0 };
+    const stats = { total: allOrders.length, delivered: 0, transit: 0, rto: 0, pending: 0, ready: 0, revenue: 0 };
     for (const o of allOrders) {
       const st = stageMap[o.shopify_id || String(o.id)] || 'new';
       if (st === 'delivered') stats.delivered++;
-      else if (st === 'transit' || st === 'pickup') stats.transit++;
+      else if (st === 'transit' || st === 'pickup' || st === 'ofd') stats.transit++;
       else if (st === 'rto') stats.rto++;
-      else if (['new','confirmed','ready'].includes(st)) stats.pending++;
+      else if (st === 'ready' || st === 'partial_collected') stats.ready++;
+      else if (['new','confirmed'].includes(st)) stats.pending++;
       stats.revenue += o.total_price || 0;
     }
     res.json(stats);

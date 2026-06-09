@@ -217,7 +217,7 @@ function Dashboard() {
   ];
 
   const deliveryRate = stats?.total ? ((stats.delivered/stats.total)*100).toFixed(1) : 0;
-  const fulfillmentRate = stats?.total ? (((stats.total-stats.pending)/stats.total)*100).toFixed(1) : 0;
+  const fulfillmentRate = stats?.total ? (((stats.ready||0)+(stats.transit||0)+(stats.delivered||0)+(stats.rto||0))/stats.total*100).toFixed(1) : 0;
 
   return (
     <div>
