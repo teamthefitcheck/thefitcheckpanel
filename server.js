@@ -170,7 +170,7 @@ function normaliseOrder(node) {
 }
 
 // ─── Order Stage ─────────────────────────────────────────────────────────────
-const STAGE_ORDER = ['new','confirmed','ready','pickup','transit','ofd','partial_collected','delivered','rto','cancelled','misc'];
+const STAGE_ORDER = ['new','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'];
 function higherStage(a, b) {
   const ai = STAGE_ORDER.indexOf(a || 'new');
   const bi = STAGE_ORDER.indexOf(b || 'new');
@@ -455,8 +455,8 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
       if (st === 'delivered') stats.delivered++;
       else if (st === 'transit' || st === 'pickup' || st === 'ofd') stats.transit++;
       else if (st === 'rto') stats.rto++;
-      else if (st === 'ready' || st === 'partial_collected') stats.ready++;
-      else if (['new','confirmed'].includes(st)) stats.pending++;
+      else if (st === 'ready') stats.ready++;
+      else if (['new','confirmed','partial_collected'].includes(st)) stats.pending++;
       stats.revenue += o.total_price || 0;
     }
     res.json(stats);
