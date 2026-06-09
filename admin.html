@@ -538,19 +538,24 @@ function Dashboard() {
               <div className="section-title" style={{marginBottom:0}}>Audience Breakdown</div>
               <div style={{fontSize:12,color:'var(--text-muted)'}}>{(audience.total||0).toLocaleString()} orders in period</div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
               {audience.segments.map(seg=>{
                 const p = audience.total ? (seg.count/audience.total*100).toFixed(1) : 0;
                 return (
-                  <div key={seg.id} style={{background:'var(--bg-card2)',borderRadius:8,padding:'12px 14px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                      <div style={{width:8,height:8,borderRadius:'50%',background:seg.color,flexShrink:0}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.5}}>{seg.name}</span>
+                  <div key={seg.id}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{width:8,height:8,borderRadius:'50%',background:seg.color,flexShrink:0}}/>
+                        <span style={{fontSize:13,fontWeight:600}}>{seg.name}</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:12,fontSize:12}}>
+                        <span style={{color:'var(--text-muted)'}}>{fmtMoney(seg.revenue)}</span>
+                        <span style={{fontWeight:700,minWidth:32,textAlign:'right'}}>{seg.count.toLocaleString()}</span>
+                        <span style={{color:'var(--text-muted)',minWidth:36,textAlign:'right'}}>{p}%</span>
+                      </div>
                     </div>
-                    <div style={{fontSize:22,fontWeight:800,color:seg.color,marginBottom:2}}>{seg.count.toLocaleString()}</div>
-                    <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:8}}>{p}% · {fmtMoney(seg.revenue)}</div>
-                    <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${p}%`,background:seg.color,opacity:.8,transition:'width .6s'}}/>
+                    <div style={{height:5,background:'var(--bg-card2)',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${p}%`,background:seg.color,borderRadius:3,transition:'width .6s',opacity:.85}}/>
                     </div>
                   </div>
                 );
