@@ -543,7 +543,15 @@ function Orders() {
   const [to,setTo]               = useState(()=>new Date().toISOString().slice(0,10));
   const [page,setPage]           = useState(1);
   const [modal,setModal]         = useState(null);
+  const [dbStatus,setDbStatus]   = useState(null);
+  const [syncing,setSyncing]     = useState(false);
   const PAGE_SIZE = 50;
+
+  const pollDbStatus = React.useCallback(async () => {
+    try { const d = await apiFetch('/admin/sync-orders/status'); setDbStatus(d); return d; } catch { return null; }
+  }, []);
+
+  React.useEffect(() => { pollDbStatus(); }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -592,13 +600,20 @@ function Orders() {
             try{ await apiFetch('/admin/sync-tracking',{method:'POST'}); alert('Tracking sync started — stages will update in the background.'); }
             catch(e){ alert('Sync failed: '+e.message); }
           }} title="Sync shipment status from eShipz">🔄 Sync Tracking</button>
-          <button className="btn-ghost btn-sm" onClick={async()=>{
+          <button className="btn-ghost btn-sm" disabled={syncing} onClick={async()=>{
             if(!confirm('This will pull all orders from Shopify into the database. It may take a few minutes for 5000+ orders. Continue?')) return;
             try{
               await apiFetch('/admin/sync-orders',{method:'POST'});
-              alert('Order sync started in background. Check back in a few minutes and refresh.');
+              setSyncing(true);
+              // Poll every 4s until running=false
+              const poll = setInterval(async()=>{
+                const d = await pollDbStatus();
+                if(d && !d.running){ setSyncing(false); clearInterval(poll); load(); }
+              }, 4000);
             } catch(e){ alert('Sync failed: '+e.message); }
-          }} title="Pull all orders from Shopify into database">📥 Sync Orders DB</button>
+          }} title="Pull all orders from Shopify into database">
+            {syncing ? <span>⏳ Syncing… {dbStatus?.total_in_db ? `(${dbStatus.total_in_db.toLocaleString()} saved)` : ''}</span> : <span>📥 Sync Orders DB {dbStatus?.total_in_db ? `(${dbStatus.total_in_db.toLocaleString()} in DB)` : ''}</span>}
+          </button>
         </div>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
