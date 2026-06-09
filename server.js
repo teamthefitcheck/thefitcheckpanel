@@ -1151,7 +1151,9 @@ app.post('/webhooks/orders/create', async (req, res) => {
   try {
     const order = JSON.parse(req.body);
     const sid = String(order.id);
-    const initialStage = order.financial_status === 'partially_paid' ? 'partial_collected' : 'new';
+    const initialStage = order.financial_status === 'partially_paid' ? 'partial_collected'
+      : (order.fulfillment_status === 'fulfilled') ? 'ready'
+      : 'new';
     // Save to DB first — email only goes out after confirmed saved
     await Promise.all([
       ODB.upsert(order),
@@ -1192,6 +1194,16 @@ app.post('/webhooks/orders/updated', async (req, res) => {
       if (current?.stage !== 'partial_collected') {
         await OS.upsert(sid, { stage: 'partial_collected', updated_at: new Date().toISOString() });
         console.log(`[orders/updated] ${order.name} → partial_collected (partially_paid)`);
+      }
+      return;
+    }
+    // Auto-set ready if Shopify marks order as fulfilled (packed, awaiting courier pickup)
+    if (order.fulfillment_status === 'fulfilled') {
+      const current = await OS.get(sid);
+      const advancedStages = ['pickup','transit','ofd','delivered','rto','cancelled'];
+      if (!advancedStages.includes(current?.stage)) {
+        await OS.upsert(sid, { stage: 'ready', updated_at: new Date().toISOString() });
+        console.log(`[orders/updated] ${order.name} → ready (fulfilled)`);
       }
       return;
     }
@@ -1398,6 +1410,28 @@ async function syncOrdersToDB({ since } = {}) {
       }
       saved = ops.length;
     }
+    // Auto-stage fulfilled orders → ready (if not already at a higher stage)
+    const advancedStages = ['pickup','transit','ofd','delivered','rto','cancelled'];
+    const fulfilledOrders = orders.filter(o => o.fulfillment_status === 'fulfilled' && o.financial_status !== 'partially_paid');
+    if (fulfilledOrders.length) {
+      const fids = fulfilledOrders.map(o => String(o.shopify_id || o.id));
+      const fExisting = await mdb.collection('order_stage').find({ shopify_id: { $in: fids } }, { projection: { shopify_id: 1, stage: 1 } }).toArray();
+      const fMap = Object.fromEntries(fExisting.map(e => [e.shopify_id, e.stage]));
+      const fOps = fulfilledOrders
+        .filter(o => !advancedStages.includes(fMap[String(o.shopify_id || o.id)]))
+        .map(o => ({
+          updateOne: {
+            filter: { shopify_id: String(o.shopify_id || o.id) },
+            update: { $set: { shopify_id: String(o.shopify_id || o.id), stage: 'ready', updated_at: new Date().toISOString() } },
+            upsert: true,
+          }
+        }));
+      if (fOps.length) {
+        await mdb.collection('order_stage').bulkWrite(fOps, { ordered: false });
+        console.log(`[sync-orders] auto-staged ${fOps.length} fulfilled orders → ready`);
+      }
+    }
+
     // Auto-stage partially_paid orders that don't yet have partial_collected stage
     const partialOrders = orders.filter(o => o.financial_status === 'partially_paid');
     if (partialOrders.length) {
