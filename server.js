@@ -541,7 +541,7 @@ function emailBase(content, preheader = '') {
       </div>
     </td></tr>
     <tr><td style="background:#111;padding:16px 32px;text-align:center;border-radius:0 0 16px 16px;">
-      <div style="font-size:11px;color:#666;">Powered by <span style="color:#fff;font-weight:600;">Arqontiq</span></div>
+      <div style="font-size:11px;color:#666;">Powered by <span style="color:#fff;font-weight:600;">Tisco</span></div>
     </td></tr>
   </table>
   </td></tr></table></body></html>`;
@@ -1566,7 +1566,7 @@ connectMongo().then(async () => {
   }
 
   app.listen(PORT, () => {
-    console.log(`🚀  ${BRAND_NAME} · Powered by Arqontiq`);
+    console.log(`🚀  ${BRAND_NAME} · Powered by Tisco`);
     console.log(`    Running on port ${PORT}`);
     console.log(`    Admin: ${SERVER_URL}/admin.html`);
     console.log(`    Staff: ${SERVER_URL}/staff`);
