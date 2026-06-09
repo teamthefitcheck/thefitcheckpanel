@@ -592,6 +592,13 @@ function Orders() {
             try{ await apiFetch('/admin/sync-tracking',{method:'POST'}); alert('Tracking sync started — stages will update in the background.'); }
             catch(e){ alert('Sync failed: '+e.message); }
           }} title="Sync shipment status from eShipz">🔄 Sync Tracking</button>
+          <button className="btn-ghost btn-sm" onClick={async()=>{
+            if(!confirm('This will pull all orders from Shopify into the database. It may take a few minutes for 5000+ orders. Continue?')) return;
+            try{
+              await apiFetch('/admin/sync-orders',{method:'POST'});
+              alert('Order sync started in background. Check back in a few minutes and refresh.');
+            } catch(e){ alert('Sync failed: '+e.message); }
+          }} title="Pull all orders from Shopify into database">📥 Sync Orders DB</button>
         </div>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>

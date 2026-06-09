@@ -174,6 +174,67 @@ const OS = {
   },
 };
 
+// ─── Orders DB ───────────────────────────────────────────────────────────────
+// Normalise a Shopify REST order (webhook payload or /orders/:id.json) into our stored shape
+function normaliseOrderREST(o) {
+  return {
+    shopify_id:          String(o.id),
+    name:                o.name,
+    created_at:          o.created_at,
+    updated_at:          o.updated_at || o.created_at,
+    total_price:         parseFloat(o.total_price || 0),
+    financial_status:    (o.financial_status || '').toLowerCase(),
+    fulfillment_status:  (o.fulfillment_status || '').toLowerCase(),
+    email:               o.email || o.contact_email || '',
+    phone:               o.phone || '',
+    tags:                o.tags ? o.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+    note:                o.note || '',
+    customer: o.customer ? {
+      firstName: o.customer.first_name || '',
+      lastName:  o.customer.last_name  || '',
+      email:     o.customer.email      || '',
+      phone:     o.customer.phone      || '',
+    } : null,
+    shipping_address: o.shipping_address || o.billing_address || null,
+    line_items: (o.line_items || []).map(li => ({
+      id:            String(li.id),
+      title:         li.title,
+      variant_title: li.variant_title && li.variant_title !== 'Default Title' ? li.variant_title : '',
+      quantity:      li.quantity,
+      price:         parseFloat(li.price || 0),
+      sku:           li.sku || '',
+      vendor:        li.vendor || '',
+      product_id:    li.product_id ? String(li.product_id) : null,
+    })),
+    fulfillments: (o.fulfillments || []).map(f => ({
+      status:          f.status,
+      tracking_number: f.tracking_numbers?.[0] || f.tracking_number || '',
+      tracking_url:    f.tracking_urls?.[0]    || f.tracking_url    || '',
+      company:         f.tracking_company      || '',
+      created_at:      f.created_at,
+    })),
+    _synced_at: new Date().toISOString(),
+  };
+}
+
+const ODB = {
+  async upsert(order) {
+    const doc = normaliseOrderREST(order);
+    await mdb.collection('orders').updateOne(
+      { shopify_id: doc.shopify_id },
+      { $set: doc },
+      { upsert: true }
+    );
+    return doc;
+  },
+  async ensureIndexes() {
+    const col = mdb.collection('orders');
+    await col.createIndex({ shopify_id: 1 }, { unique: true });
+    await col.createIndex({ created_at: -1 });
+    await col.createIndex({ name: 1 });
+  },
+};
+
 // ─── ID Counter ──────────────────────────────────────────────────────────────
 async function nextId(col) {
   const r = await mdb.collection('id_counters').findOneAndUpdate(
@@ -299,39 +360,56 @@ async function enrichOrderImages(order) {
 }
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
-const _ordersCache = new Map(); // `${from}|${to}` -> { orders, ts }
-const ORDERS_CACHE_TTL = 3 * 60 * 1000;
+// ── helpers to read orders from MongoDB ──────────────────────────────────────
+function buildMongoDateFilter(from, to) {
+  const f = {};
+  if (from) f.$gte = from + 'T00:00:00.000Z';
+  if (to)   f.$lte = to   + 'T23:59:59.999Z';
+  return Object.keys(f).length ? f : null;
+}
 
-async function getCachedOrders(from, to) {
-  const key = `${from || ''}|${to || ''}`;
-  const cached = _ordersCache.get(key);
-  if (cached && (Date.now() - cached.ts) < ORDERS_CACHE_TTL) return cached.orders;
-  const orders = await fetchAllOrders('any', from ? from + 'T00:00:00Z' : null, to ? to + 'T23:59:59Z' : null);
-  _ordersCache.set(key, { orders, ts: Date.now() });
-  return orders;
+async function getOrdersFromDB(from, to) {
+  const query = {};
+  const dateFilter = buildMongoDateFilter(from, to);
+  if (dateFilter) query.created_at = dateFilter;
+  return mdb.collection('orders')
+    .find(query, { projection: { _id: 0 } })
+    .sort({ created_at: -1 })
+    .toArray();
+}
+
+function mergeOrderWithStage(o, stageMap) {
+  const sid = o.shopify_id || String(o.id);
+  const st = stageMap[sid] || {};
+  const shopifyFulfillment = (o.fulfillments || []).find(f => f.tracking_number);
+  return {
+    ...o,
+    id: o.shopify_id || o.id,
+    _stage:        st.stage        || 'new',
+    _awb:          st.awb          || shopifyFulfillment?.tracking_number || '',
+    _courier:      st.courier      || shopifyFulfillment?.company         || '',
+    _tracking_url: st.tracking_url || shopifyFulfillment?.tracking_url    || '',
+  };
 }
 
 app.get('/orders', adminAuth, async (req, res) => {
   try {
     const { from, to, stage, q, payment } = req.query;
-    const allOrders = await getCachedOrders(from, to);
-    const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, tracking_url: 1, _id: 0 } }).toArray();
+    const [allOrders, stages] = await Promise.all([
+      getOrdersFromDB(from, to),
+      mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, tracking_url: 1, _id: 0 } }).toArray(),
+    ]);
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
-    let orders = allOrders.map(o => {
-      const sid = String(o.id);
-      const st = stageMap[sid] || {};
-      // Fall back to Shopify fulfillment data if panel has no AWB saved
-      const shopifyFulfillment = (o.fulfillments || []).find(f => f.tracking_number);
-      const awb = st.awb || shopifyFulfillment?.tracking_number || '';
-      const courier = st.courier || shopifyFulfillment?.company || '';
-      const tracking_url = st.tracking_url || shopifyFulfillment?.tracking_url || '';
-      return { ...o, _stage: st.stage || 'new', _awb: awb, _courier: courier, _tracking_url: tracking_url };
-    });
+    let orders = allOrders.map(o => mergeOrderWithStage(o, stageMap));
     if (stage)   orders = orders.filter(o => o._stage === stage);
     if (payment) orders = orders.filter(o => o.financial_status?.includes(payment.toLowerCase()));
     if (q) {
       const lq = q.toLowerCase();
-      orders = orders.filter(o => o.name.toLowerCase().includes(lq) || (o.customer?.firstName + ' ' + o.customer?.lastName).toLowerCase().includes(lq) || o.email?.toLowerCase().includes(lq));
+      orders = orders.filter(o =>
+        o.name?.toLowerCase().includes(lq) ||
+        `${o.customer?.firstName||''} ${o.customer?.lastName||''}`.toLowerCase().includes(lq) ||
+        o.email?.toLowerCase().includes(lq)
+      );
     }
     res.json({ orders, total: orders.length });
   } catch (e) { console.error('GET /orders:', e.message); res.status(500).json({ error: e.message }); }
@@ -340,12 +418,14 @@ app.get('/orders', adminAuth, async (req, res) => {
 app.get('/orders/stats', adminAuth, async (req, res) => {
   try {
     const { from, to } = req.query;
-    const allOrders = await getCachedOrders(from, to);
-    const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray();
+    const [allOrders, stages] = await Promise.all([
+      getOrdersFromDB(from, to),
+      mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray(),
+    ]);
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
     const stats = { total: allOrders.length, delivered: 0, transit: 0, rto: 0, pending: 0, revenue: 0 };
     for (const o of allOrders) {
-      const st = stageMap[String(o.id)] || 'new';
+      const st = stageMap[o.shopify_id || String(o.id)] || 'new';
       if (st === 'delivered') stats.delivered++;
       else if (st === 'transit' || st === 'pickup') stats.transit++;
       else if (st === 'rto') stats.rto++;
@@ -358,14 +438,24 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
 
 app.get('/orders/:id', adminAuth, async (req, res) => {
   try {
-    const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
-    const st = await OS.get(req.params.id);
-    const enriched = await enrichOrderImages(order);
+    const sid = req.params.id;
+    let order = await mdb.collection('orders').findOne({ shopify_id: sid }, { projection: { _id: 0 } });
+    if (!order) {
+      // not yet in DB — fetch from Shopify and cache it
+      const { order: raw } = await shopifyREST(`/orders/${sid}.json`);
+      order = await ODB.upsert(raw);
+    }
+    const st = await OS.get(sid);
+    // enrich with product images
+    const productIds = [...new Set((order.line_items || []).map(li => li.product_id).filter(Boolean))];
+    await Promise.all(productIds.map(async pid => {
+      if (imageCache.has(pid)) return;
+      try { const d = await shopifyREST(`/products/${pid}.json?fields=id,image,images`); imageCache.set(pid, d.product?.image?.src || d.product?.images?.[0]?.src || null); }
+      catch { imageCache.set(pid, null); }
+    }));
+    const enriched = { ...order, line_items: (order.line_items || []).map(li => ({ ...li, image_url: imageCache.get(li.product_id) || null })) };
     const shopifyFulfillment = (order.fulfillments || []).find(f => f.tracking_number);
-    const awb = st?.awb || shopifyFulfillment?.tracking_number || '';
-    const courier = st?.courier || shopifyFulfillment?.tracking_company || '';
-    const tracking_url = st?.tracking_url || shopifyFulfillment?.tracking_url || '';
-    res.json({ ...enriched, _stage: st?.stage || 'new', _awb: awb, _courier: courier, _tracking_url: tracking_url });
+    res.json({ ...enriched, _stage: st?.stage || 'new', _awb: st?.awb || shopifyFulfillment?.tracking_number || '', _courier: st?.courier || shopifyFulfillment?.company || '', _tracking_url: st?.tracking_url || shopifyFulfillment?.tracking_url || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -383,7 +473,8 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
     // Send stage email
     if (stage) {
       try {
-        const { order } = await shopifyREST(`/orders/${req.params.id}.json`);
+        let order = await mdb.collection('orders').findOne({ shopify_id: String(req.params.id) }, { projection: { _id: 0 } });
+        if (!order) { const { order: raw } = await shopifyREST(`/orders/${req.params.id}.json`); order = await ODB.upsert(raw); }
         const email = order.email || order.contact_email;
         const awbVal = awb || (await OS.get(req.params.id))?.awb || '';
         const courierVal = courier || (await OS.get(req.params.id))?.courier || '';
@@ -423,15 +514,13 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
 // Staff order routes
 app.get('/staff/orders', staffAuth, async (req, res) => {
   try {
-    const allOrders = await getCachedOrders(null, null);
-    const stages = await mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, _id: 0 } }).toArray();
+    const [allOrders, stages] = await Promise.all([
+      getOrdersFromDB(null, null),
+      mdb.collection('order_stage').find({}, { projection: { shopify_id: 1, stage: 1, awb: 1, courier: 1, _id: 0 } }).toArray(),
+    ]);
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
     const orders = allOrders
-      .map(o => {
-        const st = stageMap[String(o.id)] || {};
-        const sf = (o.fulfillments || []).find(f => f.tracking_number);
-        return { ...o, _stage: st.stage || 'new', _awb: st.awb || sf?.tracking_number || '', _courier: st.courier || sf?.company || '' };
-      })
+      .map(o => mergeOrderWithStage(o, stageMap))
       .filter(o => ['confirmed','ready','pickup','transit'].includes(o._stage));
     res.json({ orders });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1000,7 +1089,11 @@ app.post('/webhooks/orders/create', async (req, res) => {
   if (!verifyWebhook(req)) return;
   try {
     const order = JSON.parse(req.body);
-    await OS.upsert(String(order.id), { stage: 'new', updated_at: new Date().toISOString() });
+    const sid = String(order.id);
+    await Promise.all([
+      ODB.upsert(order),
+      OS.upsert(sid, { stage: 'new', updated_at: new Date().toISOString() }),
+    ]);
     const email = order.email || order.contact_email;
     console.log(`[orders/create] ${order.name} email=${email||'none'}`);
     if (email) {
@@ -1020,6 +1113,8 @@ app.post('/webhooks/orders/updated', async (req, res) => {
   try {
     const order = JSON.parse(req.body);
     const sid = String(order.id);
+    // Always keep DB copy fresh — tags, address, payment status all update here
+    ODB.upsert(order).catch(e => console.error('[orders/updated] DB upsert failed:', e.message));
     if (order.cancelled_at) {
       await OS.upsert(sid, { stage: 'cancelled', updated_at: new Date().toISOString() });
       return;
@@ -1190,6 +1285,58 @@ async function runTrackingSync() {
     }
   } catch(e) { console.error('[tracking-sync] fatal error:', e.message); }
 }
+
+// ─── Orders DB Backfill ───────────────────────────────────────────────────────
+let _syncOrdersRunning = false;
+async function syncOrdersToDB({ since } = {}) {
+  if (_syncOrdersRunning) return { skipped: true };
+  _syncOrdersRunning = true;
+  let saved = 0, pages = 0;
+  try {
+    const min = since || null;
+    const orders = await fetchAllOrders('any', min, null);
+    pages = Math.ceil(orders.length / 250);
+    const ops = orders.map(o => ({
+      updateOne: {
+        filter: { shopify_id: String(o.id) },
+        update: { $set: {
+          shopify_id: String(o.id), name: o.name, created_at: o.created_at,
+          updated_at: o.updated_at || o.created_at,
+          total_price: o.total_price, financial_status: o.financial_status,
+          fulfillment_status: o.fulfillment_status, email: o.email, phone: o.phone,
+          tags: Array.isArray(o.tags) ? o.tags : (o.tags||'').split(',').map(t=>t.trim()).filter(Boolean),
+          note: o.note || '', customer: o.customer, shipping_address: o.shipping_address,
+          line_items: (o.line_items||[]).map(li=>({ ...li, product_id: li.product_id ? String(li.product_id) : null })),
+          fulfillments: o.fulfillments || [], _synced_at: new Date().toISOString(),
+        }},
+        upsert: true,
+      }
+    }));
+    if (ops.length) {
+      // batch in groups of 500
+      for (let i = 0; i < ops.length; i += 500) {
+        await mdb.collection('orders').bulkWrite(ops.slice(i, i + 500), { ordered: false });
+      }
+      saved = ops.length;
+    }
+    console.log(`[sync-orders] done — saved ${saved} orders`);
+    return { saved, pages };
+  } finally { _syncOrdersRunning = false; }
+}
+
+app.post('/admin/sync-orders', adminAuth, async (req, res) => {
+  const { since } = req.body || {};
+  res.json({ ok: true, message: 'Order sync started in background' });
+  syncOrdersToDB({ since })
+    .then(r => console.log(`[sync-orders] complete:`, r))
+    .catch(e => console.error('[sync-orders] error:', e.message));
+});
+
+app.get('/admin/sync-orders/status', adminAuth, async (req, res) => {
+  const count = await mdb.collection('orders').countDocuments();
+  const latest = await mdb.collection('orders').findOne({}, { sort: { _synced_at: -1 }, projection: { _synced_at: 1, name: 1, _id: 0 } });
+  res.json({ total_in_db: count, last_synced: latest?._synced_at, last_order: latest?.name, running: _syncOrdersRunning });
+});
 
 // Manual trigger endpoint
 app.post('/admin/sync-tracking', adminAuth, async (req, res) => {
@@ -1573,12 +1720,24 @@ connectMongo().then(async () => {
     console.log(`    Install: ${SERVER_URL}/install`);
   });
 
-  // Auto-sync tracking every 2 hours
+  // Ensure MongoDB indexes for orders collection
+  ODB.ensureIndexes().catch(e => console.error('Index creation failed:', e.message));
+
   if (SHOPIFY_TOKEN && SHOP_DOMAIN && !SHOP_DOMAIN.startsWith('.')) {
     setTimeout(() => {
+      // Auto-sync tracking every 2 hours
       runTrackingSync();
       setInterval(runTrackingSync, 2 * 60 * 60 * 1000);
-    }, 30000); // wait 30s after startup before first sync
+
+      // Background order refresh: sync last 48h every 30 min to catch any missed webhooks
+      const refreshRecentOrders = () => {
+        const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+        syncOrdersToDB({ since }).catch(e => console.error('[bg-order-refresh]', e.message));
+      };
+      refreshRecentOrders();
+      setInterval(refreshRecentOrders, 30 * 60 * 1000);
+    }, 30000);
     console.log('✅  Tracking auto-sync enabled (every 2 hours)');
+    console.log('✅  Order DB refresh enabled (every 30 min)');
   }
 }).catch(err => { console.error('❌  Startup error:', err.message); process.exit(1); });
