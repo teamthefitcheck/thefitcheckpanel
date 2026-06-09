@@ -85,12 +85,18 @@ async function fetchAllOrders(status = 'any', createdAtMin, createdAtMax, { onPa
       orders(first:$first,query:$query,after:$after,sortKey:CREATED_AT,reverse:true){
         pageInfo{hasNextPage endCursor}
         edges{node{
-          id name createdAt totalPriceSet{shopMoney{amount}}
+          id name createdAt
+          totalPriceSet{shopMoney{amount}}
+          subtotalPriceSet{shopMoney{amount}}
+          totalShippingPriceSet{shopMoney{amount}}
+          totalDiscountsSet{shopMoney{amount}}
+          netPaymentSet{shopMoney{amount}}
           displayFinancialStatus displayFulfillmentStatus
           email phone tags
           customer{firstName lastName email phone}
           lineItems(first:10){edges{node{id title quantity vendor sku product{id} originalUnitPriceSet{shopMoney{amount}} variant{title}}}}
           fulfillments{status trackingInfo{number url company} createdAt}
+          discountApplications(first:5){edges{node{...on DiscountCodeApplication{code}}}}
           note
         }}
       }
@@ -120,11 +126,21 @@ function buildOrderQuery(status, min, max) {
 
 function normaliseOrder(node) {
   const id = node.id.replace('gid://shopify/Order/', '');
+  const totalPrice  = parseFloat(node.totalPriceSet?.shopMoney?.amount || 0);
+  const netPayment  = parseFloat(node.netPaymentSet?.shopMoney?.amount || 0);
+  const outstanding = Math.max(0, totalPrice - netPayment);
   return {
     id,
+    shopify_id: id,
     name: node.name,
     created_at: node.createdAt,
-    total_price: parseFloat(node.totalPriceSet?.shopMoney?.amount || 0),
+    total_price:       totalPrice,
+    subtotal_price:    parseFloat(node.subtotalPriceSet?.shopMoney?.amount || 0),
+    total_shipping:    parseFloat(node.totalShippingPriceSet?.shopMoney?.amount || 0),
+    total_discounts:   parseFloat(node.totalDiscountsSet?.shopMoney?.amount || 0),
+    total_outstanding: outstanding,
+    total_paid:        netPayment,
+    discount_codes:    (node.discountApplications?.edges || []).map(e => ({ code: e.node?.code })).filter(d => d.code),
     financial_status: node.displayFinancialStatus?.toLowerCase(),
     fulfillment_status: node.displayFulfillmentStatus?.toLowerCase(),
     email: node.email || node.customer?.email || '',
@@ -154,7 +170,7 @@ function normaliseOrder(node) {
 }
 
 // ─── Order Stage ─────────────────────────────────────────────────────────────
-const STAGE_ORDER = ['new','confirmed','ready','pickup','transit','delivered','rto','cancelled','misc'];
+const STAGE_ORDER = ['new','confirmed','ready','pickup','transit','ofd','partial_collected','delivered','rto','cancelled','misc'];
 function higherStage(a, b) {
   const ai = STAGE_ORDER.indexOf(a || 'new');
   const bi = STAGE_ORDER.indexOf(b || 'new');
@@ -177,12 +193,22 @@ const OS = {
 // ─── Orders DB ───────────────────────────────────────────────────────────────
 // Normalise a Shopify REST order (webhook payload or /orders/:id.json) into our stored shape
 function normaliseOrderREST(o) {
+  const totalPrice   = parseFloat(o.total_price   || 0);
+  const outstanding  = parseFloat(o.total_outstanding ?? o.total_price ?? 0);
+  const paidAmount   = Math.max(0, totalPrice - outstanding);
   return {
     shopify_id:          String(o.id),
     name:                o.name,
     created_at:          o.created_at,
     updated_at:          o.updated_at || o.created_at,
-    total_price:         parseFloat(o.total_price || 0),
+    total_price:         totalPrice,
+    subtotal_price:      parseFloat(o.subtotal_price  || 0),
+    total_discounts:     parseFloat(o.total_discounts || 0),
+    total_shipping:      parseFloat(o.total_shipping_price_set?.shop_money?.amount || 0),
+    total_outstanding:   outstanding,
+    total_paid:          paidAmount,
+    payment_gateway:     o.payment_gateway || '',
+    discount_codes:      (o.discount_codes || []).map(d => ({ code: d.code, amount: parseFloat(d.amount || 0), type: d.type })),
     financial_status:    (o.financial_status || '').toLowerCase(),
     fulfillment_status:  (o.fulfillment_status || '').toLowerCase(),
     email:               o.email || o.contact_email || '',
@@ -488,6 +514,7 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
           else if (stage === 'transit')  { html = templateInTransit({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
           else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
           else if (stage === 'delivered'){ html = templateDelivered({ order, imageMap }); subject = `Your order ${order.name} has been delivered ✅`; }
+          else if (stage === 'partial_collected'){ html = templatePartialCollected({ order, imageMap }); subject = `Partial payment received for ${order.name} — balance due on delivery`; }
           if (html) {
             const rec2 = await OS.get(req.params.id);
             const alreadySent = (rec2?.emails_sent || []).includes(stage);
@@ -654,8 +681,9 @@ async function fetchProductImages(productIds) {
   } catch { return {}; }
 }
 
-function orderItemsBlock(lineItems, totalPrice, imageMap = {}) {
+function orderItemsBlock(lineItems, totalPrice, imageMap = {}, { subtotal, discount, shipping, paid, outstanding } = {}) {
   if (!lineItems || !lineItems.length) return '';
+  const fmt = n => `₹${parseFloat(n||0).toLocaleString('en-IN')}`;
   const rows = lineItems.map(li => {
     const img = imageMap[String(li.product_id || '')];
     const imgCell = img
@@ -674,19 +702,30 @@ function orderItemsBlock(lineItems, totalPrice, imageMap = {}) {
         ${size ? `<div style="font-size:12px;color:#888;margin-top:2px;">Size: ${size}</div>` : ''}
         <div style="font-size:12px;color:#aaa;margin-top:1px;">Qty: ${li.quantity}</div>
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;font-weight:700;color:#333;text-align:right;vertical-align:middle;white-space:nowrap;">₹${lineTotal.toLocaleString('en-IN')}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;font-weight:700;color:#333;text-align:right;vertical-align:middle;white-space:nowrap;">${fmt(lineTotal)}</td>
     </tr>`;
   }).join('');
 
+  const summaryRows = [];
+  if (subtotal != null) summaryRows.push(`<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#666;">Subtotal</td><td style="padding:6px 0;font-size:12px;color:#666;text-align:right;">${fmt(subtotal)}</td></tr>`);
+  if (discount != null && parseFloat(discount) > 0) summaryRows.push(`<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#16a34a;">Discount</td><td style="padding:6px 0;font-size:12px;color:#16a34a;text-align:right;">−${fmt(discount)}</td></tr>`);
+  if (shipping != null) summaryRows.push(`<tr><td colspan="2" style="padding:6px 0;font-size:12px;color:#666;">Shipping</td><td style="padding:6px 0;font-size:12px;color:#666;text-align:right;">${parseFloat(shipping)===0?'Free':fmt(shipping)}</td></tr>`);
+
   const total = parseFloat(totalPrice || 0);
+  const paidAmt = parseFloat(paid || 0);
+  const balanceAmt = parseFloat(outstanding || 0);
+
   return `
     <div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Items in your order</div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
       ${rows}
+      ${summaryRows.length ? `<tr><td colspan="3" style="padding:8px 0 0;border-top:1px solid #eee;"></td></tr>${summaryRows.join('')}` : ''}
       <tr>
-        <td colspan="2" style="padding:12px 0 4px;font-size:13px;font-weight:800;color:#111;border-top:2px solid #111;">Order Total</td>
-        <td style="padding:12px 0 4px;font-size:15px;font-weight:800;color:#111;text-align:right;border-top:2px solid #111;">₹${total.toLocaleString('en-IN')}</td>
+        <td colspan="2" style="padding:10px 0 4px;font-size:13px;font-weight:800;color:#111;border-top:2px solid #111;">Order Total</td>
+        <td style="padding:10px 0 4px;font-size:15px;font-weight:800;color:#111;text-align:right;border-top:2px solid #111;">${fmt(total)}</td>
       </tr>
+      ${paidAmt > 0 ? `<tr><td colspan="2" style="padding:4px 0;font-size:12px;color:#16a34a;font-weight:600;">Paid</td><td style="padding:4px 0;font-size:12px;color:#16a34a;font-weight:600;text-align:right;">${fmt(paidAmt)}</td></tr>` : ''}
+      ${balanceAmt > 0 ? `<tr><td colspan="2" style="padding:4px 0;font-size:12px;color:#dc2626;font-weight:600;">Balance Due</td><td style="padding:4px 0;font-size:12px;color:#dc2626;font-weight:600;text-align:right;">${fmt(balanceAmt)}</td></tr>` : ''}
     </table>`;
 }
 
@@ -717,7 +756,7 @@ function templateOrderConfirmed(order, imageMap = {}) {
       </div>
     </div>
 
-    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
 
     ${addrLine ? `
     <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
@@ -736,7 +775,7 @@ function templateShipped({ order, awb, courier, trackingUrl, imageMap = {} }) {
     ${awb ? `<div style="background:#f9f9f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#444;">
       <strong>Tracking:</strong> ${awb} ${courier ? `· ${courier}` : ''}
     </div>` : ''}
-    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
     ${trackButton(trackingUrl, awb, courier)}
   `, `Your order ${order.name} has shipped!`);
 }
@@ -745,7 +784,7 @@ function templateInTransit({ order, awb, courier, trackingUrl, imageMap = {} }) 
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">On the way! 📦</h2>
     <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> is in transit and moving towards you.</p>
-    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
     ${trackButton(trackingUrl, awb, courier, 'Track My Order →')}
   `, `Order ${order.name} is in transit`);
 }
@@ -754,7 +793,7 @@ function templateOFD({ order, awb, courier, trackingUrl, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Out for delivery today! 🛵</h2>
     <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> is out for delivery. Keep your phone handy!</p>
-    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
     ${trackButton(trackingUrl, awb, courier, 'Track My Order →')}
   `, `Your order is out for delivery today!`);
 }
@@ -763,9 +802,30 @@ function templateDelivered({ order, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Delivered! ✅</h2>
     <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> has been delivered. We hope you love it!</p>
-    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
     <p style="color:#555;font-size:13px;">If you have any issues, reply to this email and we'll sort it out.</p>
   `, `Your order ${order.name} has been delivered`);
+}
+
+function templatePartialCollected({ order, imageMap = {} }) {
+  const paid = parseFloat(order.total_paid || 0);
+  const balance = parseFloat(order.total_outstanding || 0);
+  return emailBase(`
+    <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Partial payment received 💰</h2>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, we've received a partial payment for your order <strong>${order.name}</strong>. Please arrange the remaining balance at the time of delivery.</p>
+    <div style="background:#fff8ed;border:1px solid #f59e0b;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;">
+        <span style="color:#92400e;font-weight:600;">Amount Received</span>
+        <span style="font-weight:800;color:#15803d;">₹${paid.toLocaleString('en-IN')}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;">
+        <span style="color:#92400e;font-weight:600;">Balance Due on Delivery</span>
+        <span style="font-weight:800;color:#dc2626;">₹${balance.toLocaleString('en-IN')}</span>
+      </div>
+    </div>
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
+    <p style="color:#888;font-size:13px;">Please keep the balance amount ready for the delivery agent. For any queries, reply to this email.</p>
+  `, `Partial payment received for ${order.name} — balance due on delivery`);
 }
 
 app.get('/admin/email-config', adminAuth, async (req, res) => {
@@ -797,6 +857,7 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
     else if (template === 'transit')  { html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Your order is in transit 📦`; }
     else if (template === 'ofd')      { html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Out for delivery today 🛵`; }
     else if (template === 'delivered'){ html = templateDelivered({ order }); subject = `[TEST] Your order has been delivered ✅`; }
+    else if (template === 'partial_collected'){ html = templatePartialCollected({ order: { ...order, total_paid: 99, total_outstanding: 1350, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: 1449, quantity: 1 }], total_price: 1449 } }); subject = `[TEST] Partial payment received 💰`; }
     else                              { html = templateDelivered({ order }); subject = `[TEST] ${BRAND_NAME} Email Preview`; }
     await sendEmail({ to, subject, html });
     res.json({ ok: true });

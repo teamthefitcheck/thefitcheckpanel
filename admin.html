@@ -92,12 +92,14 @@ async function apiFetch(url, opts = {}) {
 function stageBadge(s) {
   const map = {
     delivered:['badge-green','Delivered'], transit:['badge-cyan','In Transit'],
-    pickup:['badge-cyan','Picked Up'], rto:['badge-red','RTO'],
-    confirmed:['badge-yellow','Confirmed'], ready:['badge-yellow','Ready'],
+    ofd:['badge-cyan','Out for Delivery'], pickup:['badge-cyan','Picked Up'],
+    rto:['badge-red','RTO'], confirmed:['badge-yellow','Confirmed'],
+    ready:['badge-yellow','Ready'], partial_collected:['','Partial Collected'],
     cancelled:['badge-red','Cancelled'], new:['badge-gray','New'], misc:['badge-gray','Misc'],
   };
   const [cls,label] = map[s] || ['badge-gray', s || 'Unknown'];
-  return <span className={`badge ${cls}`}>{label}</span>;
+  const style = s==='partial_collected' ? {background:'#92400e22',color:'#f59e0b',border:'1px solid #f59e0b55'} : {};
+  return <span className={`badge ${cls}`} style={style}>{label}</span>;
 }
 
 function fmt(d) { return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
@@ -413,8 +415,13 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
                     </div>
                   </div>
                 ))}
-                <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontWeight:700,fontSize:14}}>
-                  <span>Total</span><span>{fmtMoney(order.total_price)}</span>
+                <div style={{borderTop:'1px solid var(--border)',marginTop:4,paddingTop:8}}>
+                  {order.subtotal_price > 0 && <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,color:'var(--text-muted)'}}><span>Subtotal</span><span>{fmtMoney(order.subtotal_price)}</span></div>}
+                  {order.total_discounts > 0 && <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,color:'#16a34a'}}><span>Discount {order.discount_codes?.[0]?.code ? `(${order.discount_codes[0].code})` : ''}</span><span>−{fmtMoney(order.total_discounts)}</span></div>}
+                  {order.total_shipping != null && <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,color:'var(--text-muted)'}}><span>Shipping</span><span>{order.total_shipping===0?'Free':fmtMoney(order.total_shipping)}</span></div>}
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0 3px',fontWeight:700,fontSize:14,borderTop:'2px solid var(--border)',marginTop:4}}><span>Total</span><span>{fmtMoney(order.total_price)}</span></div>
+                  {order.total_paid > 0 && <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,color:'#16a34a',fontWeight:600}}><span>Paid</span><span>{fmtMoney(order.total_paid)}</span></div>}
+                  {order.total_outstanding > 0 && <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,color:'#dc2626',fontWeight:600}}><span>Balance Due</span><span>{fmtMoney(order.total_outstanding)}</span></div>}
                 </div>
               </div>
 
@@ -465,7 +472,7 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
                 <div className="field">
                   <label>Stage</label>
                   <select value={stage} onChange={e=>setStage(e.target.value)}>
-                    {['confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>(
+                    {['confirmed','ready','pickup','transit','ofd','partial_collected','delivered','rto','cancelled','misc'].map(s=>(
                       <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
                     ))}
                   </select>
@@ -623,7 +630,7 @@ function Orders() {
         <button className="btn-primary btn-sm" onClick={load}>Search</button>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        {['','confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
+        {['','confirmed','ready','pickup','transit','ofd','partial_collected','delivered','rto','cancelled','misc'].map(s=>{
           const active = stage===s;
           const count = s==='' ? allOrders.length : (counts[s]||0);
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
@@ -657,11 +664,17 @@ function Orders() {
                 <td style={{color:'var(--text-muted)',fontSize:12,maxWidth:160}}>
                   {(o.line_items||[]).slice(0,2).map(li=>li.title).join(', ').slice(0,55)}{(o.line_items||[]).length>2?'…':''}
                 </td>
-                <td style={{fontWeight:600}}>{fmtMoney(o.total_price)}</td>
+                <td style={{fontWeight:600}}>
+                  <div>{fmtMoney(o.total_price)}</div>
+                  {o.financial_status==='partially_paid' && <div style={{fontSize:11,color:'#f59e0b',marginTop:2}}>Paid {fmtMoney(o.total_paid)} · Due {fmtMoney(o.total_outstanding)}</div>}
+                </td>
                 <td>
-                  <span className={`badge ${o.financial_status==='paid'?'badge-green':o.financial_status?.includes('pending')?'badge-yellow':'badge-gray'}`}>
-                    {o.financial_status==='paid'?'Prepaid':'COD'}
-                  </span>
+                  {o.financial_status==='paid'
+                    ? <span className="badge badge-green">Prepaid</span>
+                    : o.financial_status==='partially_paid'
+                    ? <span className="badge" style={{background:'#92400e22',color:'#f59e0b',border:'1px solid #f59e0b55'}}>Partial</span>
+                    : <span className="badge badge-yellow">COD</span>
+                  }
                 </td>
                 <td>{stageBadge(o._stage)}</td>
                 <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
@@ -961,6 +974,17 @@ function Emails() {
       ${sampleItems}
       <p style="color:#555;font-size:13px;">If you have any issues, reply to this email and we'll sort it out.</p>`,
     },
+    partial_collected: {
+      subject: 'Partial payment received for #1001 — balance due on delivery',
+      body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Partial payment received 💰</h2>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, we've received a partial payment for your order <strong>#1001</strong>. Please arrange the remaining balance at the time of delivery.</p>
+      <div style="background:#fff8ed;border:1px solid #f59e0b;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;"><span style="color:#92400e;font-weight:600;">Amount Received</span><span style="font-weight:800;color:#15803d;">₹99</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#92400e;font-weight:600;">Balance Due on Delivery</span><span style="font-weight:800;color:#dc2626;">₹1,350</span></div>
+      </div>
+      ${sampleItems}
+      <p style="color:#888;font-size:13px;">Please keep the balance amount ready for the delivery agent. For any queries, reply to this email.</p>`,
+    },
   };
 
   const currentPreview = previews[testTemplate] || previews.confirmed;
@@ -999,6 +1023,7 @@ function Emails() {
                 <option value="transit">In Transit 📦</option>
                 <option value="ofd">Out for Delivery 🛵</option>
                 <option value="delivered">Delivered ✅</option>
+                <option value="partial_collected">Partial Payment Collected 💰</option>
               </select>
             </div>
             <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
@@ -1221,7 +1246,7 @@ function Settings() {
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <label>Maps to Stage</label>
               <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
-                {['confirmed','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                {['confirmed','ready','pickup','transit','ofd','partial_collected','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
               </select>
             </div>
             <button className="btn-ghost btn-sm" onClick={addTagMapping} disabled={!newTag}>Add Mapping</button>
@@ -1344,7 +1369,7 @@ function SyncLogs() {
 
   useEffect(() => { load(); }, []);
 
-  const stageColor = s => s==='delivered'?'#22c55e':s==='transit'||s==='ofd'?'#f59e0b':s==='rto'?'#ef4444':'#888';
+  const stageColor = s => s==='delivered'?'#22c55e':s==='transit'||s==='ofd'?'#f59e0b':s==='rto'?'#ef4444':s==='partial_collected'?'#f59e0b':'#888';
 
   return (
     <div>
