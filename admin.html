@@ -1288,26 +1288,23 @@ function Shipping() {
 const AUDIENCE_COLORS = ['#ef4444','#f59e0b','#22c55e','#06b6d4','#a78bfa','#f97316','#ec4899','#64748b'];
 
 function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }) {
-  const [segs, setSegs] = React.useState(segments);
   const [editIdx, setEditIdx] = React.useState(null);
   const [editName, setEditName] = React.useState('');
   const [editColor, setEditColor] = React.useState(AUDIENCE_COLORS[0]);
   const [editTags, setEditTags] = React.useState([]);
   const [tagInput, setTagInput] = React.useState('');
 
-  React.useEffect(()=>{ setSegs(segments); },[segments]);
-
   function openNew() {
     setEditIdx('new');
     setEditName('');
-    setEditColor(AUDIENCE_COLORS[segs.length % AUDIENCE_COLORS.length]);
+    setEditColor(AUDIENCE_COLORS[segments.length % AUDIENCE_COLORS.length]);
     setEditTags([]);
     setTagInput('');
   }
 
   function openEdit(i) {
     setEditIdx(i);
-    const s = segs[i];
+    const s = segments[i];
     setEditName(s.name);
     setEditColor(s.color);
     setEditTags([...(s.tags||[])]);
@@ -1323,19 +1320,16 @@ function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }
 
   function saveEdit() {
     if (!editName.trim()) return;
-    const seg = { id: editIdx==='new' ? Date.now().toString() : segs[editIdx].id, name: editName.trim(), color: editColor, tags: editTags };
+    const seg = { id: editIdx==='new' ? Date.now().toString() : segments[editIdx].id, name: editName.trim(), color: editColor, tags: editTags };
     let updated;
-    if (editIdx === 'new') updated = [...segs, seg];
-    else { updated = segs.map((s,i)=>i===editIdx?seg:s); }
-    setSegs(updated);
+    if (editIdx === 'new') updated = [...segments, seg];
+    else { updated = segments.map((s,i)=>i===editIdx?seg:s); }
     onSave(updated);
     setEditIdx(null);
   }
 
   function removeSegment(i) {
-    const updated = segs.filter((_,idx)=>idx!==i);
-    setSegs(updated);
-    onSave(updated);
+    onSave(segments.filter((_,idx)=>idx!==i));
   }
 
   const allKnownTags = shopifyTags.length > 0 ? shopifyTags : [];
@@ -1352,12 +1346,12 @@ function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }
             <div style={{fontWeight:700,fontSize:14}}>Audience Segments</div>
             <button className="btn-primary btn-sm" onClick={openNew}>+ New Segment</button>
           </div>
-          {segs.length===0 && (
+          {segments.length===0 && (
             <div className="card" style={{padding:24,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>
               No segments yet. Create one to start categorising your audience.
             </div>
           )}
-          {segs.map((s,i)=>(
+          {segments.map((s,i)=>(
             <div key={s.id} className="card" style={{padding:'12px 16px',marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
               <div style={{width:10,height:10,borderRadius:'50%',background:s.color,flexShrink:0}}/>
               <div style={{flex:1}}>
