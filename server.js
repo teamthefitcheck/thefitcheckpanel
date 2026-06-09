@@ -391,11 +391,12 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
         console.log(`[stage-email] order=${order.name} stage=${stage} email=${email||'none'}`);
         if (email) {
           let html, subject;
-          if (stage === 'confirmed') { html = templateOrderConfirmed(order); subject = `Your order ${order.name} is confirmed! 🎉`; }
-          else if (stage === 'pickup')   { html = templateShipped({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} has shipped! 🚚`; }
-          else if (stage === 'transit')  { html = templateInTransit({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
-          else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
-          else if (stage === 'delivered'){ html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
+          const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+          if (stage === 'confirmed') { html = templateOrderConfirmed(order, imageMap); subject = `Your order ${order.name} is confirmed! 🎉`; }
+          else if (stage === 'pickup')   { html = templateShipped({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} has shipped! 🚚`; }
+          else if (stage === 'transit')  { html = templateInTransit({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
+          else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+          else if (stage === 'delivered'){ html = templateDelivered({ order, imageMap }); subject = `Your order ${order.name} has been delivered ✅`; }
           if (html) {
             const rec2 = await OS.get(req.params.id);
             const alreadySent = (rec2?.emails_sent || []).includes(stage);
@@ -546,22 +547,71 @@ function emailBase(content, preheader = '') {
   </td></tr></table></body></html>`;
 }
 
-function templateOrderConfirmed(order) {
-  const items = (order.line_items || []).map(li => `
-    <tr>
-      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;">
-        <strong>${li.title}</strong>${li.variant_title && li.variant_title !== 'Default Title' ? `<br/><span style="color:#888;font-size:12px;">${li.variant_title}</span>` : ''}
-      </td>
-      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#888;text-align:center;">×${li.quantity}</td>
-      <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;text-align:right;font-weight:600;">₹${parseFloat(li.price * (li.quantity || 1)).toLocaleString('en-IN')}</td>
-    </tr>`).join('');
+// Batch-fetch product images via GraphQL. Returns map: product_id -> image_url
+async function fetchProductImages(productIds) {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return {};
+  try {
+    const gqlIds = ids.map(id => `"gid://shopify/Product/${id}"`).join(',');
+    const data = await shopifyGQL(`{ nodes(ids:[${gqlIds}]){ ... on Product { id featuredImage { url } } } }`);
+    const map = {};
+    for (const node of (data?.data?.nodes || [])) {
+      if (node?.id && node.featuredImage?.url) {
+        const numId = node.id.replace('gid://shopify/Product/', '');
+        map[numId] = node.featuredImage.url;
+      }
+    }
+    return map;
+  } catch { return {}; }
+}
 
+function orderItemsBlock(lineItems, totalPrice, imageMap = {}) {
+  if (!lineItems || !lineItems.length) return '';
+  const rows = lineItems.map(li => {
+    const img = imageMap[String(li.product_id || '')];
+    const imgCell = img
+      ? `<td style="padding:10px 12px 10px 0;border-bottom:1px solid #f0f0f0;width:56px;vertical-align:middle;">
+           <img src="${img}" width="52" height="52" style="border-radius:8px;object-fit:cover;display:block;" />
+         </td>`
+      : `<td style="padding:10px 12px 10px 0;border-bottom:1px solid #f0f0f0;width:56px;vertical-align:middle;">
+           <div style="width:52px;height:52px;background:#f5f5f5;border-radius:8px;"></div>
+         </td>`;
+    const size = li.variant_title && li.variant_title !== 'Default Title' ? li.variant_title : '';
+    const lineTotal = parseFloat(li.price || 0) * (li.quantity || 1);
+    return `<tr>
+      ${imgCell}
+      <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;vertical-align:middle;">
+        <div style="font-size:13px;font-weight:600;color:#111;">${li.title}</div>
+        ${size ? `<div style="font-size:12px;color:#888;margin-top:2px;">Size: ${size}</div>` : ''}
+        <div style="font-size:12px;color:#aaa;margin-top:1px;">Qty: ${li.quantity}</div>
+      </td>
+      <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;font-weight:700;color:#333;text-align:right;vertical-align:middle;white-space:nowrap;">₹${lineTotal.toLocaleString('en-IN')}</td>
+    </tr>`;
+  }).join('');
+
+  const total = parseFloat(totalPrice || 0);
+  return `
+    <div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Items in your order</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      ${rows}
+      <tr>
+        <td colspan="2" style="padding:12px 0 4px;font-size:13px;font-weight:800;color:#111;border-top:2px solid #111;">Order Total</td>
+        <td style="padding:12px 0 4px;font-size:15px;font-weight:800;color:#111;text-align:right;border-top:2px solid #111;">₹${total.toLocaleString('en-IN')}</td>
+      </tr>
+    </table>`;
+}
+
+function customerFirstName(order) {
+  return order.customer?.first_name || order.customer?.firstName || order.shipping_address?.first_name || 'there';
+}
+
+function templateOrderConfirmed(order, imageMap = {}) {
   const addr = order.shipping_address || order.billing_address || {};
   const addrLine = [addr.address1, addr.address2, addr.city, addr.province, addr.zip].filter(Boolean).join(', ');
 
   return emailBase(`
     <h2 style="font-size:22px;font-weight:800;color:#111;margin:0 0 4px">Order Placed Successfully! 🎉</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 24px">Hey ${order.customer?.first_name || order.shipping_address?.first_name || 'there'}, thank you for your order! We've received it and you'll get updates as it moves forward.</p>
+    <p style="color:#555;font-size:14px;margin:0 0 24px">Hey ${customerFirstName(order)}, thank you for your order! We've received it and you'll get updates as it moves forward.</p>
 
     <div style="background:#f9f9f9;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
       <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
@@ -578,14 +628,7 @@ function templateOrderConfirmed(order) {
       </div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Items Ordered</div>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-      ${items}
-      <tr>
-        <td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:800;color:#111;">Total Amount</td>
-        <td style="padding:12px 0 0;font-size:15px;font-weight:800;color:#111;text-align:right;">₹${parseFloat(order.total_price || 0).toLocaleString('en-IN')}</td>
-      </tr>
-    </table>
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
 
     ${addrLine ? `
     <div style="background:#f9f9f9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
@@ -597,37 +640,41 @@ function templateOrderConfirmed(order) {
   `, `Order placed! ${order.name} is on its way 🎉`);
 }
 
-function templateShipped({ order, awb, courier, trackingUrl }) {
+function templateShipped({ order, awb, courier, trackingUrl, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Your order has shipped! 🚚</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${order.customer?.firstName || 'there'}, your order <strong>${order.name}</strong> is on its way.</p>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> is on its way.</p>
     ${awb ? `<div style="background:#f9f9f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#444;">
       <strong>Tracking:</strong> ${awb} ${courier ? `· ${courier}` : ''}
     </div>` : ''}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
     ${trackButton(trackingUrl, awb, courier)}
   `, `Your order ${order.name} has shipped!`);
 }
 
-function templateInTransit({ order, awb, courier, trackingUrl }) {
+function templateInTransit({ order, awb, courier, trackingUrl, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">On the way! 📦</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${order.customer?.firstName || 'there'}, your order <strong>${order.name}</strong> is in transit and moving towards you.</p>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> is in transit and moving towards you.</p>
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
     ${trackButton(trackingUrl, awb, courier, 'Track My Order →')}
   `, `Order ${order.name} is in transit`);
 }
 
-function templateOFD({ order, awb, courier, trackingUrl }) {
+function templateOFD({ order, awb, courier, trackingUrl, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Out for delivery today! 🛵</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${order.customer?.firstName || 'there'}, your order <strong>${order.name}</strong> is out for delivery. Keep your phone handy!</p>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> is out for delivery. Keep your phone handy!</p>
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
     ${trackButton(trackingUrl, awb, courier, 'Track My Order →')}
   `, `Your order is out for delivery today!`);
 }
 
-function templateDelivered({ order }) {
+function templateDelivered({ order, imageMap = {} }) {
   return emailBase(`
     <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Delivered! ✅</h2>
-    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${order.customer?.firstName || 'there'}, your order <strong>${order.name}</strong> has been delivered. We hope you love it!</p>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> has been delivered. We hope you love it!</p>
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap)}
     <p style="color:#555;font-size:13px;">If you have any issues, reply to this email and we'll sort it out.</p>
   `, `Your order ${order.name} has been delivered`);
 }
@@ -957,7 +1004,8 @@ app.post('/webhooks/orders/create', async (req, res) => {
     const email = order.email || order.contact_email;
     console.log(`[orders/create] ${order.name} email=${email||'none'}`);
     if (email) {
-      sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order) })
+      fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean))
+        .then(imageMap => sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order, imageMap) }))
         .then(()=>console.log(`[orders/create] confirmation email sent to ${email}`))
         .catch(e=>console.error(`[orders/create] email failed:`, e.message));
     } else {
@@ -1009,7 +1057,8 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
         const { order } = await shopifyREST(`/orders/${sid}.json`);
         const email = order.email || order.contact_email;
         if (email) {
-          await sendEmail({ to: email, subject: `Your order ${order.name} has shipped! 🚚`, html: templateShipped({ order, awb: tracking, courier, trackingUrl: trackUrl }) });
+          const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+          await sendEmail({ to: email, subject: `Your order ${order.name} has shipped! 🚚`, html: templateShipped({ order, awb: tracking, courier, trackingUrl: trackUrl, imageMap }) });
           console.log(`[fulfillments/create] shipped email sent to ${email}`);
         }
       } catch(e) { console.error('[fulfillments/create] email error:', e.message); }
@@ -1109,11 +1158,12 @@ async function runTrackingSync() {
         const email = order.email || order.contact_email;
         if (!email) { log(`⚠️  ${rec.shopify_id} | no customer email on file`); continue; }
         const awb = rec.awb || '', courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
+        const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
         let html, subject;
-        if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is on the way 📦`; }
-        else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
-        else if (result.stage === 'delivered') { html = templateDelivered({ order }); subject = `Your order ${order.name} has been delivered ✅`; }
-        else if (result.stage === 'rto')   { html = templateDelivered({ order }); subject = `Update on your order ${order.name}`; }
+        if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
+        else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+        else if (result.stage === 'delivered') { html = templateDelivered({ order, imageMap }); subject = `Your order ${order.name} has been delivered ✅`; }
+        else if (result.stage === 'rto')   { html = templateDelivered({ order, imageMap }); subject = `Update on your order ${order.name}`; }
         if (html) {
           await sendEmail({ to: email, subject, html });
           await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: result.stage } });
