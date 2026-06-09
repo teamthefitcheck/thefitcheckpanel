@@ -1151,10 +1151,11 @@ app.post('/webhooks/orders/create', async (req, res) => {
   try {
     const order = JSON.parse(req.body);
     const sid = String(order.id);
+    const initialStage = order.financial_status === 'partially_paid' ? 'partial_collected' : 'new';
     // Save to DB first — email only goes out after confirmed saved
     await Promise.all([
       ODB.upsert(order),
-      OS.upsert(sid, { stage: 'new', updated_at: new Date().toISOString() }),
+      OS.upsert(sid, { stage: initialStage, updated_at: new Date().toISOString() }),
     ]);
     console.log(`[orders/create] ${order.name} saved to DB`);
     const email = order.email || order.contact_email;
@@ -1185,6 +1186,15 @@ app.post('/webhooks/orders/updated', async (req, res) => {
       await OS.upsert(sid, { stage: 'cancelled', updated_at: new Date().toISOString() });
       return;
     }
+    // Auto-set partial_collected if Shopify marks order as partially paid
+    if (order.financial_status === 'partially_paid') {
+      const current = await OS.get(sid);
+      if (current?.stage !== 'partial_collected') {
+        await OS.upsert(sid, { stage: 'partial_collected', updated_at: new Date().toISOString() });
+        console.log(`[orders/updated] ${order.name} → partial_collected (partially_paid)`);
+      }
+      return;
+    }
     // Auto-map tags → stage
     const cfg = await mdb.collection('settings').findOne({}, { projection: { tag_mappings: 1 } });
     const tagMap = cfg?.tag_mappings || {};
@@ -1199,7 +1209,7 @@ app.post('/webhooks/orders/updated', async (req, res) => {
         await OS.upsert(sid, { stage: mappedStage, updated_at: new Date().toISOString() });
       }
     }
-  } catch {}
+  } catch(e) { console.error('[orders/updated] error:', e.message); }
 });
 
 app.post('/webhooks/fulfillments/create', async (req, res) => {
@@ -1364,12 +1374,16 @@ async function syncOrdersToDB({ since } = {}) {
     pages = Math.ceil(orders.length / 250);
     const ops = orders.map(o => ({
       updateOne: {
-        filter: { shopify_id: String(o.id) },
+        filter: { shopify_id: String(o.shopify_id || o.id) },
         update: { $set: {
-          shopify_id: String(o.id), name: o.name, created_at: o.created_at,
-          updated_at: o.updated_at || o.created_at,
-          total_price: o.total_price, financial_status: o.financial_status,
-          fulfillment_status: o.fulfillment_status, email: o.email, phone: o.phone,
+          shopify_id: String(o.shopify_id || o.id), name: o.name,
+          created_at: o.created_at, updated_at: o.updated_at || o.created_at,
+          total_price: o.total_price, subtotal_price: o.subtotal_price || 0,
+          total_discounts: o.total_discounts || 0, total_shipping: o.total_shipping || 0,
+          total_outstanding: o.total_outstanding || 0, total_paid: o.total_paid || 0,
+          discount_codes: o.discount_codes || [],
+          financial_status: o.financial_status, fulfillment_status: o.fulfillment_status,
+          email: o.email, phone: o.phone,
           tags: Array.isArray(o.tags) ? o.tags : (o.tags||'').split(',').map(t=>t.trim()).filter(Boolean),
           note: o.note || '', customer: o.customer, shipping_address: o.shipping_address,
           line_items: (o.line_items||[]).map(li=>({ ...li, product_id: li.product_id ? String(li.product_id) : null })),
@@ -1379,11 +1393,30 @@ async function syncOrdersToDB({ since } = {}) {
       }
     }));
     if (ops.length) {
-      // batch in groups of 500
       for (let i = 0; i < ops.length; i += 500) {
         await mdb.collection('orders').bulkWrite(ops.slice(i, i + 500), { ordered: false });
       }
       saved = ops.length;
+    }
+    // Auto-stage partially_paid orders that don't yet have partial_collected stage
+    const partialOrders = orders.filter(o => o.financial_status === 'partially_paid');
+    if (partialOrders.length) {
+      const ids = partialOrders.map(o => String(o.shopify_id || o.id));
+      const existing = await mdb.collection('order_stage').find({ shopify_id: { $in: ids } }, { projection: { shopify_id: 1, stage: 1 } }).toArray();
+      const existingMap = Object.fromEntries(existing.map(e => [e.shopify_id, e.stage]));
+      const stageOps = partialOrders
+        .filter(o => existingMap[String(o.shopify_id || o.id)] !== 'partial_collected')
+        .map(o => ({
+          updateOne: {
+            filter: { shopify_id: String(o.shopify_id || o.id) },
+            update: { $set: { shopify_id: String(o.shopify_id || o.id), stage: 'partial_collected', updated_at: new Date().toISOString() } },
+            upsert: true,
+          }
+        }));
+      if (stageOps.length) {
+        await mdb.collection('order_stage').bulkWrite(stageOps, { ordered: false });
+        console.log(`[sync-orders] auto-staged ${stageOps.length} partially_paid orders → partial_collected`);
+      }
     }
     console.log(`[sync-orders] done — saved ${saved} orders`);
     return { saved, pages };
