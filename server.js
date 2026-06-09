@@ -1090,17 +1090,22 @@ app.post('/webhooks/orders/create', async (req, res) => {
   try {
     const order = JSON.parse(req.body);
     const sid = String(order.id);
+    // Save to DB first — email only goes out after confirmed saved
     await Promise.all([
       ODB.upsert(order),
       OS.upsert(sid, { stage: 'new', updated_at: new Date().toISOString() }),
     ]);
+    console.log(`[orders/create] ${order.name} saved to DB`);
     const email = order.email || order.contact_email;
-    console.log(`[orders/create] ${order.name} email=${email||'none'}`);
     if (email) {
-      fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean))
-        .then(imageMap => sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order, imageMap) }))
-        .then(()=>console.log(`[orders/create] confirmation email sent to ${email}`))
-        .catch(e=>console.error(`[orders/create] email failed:`, e.message));
+      // Send email async after DB save — don't block the webhook response
+      (async () => {
+        try {
+          const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+          await sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order, imageMap) });
+          console.log(`[orders/create] confirmation email sent to ${email}`);
+        } catch(e) { console.error(`[orders/create] email failed:`, e.message); }
+      })();
     } else {
       console.warn(`[orders/create] ${order.name} has no email — skipping`);
     }
