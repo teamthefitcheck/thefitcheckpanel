@@ -431,7 +431,7 @@ function Dashboard() {
               {label:'Dispatched Value',value:s.revenue_dispatched||0,color:'#06b6d4',icon:'🚀'},
               {label:'Delivered Value',value:s.revenue_delivered||0,color:'#22c55e',icon:'✅'},
               {label:'Pending Value',value:s.revenue_pending||0,color:'#f59e0b',icon:'⏳'},
-              {label:'RTO Value at Risk',value:s.revenue_rto||0,color:'#ef4444',icon:'↩'},
+              {label:'RTO Value',value:s.revenue_rto||0,color:'#ef4444',icon:'↩'},
             ].map(({label,value,color,icon})=>{
               const pctV = s.revenue ? (value/s.revenue*100).toFixed(0) : 0;
               return (
@@ -509,7 +509,7 @@ function Dashboard() {
               {label:'Prepaid',count:s.prepaid||0,revenue:s.prepaid_revenue||0,color:'#22c55e',icon:'💳'},
               {label:'COD',count:s.cod||0,revenue:s.cod_revenue||0,color:'#f59e0b',icon:'💵'},
               {label:'Partial',count:s.partial||0,revenue:s.partial_revenue||0,color:'#f97316',icon:'⚡',
-               sub: s.partial_outstanding>0 ? `₹${Math.round(s.partial_outstanding/1000)}k outstanding` : null},
+               sub: null},
             ].map(({label,count,revenue,color,icon,sub})=>(
               <div key={label} style={{
                 display:'flex',alignItems:'center',justifyContent:'space-between',
