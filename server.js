@@ -453,9 +453,9 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
     for (const o of allOrders) {
       const st = stageMap[o.shopify_id || String(o.id)] || 'new';
       if (st === 'delivered') stats.delivered++;
-      else if (st === 'transit' || st === 'pickup' || st === 'ofd') stats.transit++;
+      else if (st === 'transit' || st === 'ofd') stats.transit++;
       else if (st === 'rto') stats.rto++;
-      else if (st === 'ready') stats.ready++;
+      else if (st === 'ready' || st === 'pickup') stats.ready++;
       else if (['new','confirmed','partial_collected'].includes(st)) stats.pending++;
       stats.revenue += o.total_price || 0;
     }

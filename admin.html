@@ -106,6 +106,124 @@ function fmt(d) { return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digi
 function fmtMoney(n) { return '₹'+parseFloat(n||0).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2}); }
 function fmtPct(n,d) { return d ? ((n/d)*100).toFixed(1)+'%' : '0%'; }
 
+/* ─── DateRangePicker ───────────────────────────────────────── */
+function DateRangePicker({ from, to, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const [customFrom, setCustomFrom] = React.useState(from);
+  const [customTo, setCustomTo] = React.useState(to);
+  const ref = React.useRef();
+
+  React.useEffect(() => {
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+
+  function isoDate(d) { return d.toISOString().slice(0,10); }
+
+  const PRESETS = [
+    { label: 'Today', get: () => { const d = todayStr; return [d, d]; } },
+    { label: 'Yesterday', get: () => { const d = isoDate(new Date(today-86400000)); return [d,d]; } },
+    { label: 'Last 7 days', get: () => [isoDate(new Date(today-6*86400000)), todayStr] },
+    { label: 'Last 30 days', get: () => [isoDate(new Date(today-29*86400000)), todayStr] },
+    { label: 'Last 90 days', get: () => [isoDate(new Date(today-89*86400000)), todayStr] },
+    { label: 'This month', get: () => [isoDate(new Date(today.getFullYear(), today.getMonth(), 1)), todayStr] },
+    { label: 'Last month', get: () => {
+      const f = new Date(today.getFullYear(), today.getMonth()-1, 1);
+      const t = new Date(today.getFullYear(), today.getMonth(), 0);
+      return [isoDate(f), isoDate(t)];
+    }},
+    { label: 'This year', get: () => [isoDate(new Date(today.getFullYear(),0,1)), todayStr] },
+    { label: 'Last year', get: () => {
+      const y = today.getFullYear()-1;
+      return [isoDate(new Date(y,0,1)), isoDate(new Date(y,11,31))];
+    }},
+    { label: 'All time', get: () => ['2020-01-01', todayStr] },
+  ];
+
+  function activePreset() {
+    for (const p of PRESETS) {
+      const [f,t] = p.get();
+      if (f === from && t === to) return p.label;
+    }
+    return null;
+  }
+
+  function applyPreset(p) {
+    const [f,t] = p.get();
+    onChange(f, t);
+    setOpen(false);
+  }
+
+  function applyCustom() {
+    if (customFrom && customTo) { onChange(customFrom, customTo); setOpen(false); }
+  }
+
+  function fmtRange(f, t) {
+    const ap = activePreset();
+    if (ap) return ap;
+    const fmt = d => new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    if (!f && !t) return 'All time';
+    if (f === t) return fmt(f);
+    return `${fmt(f)} – ${fmt(t)}`;
+  }
+
+  return (
+    <div ref={ref} style={{position:'relative'}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        background:'var(--bg-card2)', border:'1.5px solid var(--border2)', borderRadius:6,
+        color:'var(--text)', fontSize:13, fontWeight:600, padding:'7px 14px',
+        display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap', cursor:'pointer',
+        minWidth:180,
+      }}>
+        <span>📅</span>
+        <span style={{flex:1,textAlign:'left'}}>{fmtRange(from,to)}</span>
+        <span style={{color:'var(--text-muted)',fontSize:10}}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position:'absolute', right:0, top:'calc(100% + 6px)', zIndex:500,
+          background:'var(--bg-card)', border:'1px solid var(--border2)', borderRadius:10,
+          boxShadow:'0 8px 32px rgba(0,0,0,.6)', minWidth:220, overflow:'hidden',
+        }}>
+          <div style={{padding:'8px 0'}}>
+            {PRESETS.map(p => {
+              const [f,t] = p.get();
+              const active = f===from && t===to;
+              return (
+                <div key={p.label} onClick={()=>applyPreset(p)} style={{
+                  padding:'8px 16px', fontSize:13, cursor:'pointer',
+                  background: active ? '#ffffff11' : 'transparent',
+                  color: active ? '#fff' : 'var(--text-muted)',
+                  fontWeight: active ? 700 : 400,
+                  display:'flex', justifyContent:'space-between', alignItems:'center',
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background='#ffffff0d'}
+                onMouseLeave={e=>e.currentTarget.style.background=active?'#ffffff11':'transparent'}>
+                  {p.label}
+                  {active && <span style={{fontSize:10,color:'var(--green)'}}>✓</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{borderTop:'1px solid var(--border)',padding:'12px 14px'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Custom range</div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{flex:1,padding:'6px 8px',fontSize:12}}/>
+              <span style={{color:'var(--text-muted)',fontSize:12}}>→</span>
+              <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{flex:1,padding:'6px 8px',fontSize:12}}/>
+            </div>
+            <button onClick={applyCustom} className="btn-primary btn-sm" style={{width:'100%',marginTop:8}}>Apply</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Login ─────────────────────────────────────────────────── */
 function Login({ onLogin }) {
   const [pw,setPw] = useState('');
@@ -186,26 +304,22 @@ function Dashboard() {
   const [stats,setStats] = useState(null);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(true);
-  const [period,setPeriod] = useState('30d');
+  const now = new Date();
+  const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
+  const [to,setTo]     = useState(()=>now.toISOString().slice(0,10));
 
-  const load = async (p) => {
+  const load = useCallback(async (f,t) => {
     setLoading(true);
-    const now = new Date();
-    let from;
-    if(p==='7d')  from = new Date(now-7*86400000).toISOString().slice(0,10);
-    else if(p==='30d') from = new Date(now-30*86400000).toISOString().slice(0,10);
-    else from = new Date(now.getFullYear(),0,1).toISOString().slice(0,10);
-    const to = now.toISOString().slice(0,10);
     try {
       const [s,o] = await Promise.all([
-        apiFetch(`/orders/stats?from=${from}&to=${to}`),
-        apiFetch(`/orders?from=${from}&to=${to}`),
+        apiFetch(`/orders/stats?from=${f}&to=${t}`),
+        apiFetch(`/orders?from=${f}&to=${t}`),
       ]);
       setStats(s); setOrders((o.orders||[]).slice(0,10));
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(()=>{ load(period); },[period]);
+  useEffect(()=>{ load(from,to); },[from,to]);
 
   const statCards = [
     {label:'Total Orders',value:stats?.total||0,color:'#fff',icon:'📦'},
@@ -217,7 +331,7 @@ function Dashboard() {
   ];
 
   const deliveryRate = stats?.total ? ((stats.delivered/stats.total)*100).toFixed(1) : 0;
-  const fulfillmentRate = stats?.total ? (((stats.transit||0)+(stats.delivered||0)+(stats.rto||0))/stats.total*100).toFixed(1) : 0;
+  const fulfillmentRate = stats?.total ? (((stats.ready||0)+(stats.transit||0)+(stats.delivered||0)+(stats.rto||0))/stats.total*100).toFixed(1) : 0;
 
   return (
     <div>
@@ -226,15 +340,7 @@ function Dashboard() {
           <h2 style={{fontSize:20,fontWeight:800,color:'#fff'}}>Dashboard</h2>
           <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Store performance overview</p>
         </div>
-        <div style={{display:'flex',gap:4}}>
-          {[['7d','7 days'],['30d','Last 30 days'],['year','This year']].map(([k,l])=>(
-            <button key={k} onClick={()=>setPeriod(k)} style={{
-              padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
-              background:period===k?'#fff':'transparent',color:period===k?'#000':'var(--text-muted)',
-              border:period===k?'none':'1px solid var(--border)'
-            }}>{l}</button>
-          ))}
-        </div>
+        <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}} />
       </div>
 
       {loading ? <div style={{padding:40,color:'var(--text-muted)',textAlign:'center'}}>Loading…</div> : <>
@@ -573,7 +679,7 @@ function Orders() {
     finally { setLoading(false); }
   },[from,to]);
 
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{ load(); },[from,to]);
 
   // Client-side filter + search
   const filtered = allOrders.filter(o=>{
@@ -623,11 +729,9 @@ function Orders() {
           </button>
         </div>
       </div>
-      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input placeholder="Search order, customer…" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} style={{flex:'1 1 200px',minWidth:150}}/>
-        <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:140}}/>
-        <input type="date" value={to}   onChange={e=>setTo(e.target.value)}   style={{width:140}}/>
-        <button className="btn-primary btn-sm" onClick={load}>Search</button>
+        <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);load();}} />
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
         {['','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
