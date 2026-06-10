@@ -1853,7 +1853,7 @@ app.post('/track/request', async (req, res) => {
   try {
     const { shopify_order_id, order_name, customer_email, customer_name, customer_phone,
             customer_address1, customer_address2, customer_city, customer_state, customer_pincode,
-            type, items, reason, image_urls } = req.body || {};
+            type, items, reason, image_urls, shipping_address } = req.body || {};
 
     if (!shopify_order_id || !type || !items?.length || !reason)
       return res.status(400).json({ error: 'Missing required fields' });
@@ -1877,6 +1877,7 @@ app.post('/track/request', async (req, res) => {
       customer_state: customer_state || '',
       customer_pincode: customer_pincode || '',
       type, items, reason,
+      shipping_address: shipping_address || '',
       status: 'pending',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),

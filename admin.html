@@ -1117,6 +1117,14 @@ function RRModal({ rr, onClose }) {
             </div>
           )}
 
+          {/* New shipment address (exchange only, if different from pickup) */}
+          {rr.shipping_address && (
+            <div style={{marginBottom:14,background:'var(--bg-card2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--text-muted)'}}>
+              <div style={{fontWeight:700,color:'var(--cyan)',marginBottom:3}}>📦 New Shipment Address (for exchanged item)</div>
+              <div style={{whiteSpace:'pre-wrap'}}>{rr.shipping_address}</div>
+            </div>
+          )}
+
           <div className="grid-2" style={{marginBottom:12}}>
             <div className="field">
               <label>Status</label>

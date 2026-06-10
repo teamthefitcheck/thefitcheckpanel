@@ -561,6 +561,16 @@ function renderRRForm(){
         <div class="field"><label class="lbl">State</label><input id="state" value="${addr.province||addr.state||''}"/></div>
       </div>
       <div class="field"><label class="lbl">Pincode</label><input id="pincode" value="${addr.zip||''}"/></div>
+      ${rrType==='exchange'?`
+      <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0;cursor:pointer">
+        <input type="checkbox" id="sameAsPickup" checked onchange="toggleShipAddr()" style="margin-top:3px"/>
+        <span style="font-size:13px">Shipping address for the new size is the same as the pickup address</span>
+      </label>
+      <div class="field" id="shipAddrField" style="display:none">
+        <label class="lbl">New Shipment Address</label>
+        <textarea id="shipAddr" rows="3" placeholder="Enter the address where the exchanged item should be delivered"></textarea>
+      </div>
+      `:''}
       <div style="display:flex;gap:10;margin-top:8px">
         <button class="btn btn-outline btn-sm" onclick="rrBack()">← Back</button>
         <button class="btn btn-black btn-sm" id="btnSubmitRR" onclick="submitRR()">Submit Request</button>
@@ -677,6 +687,13 @@ function cancelRR(){
   showOrderDetail(currentOrder);
 }
 
+function toggleShipAddr(){
+  const cb=document.getElementById('sameAsPickup');
+  const field=document.getElementById('shipAddrField');
+  if(!cb||!field) return;
+  field.style.display=cb.checked?'none':'block';
+}
+
 async function submitRR(){
   const btn=document.getElementById('btnSubmitRR');
   const errEl=document.getElementById('rrErr');
@@ -686,6 +703,14 @@ async function submitRR(){
   const state=document.getElementById('state').value.trim();
   const pincode=document.getElementById('pincode').value.trim();
   if(!addr1||!city||!pincode){errEl.textContent='Please fill in the pickup address.';errEl.style.display='block';return;}
+  let shipAddr='';
+  if(rrType==='exchange'){
+    const sameAsPickup=document.getElementById('sameAsPickup').checked;
+    if(!sameAsPickup){
+      shipAddr=document.getElementById('shipAddr').value.trim();
+      if(!shipAddr){errEl.textContent='Please enter the new shipment address, or check "same as pickup address".';errEl.style.display='block';return;}
+    }
+  }
   btn.disabled=true;btn.textContent='Submitting…';
   try{
     const r=await fetch(`${API}/track/request`,{
@@ -704,6 +729,7 @@ async function submitRR(){
         type: rrType,
         items: rrData.items,
         reason: rrData.reason,
+        shipping_address: shipAddr || null,
       }),
     });
     const d=await r.json();
