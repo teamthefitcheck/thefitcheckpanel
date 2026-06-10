@@ -1686,6 +1686,23 @@ function trackingUrlForCourier(courier, awb) {
   return null;
 }
 
+// GET /track/product-variants/:productId — public, used for exchange size picker
+app.get('/track/product-variants/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const data = await shopifyREST(`/products/${productId}.json?fields=id,title,options,variants`);
+    const product = data.product;
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    const variants = (product.variants || []).map(v => ({
+      variant_id: String(v.id),
+      title: v.title,
+      price: v.price,
+      available: v.inventory_management ? (v.inventory_quantity > 0 || v.inventory_policy === 'continue') : true,
+    }));
+    res.json({ product_id: String(product.id), product_title: product.title, options: product.options || [], variants });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /track/order?q=1234&contact=email_or_phone
 app.get('/track/order', async (req, res) => {
   try {
@@ -1753,6 +1770,8 @@ app.get('/track/order', async (req, res) => {
       items: (order.line_items || []).map(li => ({
         line_item_id: li.id, title: li.title, variant_title: li.variant_title || '',
         sku: li.sku, qty: li.quantity, price: li.price,
+        product_id: li.product_id ? String(li.product_id) : null,
+        variant_id: li.variant_id ? String(li.variant_id) : null,
       })),
       return_requests: existingRRs,
       exchange_enabled: rrCfg.exchange_enabled !== false,

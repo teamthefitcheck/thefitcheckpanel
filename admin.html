@@ -1099,7 +1099,10 @@ function RRModal({ rr, onClose }) {
               <div className="section-title">Requested Items</div>
               {(rr.items||[]).map((it,i)=>(
                 <div key={i} style={{padding:'7px 0',borderBottom:'1px solid var(--border)',fontSize:13,color:'var(--text-muted)'}}>
-                  {it.title}{it.qty>1?` ×${it.qty}`:''}
+                  {it.title}{it.variant_title?` — ${it.variant_title}`:''}{it.qty>1?` ×${it.qty}`:''}
+                  {it.exchange_variant_title && (
+                    <span style={{marginLeft:8,color:'var(--cyan)',fontWeight:600}}>→ Exchange for: {it.exchange_variant_title}</span>
+                  )}
                 </div>
               ))}
             </div>

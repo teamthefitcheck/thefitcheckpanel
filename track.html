@@ -418,6 +418,7 @@ function renderRRForm(){
           <div style="font-weight:600;font-size:13px">${it.title}</div>
           ${it.variant_title?`<div style="font-size:12px;color:var(--text-muted)">${it.variant_title}</div>`:''}
           <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${fmtMoney(it.price)} · Qty: ${it.qty}</div>
+          ${rrType==='exchange'?`<div id="variant-picker-${i}" style="margin-top:10px;display:none"></div>`:''}
         </div>
       </label>
     `).join('');
@@ -426,7 +427,7 @@ function renderRRForm(){
       <div style="margin-bottom:14px">
         <div class="step-nav">Step <span>1</span> of 3 · Select Items</div>
         <div style="font-size:16px;font-weight:700;margin-bottom:4px">${rrType==='exchange'?'⇄ Request Exchange':'↩ Request Return'}</div>
-        <div style="font-size:13px;color:var(--text-muted)">Select the item(s) you want to ${rrType}.</div>
+        <div style="font-size:13px;color:var(--text-muted)">Select the item(s) you want to ${rrType}.${rrType==='exchange'?' Then choose the size you\'d like instead.':''}</div>
       </div>
       <div id="itemsList">${itemsHtml}</div>
       <div id="rrErr" class="alert alert-error" style="display:none"></div>
@@ -435,6 +436,15 @@ function renderRRForm(){
         <button class="btn btn-black btn-sm" onclick="rrNext1()">Next →</button>
       </div>
     `;
+
+    // Restore previously-selected items/variants if navigating back
+    (rrData.items||[]).forEach(sel=>{
+      const i=(order.items||[]).findIndex(it=>(it.line_item_id||it.id)===sel.line_item_id);
+      if(i<0) return;
+      const cb=document.getElementById(`item-cb-${i}`);
+      if(cb){ cb.checked=true; updateItemCheck(i); }
+      if(rrType==='exchange') loadVariantPicker(i, sel.exchange_variant_id);
+    });
   }
 
   else if(rrStep===2){
@@ -488,7 +498,7 @@ function renderRRForm(){
       <div style="background:#f9f9f9;border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;margin-bottom:14px">
         <div style="font-weight:700;margin-bottom:8px">Request Summary</div>
         <div style="color:var(--text-muted)">Type: <strong style="color:var(--text)">${rrType}</strong></div>
-        <div style="color:var(--text-muted);margin-top:4px">Items: <strong style="color:var(--text)">${(rrData.items||[]).map(i=>i.title).join(', ')}</strong></div>
+        <div style="color:var(--text-muted);margin-top:4px">Items: <strong style="color:var(--text)">${(rrData.items||[]).map(i=>i.title+(i.exchange_variant_title?` (→ ${i.exchange_variant_title})`:'')).join(', ')}</strong></div>
         <div style="color:var(--text-muted);margin-top:4px">Reason: <strong style="color:var(--text)">${rrData.reason}</strong></div>
       </div>
       <div class="field">
@@ -511,17 +521,84 @@ function renderRRForm(){
 function updateItemCheck(i){
   const cb=document.getElementById(`item-cb-${i}`);
   document.getElementById(`item-check-${i}`).className='item-check'+(cb.checked?' selected':'');
+  if(rrType==='exchange'){
+    const picker=document.getElementById(`variant-picker-${i}`);
+    if(!picker) return;
+    if(cb.checked) loadVariantPicker(i);
+    else { picker.style.display='none'; picker.innerHTML=''; }
+  }
+}
+
+const variantCache={};
+
+async function loadVariantPicker(i, preselectVariantId){
+  const order=currentOrder;
+  const it=(order.items||[])[i];
+  const picker=document.getElementById(`variant-picker-${i}`);
+  if(!picker || !it) return;
+  picker.style.display='block';
+
+  if(!it.product_id){
+    picker.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">Size selection unavailable for this item — our team will confirm with you.</div>`;
+    return;
+  }
+
+  picker.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">Loading available sizes…</div>`;
+
+  try{
+    let data=variantCache[it.product_id];
+    if(!data){
+      const r=await fetch(`${API}/track/product-variants/${it.product_id}`);
+      data=await r.json();
+      if(!r.ok) throw new Error(data.error||'Failed to load sizes');
+      variantCache[it.product_id]=data;
+    }
+    const variants=(data.variants||[]).filter(v=>v.variant_id!==it.variant_id);
+    if(!variants.length){
+      picker.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">No alternate sizes available — our team will confirm with you.</div>`;
+      return;
+    }
+    const options=variants.map(v=>
+      `<option value="${v.variant_id}" data-title="${v.title}" ${!v.available?'disabled':''} ${v.variant_id===preselectVariantId?'selected':''}>${v.title}${!v.available?' (Out of stock)':''}</option>`
+    ).join('');
+    picker.innerHTML=`
+      <label class="lbl" style="margin-bottom:4px">Exchange for size</label>
+      <select id="variant-select-${i}" onchange="">
+        <option value="">Select a size…</option>
+        ${options}
+      </select>
+    `;
+  }catch(e){
+    picker.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">Couldn't load sizes — our team will confirm with you.</div>`;
+  }
 }
 
 function rrNext1(){
   const order=currentOrder;
+  const errEl=document.getElementById('rrErr');
+  errEl.style.display='none';
   const selected=[];
-  (order.items||[]).forEach((it,i)=>{
-    if(document.getElementById(`item-cb-${i}`)?.checked) selected.push({...it, line_item_id: it.line_item_id||it.id});
-  });
+  for(let i=0;i<(order.items||[]).length;i++){
+    const it=order.items[i];
+    if(!document.getElementById(`item-cb-${i}`)?.checked) continue;
+    const entry={...it, line_item_id: it.line_item_id||it.id};
+    if(rrType==='exchange'){
+      const sel=document.getElementById(`variant-select-${i}`);
+      if(sel && sel.options.length>1){
+        if(!sel.value){
+          errEl.textContent=`Please select a size to exchange "${it.title}" for.`;
+          errEl.style.display='block';
+          return;
+        }
+        entry.exchange_variant_id=sel.value;
+        entry.exchange_variant_title=sel.options[sel.selectedIndex].dataset.title;
+      }
+    }
+    selected.push(entry);
+  }
   if(!selected.length){
-    document.getElementById('rrErr').textContent='Please select at least one item.';
-    document.getElementById('rrErr').style.display='block';
+    errEl.textContent='Please select at least one item.';
+    errEl.style.display='block';
     return;
   }
   rrData.items=selected;
