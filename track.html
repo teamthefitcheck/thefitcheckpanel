@@ -335,7 +335,9 @@ function showOrderDetail(order){
   `).join('');
 
   const notCancelled = !['cancelled','rto'].includes(order.stage||'');
-  const canRR=(order.exchange_enabled!==false||order.return_enabled!==false)&&notCancelled;
+  const exchangeOk = order.exchange_enabled!==false;
+  const returnOk = order.return_enabled!==false || forceReturnUnlocked;
+  const canRR = (exchangeOk||returnOk||order.return_enabled===false) && notCancelled;
 
   el.innerHTML=`
     <button class="btn btn-outline btn-sm" style="margin-bottom:16px" onclick="document.getElementById('searchSection').style.display='block';document.getElementById('orderSection').style.display='none'">← Track Another</button>
@@ -378,10 +380,24 @@ function showOrderDetail(order){
       <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Need Help?</div>
       <div style="font-size:15px;font-weight:700;margin-bottom:4px">Return or Exchange</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Not happy with your order? We'll make it right.</div>
-      <div style="display:flex;gap:10;flex-wrap:wrap">
-        ${order.exchange_enabled!==false?`<button class="btn btn-black btn-sm" onclick="startRR('exchange')">⇄ Request Exchange</button>`:''}
-        ${order.return_enabled!==false?`<button class="btn btn-outline btn-sm" onclick="startRR('return')">↩ Request Return</button>`:''}
+      <div style="display:flex;gap:10;flex-wrap:wrap;align-items:center">
+        ${exchangeOk?`<button class="btn btn-black btn-sm" onclick="startRR('exchange')">⇄ Request Exchange</button>`:''}
+        ${returnOk
+          ?`<button class="btn btn-outline btn-sm" onclick="startRR('return')">↩ Request Return</button>`
+          :`<button class="btn btn-sm" style="background:#fef2f2;border:1.5px solid #fecaca;color:var(--red);cursor:pointer" onclick="toggleReturnCodeBox()">↩ Return Unavailable</button>`
+        }
       </div>
+      ${!returnOk?`
+      <div style="font-size:12px;color:var(--red);margin-top:10px">Returns are currently disabled for this order.</div>
+      <div id="returnCodeBox" style="display:none;margin-top:12px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Have a return authorization code? Enter it below to enable returns for this order.</div>
+        <div style="display:flex;gap:8">
+          <input id="returnCodeInput" placeholder="Enter code" style="flex:1" onkeydown="if(event.key==='Enter')applyReturnCode()"/>
+          <button class="btn btn-black btn-sm" onclick="applyReturnCode()">Apply</button>
+        </div>
+        <div id="returnCodeMsg" style="font-size:12px;margin-top:6px"></div>
+      </div>
+      `:''}
     </div>
     `:`
     <div class="card" style="text-align:center;padding:20px">
@@ -391,6 +407,41 @@ function showOrderDetail(order){
     </div>
     `}
   `;
+}
+
+let forceReturnUnlocked=false;
+
+function toggleReturnCodeBox(){
+  const box=document.getElementById('returnCodeBox');
+  if(!box) return;
+  box.style.display = box.style.display==='none' ? 'block' : 'none';
+}
+
+async function applyReturnCode(){
+  const input=document.getElementById('returnCodeInput');
+  const msg=document.getElementById('returnCodeMsg');
+  const code=(input?.value||'').trim();
+  if(!code) return;
+  msg.style.color='var(--text-muted)';
+  msg.textContent='Checking…';
+  try{
+    const r=await fetch(`${API}/track/verify-return-code`,{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code}),
+    });
+    const d=await r.json();
+    if(d.valid){
+      forceReturnUnlocked=true;
+      msg.style.color='var(--green)';
+      msg.textContent='Code accepted — returns enabled for this order.';
+      setTimeout(()=>showOrderDetail(currentOrder), 600);
+    } else {
+      msg.style.color='var(--red)';
+      msg.textContent='Invalid code. Please check and try again.';
+    }
+  }catch(e){
+    msg.style.color='var(--red)';
+    msg.textContent='Something went wrong. Please try again.';
+  }
 }
 
 /* ── Return / Exchange form ────────────────────────── */

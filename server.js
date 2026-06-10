@@ -1651,15 +1651,34 @@ app.post('/admin/orders/:id/tag', adminAuth, async (req, res) => {
 
 // ─── R&R Settings ─────────────────────────────────────────────────────────────
 app.get('/admin/rr-settings', adminAuth, async (req, res) => {
-  const doc = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, _id: 0 } });
-  res.json({ exchange_enabled: doc?.exchange_enabled !== false, return_enabled: doc?.return_enabled !== false, return_window_days: doc?.return_window_days || 7 });
+  const doc = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, force_return_code: 1, _id: 0 } });
+  res.json({
+    exchange_enabled: doc?.exchange_enabled !== false,
+    return_enabled: doc?.return_enabled !== false,
+    return_window_days: doc?.return_window_days || 7,
+    force_return_code: doc?.force_return_code || '',
+  });
 });
 
 app.post('/admin/rr-settings', adminAuth, async (req, res) => {
   try {
-    const { exchange_enabled, return_enabled, return_window_days } = req.body || {};
-    await mdb.collection('settings').updateOne({}, { $set: { exchange_enabled, return_enabled, return_window_days: parseInt(return_window_days) || 7, updated_at: new Date() } }, { upsert: true });
+    const { exchange_enabled, return_enabled, return_window_days, force_return_code } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: {
+      exchange_enabled, return_enabled, return_window_days: parseInt(return_window_days) || 7,
+      force_return_code: (force_return_code || '').trim(), updated_at: new Date(),
+    } }, { upsert: true });
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /track/verify-return-code — public, lets a customer unlock returns with admin override code
+app.post('/track/verify-return-code', async (req, res) => {
+  try {
+    const { code } = req.body || {};
+    if (!code) return res.json({ valid: false });
+    const doc = await mdb.collection('settings').findOne({}, { projection: { force_return_code: 1, _id: 0 } });
+    const valid = !!doc?.force_return_code && doc.force_return_code === String(code).trim();
+    res.json({ valid });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

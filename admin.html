@@ -1597,7 +1597,7 @@ function Settings() {
   const [newStage,setNewStage] = useState('confirmed');
   const [shopifyTags,setShopifyTags] = useState([]);
   const [tagsLoading,setTagsLoading] = useState(false);
-  const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7});
+  const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7,force_return_code:''});
   const [segments,setSegments]   = useState([]);
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
@@ -1764,6 +1764,11 @@ function Settings() {
           <div style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
             <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Return Window (days)</div>
             <input type="number" value={rrSettings.return_window_days} onChange={e=>setRrSettings({...rrSettings,return_window_days:parseInt(e.target.value)||7})} style={{width:100}} min="1" max="90"/>
+          </div>
+          <div style={{padding:'12px 0'}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>Force Return Code</div>
+            <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:8}}>When returns are disabled, customers see a "Return unavailable" notice with an option to enter this code to unlock returns for their order. Leave blank to disable this override.</div>
+            <input value={rrSettings.force_return_code||''} onChange={e=>setRrSettings({...rrSettings,force_return_code:e.target.value})} placeholder="e.g. RETURN2026" style={{maxWidth:220,fontFamily:'monospace'}}/>
           </div>
           <div style={{marginTop:14}}>
             <button className="btn-primary btn-sm" onClick={saveRRSettings} disabled={saving}>{saving?'Saving…':'Save Settings'}</button>
