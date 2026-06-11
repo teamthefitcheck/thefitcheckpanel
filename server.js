@@ -170,7 +170,7 @@ function normaliseOrder(node) {
 }
 
 // ─── Order Stage ─────────────────────────────────────────────────────────────
-const STAGE_ORDER = ['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'];
+const STAGE_ORDER = ['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'];
 function higherStage(a, b) {
   const ai = STAGE_ORDER.indexOf(a || 'new');
   const bi = STAGE_ORDER.indexOf(b || 'new');
@@ -451,7 +451,7 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
     const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
     const stats = {
       total: allOrders.length,
-      delivered: 0, transit: 0, ofd: 0, pickup: 0, rto: 0,
+      delivered: 0, transit: 0, ofd: 0, pickup: 0, rto: 0, ndr: 0,
       pending: 0, ready: 0, cancelled: 0, misc: 0,
       revenue: 0, revenue_dispatched: 0, revenue_pending: 0, revenue_delivered: 0, revenue_rto: 0,
       cod: 0, prepaid: 0, partial: 0,
@@ -467,6 +467,7 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
       if (st === 'delivered')                               { stats.delivered++; stats.revenue_delivered += price; }
       else if (st === 'transit')                            { stats.transit++; stats.revenue_dispatched += price; }
       else if (st === 'ofd')                                { stats.ofd++; stats.revenue_dispatched += price; }
+      else if (st === 'ndr')                                { stats.ndr++; stats.revenue_dispatched += price; }
       else if (st === 'pickup')                             { stats.pickup++; stats.revenue_dispatched += price; }
       else if (st === 'rto')                                { stats.rto++; stats.revenue_rto += price; }
       else if (st === 'ready')                              { stats.ready++; stats.revenue_dispatched += price; }
@@ -903,6 +904,25 @@ function templateOrderHoldAdmin({ order }) {
   `, `Order ${order.name} moved to hold`);
 }
 
+function templateNDR({ order, message, imageMap = {} }) {
+  return emailBase(`
+    <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">We couldn't deliver your order 📦</h2>
+    <p style="color:#555;font-size:14px;margin:0 0 12px">Hi ${customerFirstName(order)}, our courier partner attempted to deliver your order <strong>${order.name}</strong> but it could not be completed.</p>
+    ${message ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#dc2626;font-weight:600;">${message}</div>` : ''}
+    ${orderItemsBlock(order.line_items, order.total_price, imageMap, { subtotal: order.subtotal_price, discount: order.total_discounts, shipping: order.total_shipping, paid: order.total_paid, outstanding: order.total_outstanding })}
+    <p style="color:#888;font-size:13px;">We'll attempt redelivery soon. If you'd like to update your delivery address or schedule, please reply to this email as soon as possible.</p>
+  `, `Delivery attempt failed for ${order.name}`);
+}
+
+function templateNDRAdmin({ order, message, city }) {
+  return emailBase(`
+    <h2 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px">Order flagged NDR ⚠️</h2>
+    <p style="font-size:14px;color:#555;">Order <strong>${order.name}</strong> (${customerFirstName(order)}, ${order.email||order.contact_email||'no email'}) had a failed delivery attempt.</p>
+    ${message ? `<p style="font-size:14px;color:#555;margin-top:8px;">Courier remark: <strong>${message}</strong>${city?` — ${city}`:''}</p>` : ''}
+    <p style="font-size:14px;color:#555;margin-top:8px;">Please follow up with the customer or coordinate redelivery with the courier to avoid an RTO.</p>
+  `, `Order ${order.name} flagged NDR`);
+}
+
 app.get('/admin/email-config', adminAuth, async (req, res) => {
   const cfg = await getSmtpConfig();
   res.json(cfg ? { ...cfg, pass: '••••••' } : null);
@@ -935,6 +955,8 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
     else if (template === 'partial_collected'){ html = templatePartialCollected({ order: { ...order, total_paid: 99, total_outstanding: 1350, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: 1449, quantity: 1 }], total_price: 1449 } }); subject = `[TEST] Partial payment received 💰`; }
     else if (template === 'hold')     { html = templateOrderHold({ order, whatsappUrl: `https://wa.me/?text=${encodeURIComponent(`I confirm my order ${order.name}`)}` }); subject = `[TEST] Action needed — confirm your order`; }
     else if (template === 'hold_admin'){ html = templateOrderHoldAdmin({ order: { ...order, email: 'test@example.com' } }); subject = `[TEST] Order moved to hold`; }
+    else if (template === 'ndr')      { html = templateNDR({ order, message: 'CONSIGNEE REFUSED TO ACCEPT' }); subject = `[TEST] Delivery attempt failed for ${order.name}`; }
+    else if (template === 'ndr_admin'){ html = templateNDRAdmin({ order: { ...order, email: 'test@example.com' }, message: 'CONSIGNEE REFUSED TO ACCEPT', city: 'Pehowa, Kurukshetra, Haryana' }); subject = `[TEST] Order ${order.name} flagged NDR`; }
     else                              { html = templateDelivered({ order }); subject = `[TEST] ${BRAND_NAME} Email Preview`; }
     await sendEmail({ to, subject, html });
     res.json({ ok: true });
@@ -951,6 +973,8 @@ app.get('/admin/email/preview', (req, res) => {
   else if (t === 'ofd') html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
   else if (t === 'hold') html = templateOrderHold({ order, whatsappUrl: `https://wa.me/?text=${encodeURIComponent(`I confirm my order ${order.name}`)}` });
   else if (t === 'hold_admin') html = templateOrderHoldAdmin({ order: { ...order, email: 'test@example.com' } });
+  else if (t === 'ndr') html = templateNDR({ order, message: 'CONSIGNEE REFUSED TO ACCEPT' });
+  else if (t === 'ndr_admin') html = templateNDRAdmin({ order: { ...order, email: 'test@example.com' }, message: 'CONSIGNEE REFUSED TO ACCEPT', city: 'Pehowa, Kurukshetra, Haryana' });
   else html = templateDelivered({ order });
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
@@ -1351,7 +1375,25 @@ const ESHIPZ_TAG_TO_STAGE = {
   ReturnToOrigin:  'rto',
   Return:          'rto',
   Cancelled:       'cancelled',
+  NDR:             'ndr',
+  Undelivered:     'ndr',
 };
+
+// Courier remarks indicating a failed delivery attempt (NDR — Non-Delivery Report)
+const NDR_MESSAGE_PATTERNS = [
+  /undelivered/i,
+  /undeliver/i,
+  /consignee\s*refused/i,
+  /refus(ed|al)/i,
+  /not\s*available/i,
+  /address\s*(not\s*found|incorrect|incomplete)/i,
+  /held\s*at\s*location/i,
+  /reattempt/i,
+  /\bndr\b/i,
+  /customer\s*(not\s*available|unreachable)/i,
+  /shipment\s*on\s*hold/i,
+  /cod\s*not\s*ready/i,
+];
 
 async function scrapeEshipzStatus(trackingUrl) {
   try {
@@ -1364,7 +1406,12 @@ async function scrapeEshipzStatus(trackingUrl) {
     if (!events.length) return null;
     // Latest event is first
     const latest = events[0];
-    const stage = ESHIPZ_TAG_TO_STAGE[latest.subtag] || ESHIPZ_TAG_TO_STAGE[latest.tag] || null;
+    let stage = ESHIPZ_TAG_TO_STAGE[latest.subtag] || ESHIPZ_TAG_TO_STAGE[latest.tag] || null;
+    // Override with NDR if the courier remark indicates a failed delivery attempt,
+    // unless the shipment has already reached a terminal stage (delivered/rto/cancelled)
+    if (!['delivered', 'rto', 'cancelled'].includes(stage) && NDR_MESSAGE_PATTERNS.some(rx => rx.test(latest.message || ''))) {
+      stage = 'ndr';
+    }
     return { stage, tag: latest.tag, subtag: latest.subtag, message: latest.message, city: latest.city, checkpoint_time: latest.checkpoint_time };
   } catch(e) {
     return null;
@@ -1434,9 +1481,26 @@ async function runTrackingSync() {
       try {
         const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
         const email = order.email || order.contact_email;
-        if (!email) { log(`⚠️  ${rec.shopify_id} | no customer email on file`); continue; }
         const awb = rec.awb || '', courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
         const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+
+        if (result.stage === 'ndr') {
+          // Customer email (best-effort)
+          if (email) {
+            await sendEmail({ to: email, subject: `Delivery attempt failed for ${order.name}`, html: templateNDR({ order, message: result.message?.trim(), imageMap }) });
+            log(`📨  ${rec.shopify_id} | NDR email sent → ${email}`);
+          }
+          // Admin alert
+          const cfg = await getSmtpConfig();
+          if (cfg) {
+            await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} flagged NDR`, html: templateNDRAdmin({ order, message: result.message?.trim(), city: result.city }) });
+            log(`📨  ${rec.shopify_id} | NDR admin alert sent`);
+          }
+          await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: result.stage } });
+          continue;
+        }
+
+        if (!email) { log(`⚠️  ${rec.shopify_id} | no customer email on file`); continue; }
         let html, subject;
         if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
         else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }

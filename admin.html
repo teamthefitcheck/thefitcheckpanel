@@ -97,6 +97,7 @@ function stageBadge(s) {
     ready:['badge-yellow','Ready'], partial_collected:['','Partial Collected'],
     cancelled:['badge-red','Cancelled'], new:['badge-gray','New'], misc:['badge-gray','Misc'],
     hold:['badge-red','On Hold'],
+    ndr:['badge-red','NDR'],
   };
   const [cls,label] = map[s] || ['badge-gray', s || 'Unknown'];
   const style = s==='partial_collected' ? {background:'#92400e22',color:'#f59e0b',border:'1px solid #f59e0b55'} : {};
@@ -762,7 +763,7 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
                 <div className="field">
                   <label>Stage</label>
                   <select value={stage} onChange={e=>setStage(e.target.value)}>
-                    {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>(
+                    {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'].map(s=>(
                       <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
                     ))}
                   </select>
@@ -918,7 +919,7 @@ function Orders() {
         <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);load();}} />
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        {['','new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
+        {['','new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'].map(s=>{
           const active = stage===s;
           const count = s==='' ? allOrders.length : (counts[s]||0);
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
@@ -1303,6 +1304,21 @@ function Emails() {
       <p style="font-size:14px;color:#555;">Order <strong>#1001</strong> (Sample Customer, customer@example.com) has been moved to <strong>hold</strong> as the customer hasn't provided any response.</p>
       <p style="font-size:14px;color:#555;margin-top:8px;">Please confirm manually or cancel the order to clear the backlog.</p>`,
     },
+    ndr: {
+      subject: "Delivery attempt failed for #1001",
+      body: `<h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">We couldn't deliver your order 📦</h2>
+      <p style="color:#555;font-size:14px;margin:0 0 12px">Hi there, our courier partner attempted to deliver your order <strong>#1001</strong> but it could not be completed.</p>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#dc2626;font-weight:600;">CONSIGNEE REFUSED TO ACCEPT</div>
+      ${sampleItems}
+      <p style="color:#888;font-size:13px;">We'll attempt redelivery soon. If you'd like to update your delivery address or schedule, please reply to this email as soon as possible.</p>`,
+    },
+    ndr_admin: {
+      subject: 'Order #1001 flagged NDR',
+      body: `<h2 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px">Order flagged NDR ⚠️</h2>
+      <p style="font-size:14px;color:#555;">Order <strong>#1001</strong> (Sample Customer, customer@example.com) had a failed delivery attempt.</p>
+      <p style="font-size:14px;color:#555;margin-top:8px;">Courier remark: <strong>CONSIGNEE REFUSED TO ACCEPT</strong> — Pehowa, Kurukshetra, Haryana</p>
+      <p style="font-size:14px;color:#555;margin-top:8px;">Please follow up with the customer or coordinate redelivery with the courier to avoid an RTO.</p>`,
+    },
   };
 
   const currentPreview = previews[testTemplate] || previews.confirmed;
@@ -1344,6 +1360,8 @@ function Emails() {
                 <option value="partial_collected">Partial Payment Collected 💰</option>
                 <option value="hold">Order On Hold ⏸ (Customer)</option>
                 <option value="hold_admin">Order On Hold ⏸ (Admin Alert)</option>
+                <option value="ndr">Delivery Failed / NDR ⚠️ (Customer)</option>
+                <option value="ndr_admin">Delivery Failed / NDR ⚠️ (Admin Alert)</option>
               </select>
             </div>
             <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
@@ -1736,7 +1754,7 @@ function Settings() {
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <label>Maps to Stage</label>
               <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
-                {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
               </select>
             </div>
             <button className="btn-ghost btn-sm" onClick={addTagMapping} disabled={!newTag}>Add Mapping</button>
