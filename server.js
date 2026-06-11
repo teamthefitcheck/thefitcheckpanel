@@ -170,7 +170,7 @@ function normaliseOrder(node) {
 }
 
 // ─── Order Stage ─────────────────────────────────────────────────────────────
-const STAGE_ORDER = ['new','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'];
+const STAGE_ORDER = ['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'];
 function higherStage(a, b) {
   const ai = STAGE_ORDER.indexOf(a || 'new');
   const bi = STAGE_ORDER.indexOf(b || 'new');
@@ -883,6 +883,26 @@ function templatePartialCollected({ order, imageMap = {} }) {
   `, `Partial payment received for ${order.name} — balance due on delivery`);
 }
 
+function templateOrderHold({ order, whatsappUrl }) {
+  return emailBase(`
+    <h2 style="font-size:20px;font-weight:700;color:#111;margin:0 0 8px">Your order is on hold ⏸</h2>
+    <p style="color:#555;font-size:14px;margin:0 0 20px">Hi ${customerFirstName(order)}, your order <strong>${order.name}</strong> has been moved to <strong>hold</strong> as we haven't received any response to our calls and confirmation texts.</p>
+    <p style="color:#555;font-size:14px;margin:0 0 24px">Please confirm your order by tapping the button below — it'll open WhatsApp with a pre-filled message.</p>
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${whatsappUrl}" style="display:inline-block;background:#25D366;color:#fff;font-size:14px;font-weight:700;padding:14px 28px;border-radius:8px;text-decoration:none;">✅ Confirm on WhatsApp</a>
+    </div>
+    <p style="color:#888;font-size:13px;">If we don't hear back, your order may be cancelled to keep things moving. For any queries, just reply to this email.</p>
+  `, `Action needed — confirm your order ${order.name}`);
+}
+
+function templateOrderHoldAdmin({ order }) {
+  return emailBase(`
+    <h2 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px">Order moved to hold ⏸</h2>
+    <p style="font-size:14px;color:#555;">Order <strong>${order.name}</strong> (${customerFirstName(order)}, ${order.email||order.contact_email||'no email'}) has been moved to <strong>hold</strong> as the customer hasn't provided any response.</p>
+    <p style="font-size:14px;color:#555;margin-top:8px;">Please confirm manually or cancel the order to clear the backlog.</p>
+  `, `Order ${order.name} moved to hold`);
+}
+
 app.get('/admin/email-config', adminAuth, async (req, res) => {
   const cfg = await getSmtpConfig();
   res.json(cfg ? { ...cfg, pass: '••••••' } : null);
@@ -913,6 +933,8 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
     else if (template === 'ofd')      { html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' }); subject = `[TEST] Out for delivery today 🛵`; }
     else if (template === 'delivered'){ html = templateDelivered({ order }); subject = `[TEST] Your order has been delivered ✅`; }
     else if (template === 'partial_collected'){ html = templatePartialCollected({ order: { ...order, total_paid: 99, total_outstanding: 1350, line_items: order.line_items || [{ title: 'Sample Product', variant_title: 'Size M', price: 1449, quantity: 1 }], total_price: 1449 } }); subject = `[TEST] Partial payment received 💰`; }
+    else if (template === 'hold')     { html = templateOrderHold({ order, whatsappUrl: `https://wa.me/?text=${encodeURIComponent(`I confirm my order ${order.name}`)}` }); subject = `[TEST] Action needed — confirm your order`; }
+    else if (template === 'hold_admin'){ html = templateOrderHoldAdmin({ order: { ...order, email: 'test@example.com' } }); subject = `[TEST] Order moved to hold`; }
     else                              { html = templateDelivered({ order }); subject = `[TEST] ${BRAND_NAME} Email Preview`; }
     await sendEmail({ to, subject, html });
     res.json({ ok: true });
@@ -927,6 +949,8 @@ app.get('/admin/email/preview', (req, res) => {
   else if (t === 'shipped') html = templateShipped({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
   else if (t === 'transit') html = templateInTransit({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
   else if (t === 'ofd') html = templateOFD({ order, awb: 'TESTAWB123', courier: 'Delhivery', trackingUrl: '' });
+  else if (t === 'hold') html = templateOrderHold({ order, whatsappUrl: `https://wa.me/?text=${encodeURIComponent(`I confirm my order ${order.name}`)}` });
+  else if (t === 'hold_admin') html = templateOrderHoldAdmin({ order: { ...order, email: 'test@example.com' } });
   else html = templateDelivered({ order });
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
@@ -1208,6 +1232,7 @@ app.post('/webhooks/orders/create', async (req, res) => {
     const sid = String(order.id);
     const initialStage = order.financial_status === 'partially_paid' ? 'partial_collected'
       : (order.fulfillment_status === 'fulfilled') ? 'ready'
+      : (order.financial_status === 'paid') ? 'confirmed'
       : 'new';
     // Save to DB first — email only goes out after confirmed saved
     await Promise.all([
@@ -1251,6 +1276,14 @@ app.post('/webhooks/orders/updated', async (req, res) => {
         console.log(`[orders/updated] ${order.name} → partial_collected (partially_paid)`);
       }
       return;
+    }
+    // Auto-set confirmed if Shopify marks order as paid (prepaid orders skip manual confirmation)
+    if (order.financial_status === 'paid') {
+      const current = await OS.get(sid);
+      if (!current?.stage || current.stage === 'new' || current.stage === 'hold') {
+        await OS.upsert(sid, { stage: 'confirmed', updated_at: new Date().toISOString() });
+        console.log(`[orders/updated] ${order.name} → confirmed (paid)`);
+      }
     }
     // Auto-set ready if Shopify marks order as fulfilled (packed, awaiting courier pickup)
     if (order.fulfillment_status === 'fulfilled') {
@@ -1346,10 +1379,17 @@ async function runTrackingSync() {
 
   log(`━━━ Sync started at ${startedAt.toISOString()} ━━━`);
   try {
-    const activeStages = await mdb.collection('order_stage').find({
+    let activeStages = await mdb.collection('order_stage').find({
       stage: { $in: ['pickup', 'transit', 'ofd'] },
       tracking_url: { $exists: true, $ne: '' }
     }).toArray();
+
+    const scopeIds = await getTrackingSyncOrderIds();
+    if (scopeIds) {
+      const before = activeStages.length;
+      activeStages = activeStages.filter(rec => scopeIds.has(rec.shopify_id));
+      log(`Sync scope limited to ${scopeIds.size} orders — ${activeStages.length}/${before} active shipments in scope`);
+    }
 
     log(`Found ${activeStages.length} active shipments to check`);
     let checked = 0, updated = 0, skipped = 0, errors = 0;
@@ -1507,6 +1547,27 @@ async function syncOrdersToDB({ since } = {}) {
         console.log(`[sync-orders] auto-staged ${stageOps.length} partially_paid orders → partial_collected`);
       }
     }
+    // Auto-stage paid (prepaid) orders that are still sitting at 'new'
+    const paidOrders = orders.filter(o => o.financial_status === 'paid');
+    if (paidOrders.length) {
+      const ids = paidOrders.map(o => String(o.shopify_id || o.id));
+      const existing = await mdb.collection('order_stage').find({ shopify_id: { $in: ids } }, { projection: { shopify_id: 1, stage: 1 } }).toArray();
+      const existingMap = Object.fromEntries(existing.map(e => [e.shopify_id, e.stage]));
+      const stageOps = paidOrders
+        .filter(o => ['new','hold',undefined].includes(existingMap[String(o.shopify_id || o.id)]))
+        .map(o => ({
+          updateOne: {
+            filter: { shopify_id: String(o.shopify_id || o.id) },
+            update: { $set: { shopify_id: String(o.shopify_id || o.id), stage: 'confirmed', updated_at: new Date().toISOString() } },
+            upsert: true,
+          }
+        }));
+      if (stageOps.length) {
+        await mdb.collection('order_stage').bulkWrite(stageOps, { ordered: false });
+        console.log(`[sync-orders] auto-staged ${stageOps.length} paid orders → confirmed`);
+      }
+    }
+
     console.log(`[sync-orders] done — saved ${saved} orders`);
     return { saved, pages };
   } finally { _syncOrdersRunning = false; }
@@ -1524,6 +1585,86 @@ app.get('/admin/sync-orders/status', adminAuth, async (req, res) => {
   const count = await mdb.collection('orders').countDocuments();
   const latest = await mdb.collection('orders').findOne({}, { sort: { _synced_at: -1 }, projection: { _synced_at: 1, name: 1, _id: 0 } });
   res.json({ total_in_db: count, last_synced: latest?._synced_at, last_order: latest?.name, running: _syncOrdersRunning });
+});
+
+// ─── Hold Stage Auto-Move ──────────────────────────────────────────────────
+// Orders left in 'new' for more than HOLD_AFTER_DAYS are moved to 'hold' and
+// trigger a customer email (with WhatsApp confirm button) + an admin alert.
+const HOLD_AFTER_DAYS = 7;
+let _holdCheckRunning = false;
+
+async function runHoldCheck() {
+  if (_holdCheckRunning) return { skipped: true };
+  _holdCheckRunning = true;
+  let moved = 0;
+  try {
+    const cutoff = new Date(Date.now() - HOLD_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const candidates = await mdb.collection('orders').find(
+      { created_at: { $lte: cutoff } },
+      { projection: { shopify_id: 1, name: 1, created_at: 1, email: 1, phone: 1, customer: 1, shipping_address: 1, financial_status: 1, _id: 0 } }
+    ).toArray();
+    if (!candidates.length) return { moved: 0 };
+
+    const ids = candidates.map(o => o.shopify_id);
+    const stages = await mdb.collection('order_stage').find(
+      { shopify_id: { $in: ids } }, { projection: { shopify_id: 1, stage: 1, _id: 0 } }
+    ).toArray();
+    const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
+
+    const stillNew = candidates.filter(o => (stageMap[o.shopify_id] || 'new') === 'new');
+    if (!stillNew.length) return { moved: 0 };
+
+    // Prepaid orders should never sit on hold — auto-confirm them instead
+    const paidButNew = stillNew.filter(o => o.financial_status === 'paid');
+    if (paidButNew.length) {
+      const ops = paidButNew.map(o => ({
+        updateOne: {
+          filter: { shopify_id: o.shopify_id },
+          update: { $set: { shopify_id: o.shopify_id, stage: 'confirmed', updated_at: new Date().toISOString() } },
+          upsert: true,
+        }
+      }));
+      await mdb.collection('order_stage').bulkWrite(ops, { ordered: false });
+      console.log(`[hold-check] auto-confirmed ${paidButNew.length} prepaid order(s) instead of holding`);
+    }
+
+    const toHold = stillNew.filter(o => o.financial_status !== 'paid');
+    if (!toHold.length) return { moved: 0 };
+
+    const settings = await mdb.collection('settings').findOne({}, { projection: { whatsapp_number: 1, _id: 0 } });
+    const waNumber = (settings?.whatsapp_number || '').replace(/\D/g, '');
+    const cfg = await getSmtpConfig();
+
+    for (const order of toHold) {
+      await OS.upsert(order.shopify_id, { stage: 'hold', updated_at: new Date().toISOString() });
+      moved++;
+
+      const email = order.email;
+      const waMessage = encodeURIComponent(`I confirm my order ${order.name}`);
+      const whatsappUrl = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : `https://wa.me/?text=${waMessage}`;
+
+      if (email) {
+        try {
+          await sendEmail({ to: email, subject: `Action needed — confirm your order ${order.name}`, html: templateOrderHold({ order, whatsappUrl }) });
+        } catch (e) { console.error(`[hold-check] customer email failed for ${order.name}:`, e.message); }
+      }
+
+      if (cfg) {
+        try {
+          await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} moved to hold`, html: templateOrderHoldAdmin({ order }) });
+        } catch (e) { console.error(`[hold-check] admin email failed for ${order.name}:`, e.message); }
+      }
+    }
+
+    console.log(`[hold-check] moved ${moved} order(s) → hold`);
+    return { moved };
+  } catch (e) { console.error('[hold-check] error:', e.message); return { error: e.message }; }
+  finally { _holdCheckRunning = false; }
+}
+
+app.post('/admin/run-hold-check', adminAuth, async (req, res) => {
+  res.json({ ok: true, message: 'Hold check started' });
+  runHoldCheck().then(r => console.log('[hold-check] complete:', r)).catch(e => console.error('[hold-check] error:', e.message));
 });
 
 // Manual trigger endpoint
@@ -1670,6 +1811,42 @@ app.post('/admin/rr-settings', adminAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ─── Tracking Sync Settings ────────────────────────────────────────────────
+const TRACKING_SYNC_SCOPES = ['50', '100', '7d', '30d', '80d', 'all'];
+
+app.get('/admin/sync-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { tracking_sync_scope: 1, _id: 0 } });
+  res.json({ tracking_sync_scope: doc?.tracking_sync_scope || '100' });
+});
+
+app.post('/admin/sync-settings', adminAuth, async (req, res) => {
+  try {
+    const { tracking_sync_scope } = req.body || {};
+    if (!TRACKING_SYNC_SCOPES.includes(tracking_sync_scope))
+      return res.status(400).json({ error: 'Invalid scope' });
+    await mdb.collection('settings').updateOne({}, { $set: { tracking_sync_scope, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Resolve the configured tracking sync scope to a set of shopify_ids to limit checks to (null = no limit)
+async function getTrackingSyncOrderIds() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { tracking_sync_scope: 1, _id: 0 } });
+  const scope = doc?.tracking_sync_scope || '100';
+  if (scope === 'all') return null;
+
+  if (scope.endsWith('d')) {
+    const days = parseInt(scope) || 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const orders = await mdb.collection('orders').find({ created_at: { $gte: cutoff } }, { projection: { shopify_id: 1, _id: 0 } }).toArray();
+    return new Set(orders.map(o => o.shopify_id));
+  }
+
+  const limit = parseInt(scope) || 100;
+  const orders = await mdb.collection('orders').find({}, { projection: { shopify_id: 1, _id: 0 } }).sort({ created_at: -1 }).limit(limit).toArray();
+  return new Set(orders.map(o => o.shopify_id));
+}
 
 // POST /track/verify-return-code — public, lets a customer unlock returns with admin override code
 app.post('/track/verify-return-code', async (req, res) => {
@@ -1877,7 +2054,7 @@ app.post('/track/request', async (req, res) => {
       customer_state: customer_state || '',
       customer_pincode: customer_pincode || '',
       type, items, reason,
-      shipping_address: shipping_address || '',
+      shipping_address: shipping_address || null,
       status: 'pending',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
@@ -1978,8 +2155,13 @@ connectMongo().then(async () => {
       };
       refreshRecentOrders();
       setInterval(refreshRecentOrders, 30 * 60 * 1000);
+
+      // Move orders stuck in 'new' for 7+ days to 'hold' — runs every 6 hours
+      runHoldCheck();
+      setInterval(runHoldCheck, 6 * 60 * 60 * 1000);
     }, 30000);
     console.log('✅  Tracking auto-sync enabled (every 2 hours)');
     console.log('✅  Order DB refresh enabled (every 30 min)');
+    console.log('✅  Hold-stage auto-move enabled (every 6 hours)');
   }
 }).catch(err => { console.error('❌  Startup error:', err.message); process.exit(1); });

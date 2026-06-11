@@ -562,13 +562,20 @@ function renderRRForm(){
       </div>
       <div class="field"><label class="lbl">Pincode</label><input id="pincode" value="${addr.zip||''}"/></div>
       ${rrType==='exchange'?`
-      <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0;cursor:pointer">
-        <input type="checkbox" id="sameAsPickup" checked onchange="toggleShipAddr()" style="margin-top:3px"/>
-        <span style="font-size:13px">Shipping address for the new size is the same as the pickup address</span>
+      <label style="display:flex;align-items:center;gap:10px;margin:14px 0;padding:12px;border:1.5px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer">
+        <input type="checkbox" id="sameAsPickup" checked onchange="toggleShipAddr()" style="accent-color:#111;width:16px;height:16px;flex-shrink:0;margin:0"/>
+        <span style="font-size:13px;line-height:1.4">Shipping address for the new size is the same as the pickup address</span>
       </label>
-      <div class="field" id="shipAddrField" style="display:none">
-        <label class="lbl">New Shipment Address</label>
-        <textarea id="shipAddr" rows="3" placeholder="Enter the address where the exchanged item should be delivered"></textarea>
+      <div id="shipAddrField" style="display:none">
+        <div class="field">
+          <label class="lbl">New Shipment Address</label>
+          <input id="shipAddr1" placeholder="House no., street, area"/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field"><label class="lbl">City</label><input id="shipCity"/></div>
+          <div class="field"><label class="lbl">State</label><input id="shipState"/></div>
+        </div>
+        <div class="field"><label class="lbl">Pincode</label><input id="shipPincode"/></div>
       </div>
       `:''}
       <div style="display:flex;gap:10;margin-top:8px">
@@ -703,12 +710,16 @@ async function submitRR(){
   const state=document.getElementById('state').value.trim();
   const pincode=document.getElementById('pincode').value.trim();
   if(!addr1||!city||!pincode){errEl.textContent='Please fill in the pickup address.';errEl.style.display='block';return;}
-  let shipAddr='';
+  let shipAddr=null;
   if(rrType==='exchange'){
     const sameAsPickup=document.getElementById('sameAsPickup').checked;
     if(!sameAsPickup){
-      shipAddr=document.getElementById('shipAddr').value.trim();
-      if(!shipAddr){errEl.textContent='Please enter the new shipment address, or check "same as pickup address".';errEl.style.display='block';return;}
+      const shipAddr1=document.getElementById('shipAddr1').value.trim();
+      const shipCity=document.getElementById('shipCity').value.trim();
+      const shipState=document.getElementById('shipState').value.trim();
+      const shipPincode=document.getElementById('shipPincode').value.trim();
+      if(!shipAddr1||!shipCity||!shipPincode){errEl.textContent='Please fill in the new shipment address, or check "same as pickup address".';errEl.style.display='block';return;}
+      shipAddr={ address1: shipAddr1, city: shipCity, state: shipState, pincode: shipPincode };
     }
   }
   btn.disabled=true;btn.textContent='Submitting…';
@@ -729,7 +740,7 @@ async function submitRR(){
         type: rrType,
         items: rrData.items,
         reason: rrData.reason,
-        shipping_address: shipAddr || null,
+        shipping_address: shipAddr,
       }),
     });
     const d=await r.json();

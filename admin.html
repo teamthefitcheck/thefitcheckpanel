@@ -96,6 +96,7 @@ function stageBadge(s) {
     rto:['badge-red','RTO'], confirmed:['badge-yellow','Confirmed'],
     ready:['badge-yellow','Ready'], partial_collected:['','Partial Collected'],
     cancelled:['badge-red','Cancelled'], new:['badge-gray','New'], misc:['badge-gray','Misc'],
+    hold:['badge-red','On Hold'],
   };
   const [cls,label] = map[s] || ['badge-gray', s || 'Unknown'];
   const style = s==='partial_collected' ? {background:'#92400e22',color:'#f59e0b',border:'1px solid #f59e0b55'} : {};
@@ -761,7 +762,7 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
                 <div className="field">
                   <label>Stage</label>
                   <select value={stage} onChange={e=>setStage(e.target.value)}>
-                    {['confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>(
+                    {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>(
                       <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
                     ))}
                   </select>
@@ -917,7 +918,7 @@ function Orders() {
         <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);load();}} />
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        {['','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
+        {['','new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=>{
           const active = stage===s;
           const count = s==='' ? allOrders.length : (counts[s]||0);
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
@@ -1121,7 +1122,7 @@ function RRModal({ rr, onClose }) {
           {rr.shipping_address && (
             <div style={{marginBottom:14,background:'var(--bg-card2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--text-muted)'}}>
               <div style={{fontWeight:700,color:'var(--cyan)',marginBottom:3}}>📦 New Shipment Address (for exchanged item)</div>
-              <div style={{whiteSpace:'pre-wrap'}}>{rr.shipping_address}</div>
+              <div>{rr.shipping_address.address1}, {rr.shipping_address.city}{rr.shipping_address.state?`, ${rr.shipping_address.state}`:''} — {rr.shipping_address.pincode}</div>
             </div>
           )}
 
@@ -1288,6 +1289,20 @@ function Emails() {
       ${sampleItems}
       <p style="color:#888;font-size:13px;">Please keep the balance amount ready for the delivery agent. For any queries, reply to this email.</p>`,
     },
+    hold: {
+      subject: 'Action needed — confirm your order #1001',
+      body: `<h2 style="font-size:20px;font-weight:800;color:#111;margin:0 0 8px">Your order is on hold ⏸</h2>
+      <p style="color:#555;font-size:14px;line-height:1.7;margin-bottom:20px">Hi there, your order <strong>#1001</strong> has been moved to <strong>hold</strong> as we haven't received any response to our calls and confirmation texts.</p>
+      <p style="color:#555;font-size:14px;margin-bottom:24px">Please confirm your order by tapping the button below — it'll open WhatsApp with a pre-filled message.</p>
+      <div style="text-align:center;margin-bottom:24px;"><a style="display:inline-block;background:#25D366;color:#fff;font-size:14px;font-weight:700;padding:14px 28px;border-radius:8px;text-decoration:none;">✅ Confirm on WhatsApp</a></div>
+      <p style="color:#888;font-size:13px;">If we don't hear back, your order may be cancelled to keep things moving. For any queries, just reply to this email.</p>`,
+    },
+    hold_admin: {
+      subject: 'Order #1001 moved to hold',
+      body: `<h2 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px">Order moved to hold ⏸</h2>
+      <p style="font-size:14px;color:#555;">Order <strong>#1001</strong> (Sample Customer, customer@example.com) has been moved to <strong>hold</strong> as the customer hasn't provided any response.</p>
+      <p style="font-size:14px;color:#555;margin-top:8px;">Please confirm manually or cancel the order to clear the backlog.</p>`,
+    },
   };
 
   const currentPreview = previews[testTemplate] || previews.confirmed;
@@ -1327,6 +1342,8 @@ function Emails() {
                 <option value="ofd">Out for Delivery 🛵</option>
                 <option value="delivered">Delivered ✅</option>
                 <option value="partial_collected">Partial Payment Collected 💰</option>
+                <option value="hold">Order On Hold ⏸ (Customer)</option>
+                <option value="hold_admin">Order On Hold ⏸ (Admin Alert)</option>
               </select>
             </div>
             <div className="field"><label>Send To</label><input type="email" value={testTo} onChange={e=>setTestTo(e.target.value)} placeholder="test@example.com"/></div>
@@ -1606,6 +1623,7 @@ function Settings() {
   const [shopifyTags,setShopifyTags] = useState([]);
   const [tagsLoading,setTagsLoading] = useState(false);
   const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7,force_return_code:''});
+  const [syncScope,setSyncScope] = useState('100');
   const [segments,setSegments]   = useState([]);
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
@@ -1614,6 +1632,7 @@ function Settings() {
     apiFetch('/admin/staff').then(d=>setStaff(d||[]));
     apiFetch('/admin/tag-mappings').then(d=>setTagMap(d||{}));
     apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
+    apiFetch('/admin/sync-settings').then(d=>setSyncScope(d?.tracking_sync_scope||'100'));
     apiFetch('/admin/audience-segments').then(d=>setSegments(d||[]));
     setTagsLoading(true);
     apiFetch('/admin/shopify-tags').then(d=>setShopifyTags(d||[])).finally(()=>setTagsLoading(false));
@@ -1661,11 +1680,17 @@ function Settings() {
     setSaving(false);
   };
 
+  const saveSyncScope = async (val) => {
+    setSyncScope(val); setSaving(true); setMsg(null);
+    try { await apiFetch('/admin/sync-settings',{method:'POST',body:JSON.stringify({tracking_sync_scope:val})}); setMsg({type:'success',text:'Tracking sync range saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
+    setSaving(false);
+  };
+
   return (
     <div>
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
-        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['security','Security'],['store','Store']].map(([id,label])=>(
+        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['sync','Tracking Sync'],['security','Security'],['store','Store']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
@@ -1711,7 +1736,7 @@ function Settings() {
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <label>Maps to Stage</label>
               <select value={newStage} onChange={e=>setNewStage(e.target.value)} style={{width:140}}>
-                {['confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                {['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','delivered','rto','cancelled','misc'].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
               </select>
             </div>
             <button className="btn-ghost btn-sm" onClick={addTagMapping} disabled={!newTag}>Add Mapping</button>
@@ -1781,6 +1806,29 @@ function Settings() {
           <div style={{marginTop:14}}>
             <button className="btn-primary btn-sm" onClick={saveRRSettings} disabled={saving}>{saving?'Saving…':'Save Settings'}</button>
           </div>
+        </div>
+      )}
+
+      {tab==='sync' && (
+        <div className="card" style={{maxWidth:480}}>
+          <div style={{fontWeight:700,marginBottom:6}}>Tracking Sync Range</div>
+          <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>
+            The auto tracking sync (runs every 2 hours) checks shipment status for orders within this range.
+            A larger range checks more orders but takes longer per run.
+          </p>
+          {[
+            ['50','Last 50 orders'],
+            ['100','Last 100 orders'],
+            ['7d','Last 7 days'],
+            ['30d','Last 30 days'],
+            ['80d','Last 80 days'],
+            ['all','All orders (no limit)'],
+          ].map(([val,label])=>(
+            <label key={val} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',border:'1px solid '+(syncScope===val?'var(--accent)':'var(--border)'),borderRadius:8,marginBottom:8,cursor:'pointer',background:syncScope===val?'var(--bg-card2)':'transparent'}}>
+              <input type="radio" name="syncScope" value={val} checked={syncScope===val} onChange={()=>saveSyncScope(val)} style={{accentColor:'#111',width:16,height:16}}/>
+              <span style={{fontSize:13,fontWeight:600}}>{label}</span>
+            </label>
+          ))}
         </div>
       )}
 
