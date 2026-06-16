@@ -16,7 +16,26 @@
   --accent:#ffffff;--accent-dim:#d4d4d4;
   --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--cyan:#06b6d4;--purple:#a78bfa;
   --radius:10px;--radius-sm:6px;
+  --sb-bg:#0d0d0d;--sb-border:#1a1a1a;--sb-active:#1e1e1e;--sb-active-border:#2a2a2a;
+  --sb-text:#666;--sb-text-active:#fff;
 }
+body[data-theme="bw"]{
+  --bg:#000000;--bg-card:#0a0a0a;--bg-card2:#111111;
+  --border:#222;--border2:#2a2a2a;
+  --text:#ffffff;--text-muted:#666;--text-dim:#444;
+  --accent:#ffffff;--accent-dim:#cccccc;
+  --green:#ffffff;--red:#ffffff;--yellow:#ffffff;--cyan:#ffffff;--purple:#ffffff;
+  --sb-bg:#000;--sb-border:#1c1c1c;--sb-active:#141414;--sb-active-border:#2a2a2a;
+  --sb-text:#555;--sb-text-active:#fff;
+}
+body[data-theme="bw"] .badge-green{background:#ffffff18;color:#fff}
+body[data-theme="bw"] .badge-red{background:#ffffff18;color:#fff}
+body[data-theme="bw"] .badge-yellow{background:#ffffff18;color:#ccc}
+body[data-theme="bw"] .badge-cyan{background:#ffffff18;color:#ccc}
+body[data-theme="bw"] .badge-gray{background:#ffffff0e;color:#666}
+body[data-theme="bw"] .badge-purple{background:#ffffff18;color:#ccc}
+body[data-theme="bw"] .btn-primary{background:#fff;color:#000}
+body[data-theme="bw"] input:focus,body[data-theme="bw"] select:focus,body[data-theme="bw"] textarea:focus{border-color:#555}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
 input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s;font-family:inherit}
 input:focus,select:focus,textarea:focus{border-color:#666}
@@ -66,11 +85,34 @@ label{font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px
 ::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
 .section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
 </style>
+<script>(function(){var t=localStorage.getItem('fc_theme')||'dark';if(t)document.documentElement.setAttribute('data-theme-init',t);})()</script>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
+
+/* ─── Theme & Icon preset ────────────────────────────────────── */
+const SIDEBAR_ICONS_EMOJI = {
+  dashboard:'📊', orders:'📦', returns:'↩', emails:'📧',
+  shipping:'🚚', synclogs:'🔄', settings:'⚙',
+};
+const SIDEBAR_ICONS_MINIMAL = {
+  dashboard: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
+  orders:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>,
+  returns:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>,
+  emails:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+  shipping:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  synclogs:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>,
+  settings:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+};
+
+function applyTheme(theme) {
+  document.body.setAttribute('data-theme', theme);
+  localStorage.setItem('fc_theme', theme);
+}
+function getStoredTheme() { return localStorage.getItem('fc_theme') || 'dark'; }
+function getStoredIcons() { return localStorage.getItem('fc_icons') || 'emoji'; }
 const API = '';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
@@ -266,31 +308,32 @@ function Login({ onLogin }) {
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────── */
-function Sidebar({ tab, setTab, onLogout }) {
+function Sidebar({ tab, setTab, onLogout, iconPreset }) {
   const items = [
-    ['dashboard','📊','Dashboard'],['orders','📦','Orders'],['returns','↩','Returns'],
-    ['emails','📧','Emails'],['shipping','🚚','Shipping'],['synclogs','🔄','Sync Logs'],['settings','⚙','Settings'],
+    ['dashboard','Dashboard'],['orders','Orders'],['returns','Returns'],
+    ['emails','Emails'],['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings'],
   ];
+  const icons = iconPreset === 'minimal' ? SIDEBAR_ICONS_MINIMAL : SIDEBAR_ICONS_EMOJI;
   return (
-    <div style={{width:220,minHeight:'100vh',background:'#0d0d0d',borderRight:'1px solid #1a1a1a',display:'flex',flexDirection:'column',flexShrink:0,position:'sticky',top:0,height:'100vh'}}>
-      <div style={{padding:'20px 16px 14px',borderBottom:'1px solid #1a1a1a'}}>
+    <div style={{width:220,minHeight:'100vh',background:'var(--sb-bg)',borderRight:'1px solid var(--sb-border)',display:'flex',flexDirection:'column',flexShrink:0,position:'sticky',top:0,height:'100vh'}}>
+      <div style={{padding:'20px 16px 14px',borderBottom:'1px solid var(--sb-border)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:34,height:34,background:'#fff',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:900,color:'#000',flexShrink:0}}>✓</div>
           <div>
             <div style={{fontWeight:800,fontSize:14,color:'#fff',letterSpacing:'-0.3px'}}>{brand()}</div>
-            <div style={{fontSize:10,color:'#444'}}>by Tisco</div>
+            <div style={{fontSize:10,color:'var(--sb-text)'}}>by Tisco</div>
           </div>
         </div>
       </div>
       <nav style={{flex:1,padding:'8px 8px'}}>
-        {items.map(([id,icon,label])=>(
+        {items.map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{
             width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,
-            background:tab===id?'#1e1e1e':'transparent',color:tab===id?'#fff':'#666',
-            border:tab===id?'1px solid #2a2a2a':'1px solid transparent',
+            background:tab===id?'var(--sb-active)':'transparent',color:tab===id?'var(--sb-text-active)':'var(--sb-text)',
+            border:tab===id?'1px solid var(--sb-active-border)':'1px solid transparent',
             cursor:'pointer',fontSize:13,fontWeight:tab===id?600:400,marginBottom:2,transition:'all .12s',textAlign:'left'
           }}>
-            <span style={{fontSize:14,opacity:tab===id?1:.6}}>{icon}</span>{label}
+            <span style={{fontSize:14,opacity:tab===id?1:.6,display:'flex',alignItems:'center'}}>{icons[id]}</span>{label}
           </button>
         ))}
       </nav>
@@ -1630,7 +1673,7 @@ function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }
 }
 
 /* ─── Settings ────────────────────────────────────────────────── */
-function Settings() {
+function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
   const [tab,setTab]         = useState('staff');
   const [staff,setStaff]     = useState([]);
   const [newUser,setNewUser] = useState({username:'',name:'',password:''});
@@ -1708,7 +1751,7 @@ function Settings() {
     <div>
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
-        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['sync','Tracking Sync'],['security','Security'],['store','Store']].map(([id,label])=>(
+        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['sync','Tracking Sync'],['security','Security'],['store','Store'],['appearance','Appearance']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
@@ -1859,6 +1902,62 @@ function Settings() {
         </div>
       )}
 
+      {tab==='appearance' && (
+        <div style={{maxWidth:520}}>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontWeight:700,marginBottom:4}}>Theme</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:16}}>Choose how the admin panel looks.</div>
+            <div style={{display:'flex',gap:12}}>
+              {[
+                {id:'dark', label:'Dark', desc:'Deep blacks, default look', preview:'#0a0a0a'},
+                {id:'bw',   label:'Black & White', desc:'Pure black with white accents', preview:'#000000'},
+              ].map(opt=>(
+                <button key={opt.id} onClick={()=>setTheme(opt.id)} style={{
+                  flex:1,padding:'14px 16px',borderRadius:10,cursor:'pointer',textAlign:'left',transition:'all .15s',
+                  background:theme===opt.id?'var(--bg-card2)':'var(--bg-card)',
+                  border:`1.5px solid ${theme===opt.id?'var(--accent)':'var(--border)'}`,
+                }}>
+                  <div style={{width:'100%',height:48,borderRadius:6,marginBottom:10,background:opt.preview,border:'1px solid #333',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                    <div style={{width:28,height:6,borderRadius:3,background:'#fff',opacity:.9}}/>
+                    <div style={{width:16,height:6,borderRadius:3,background:'#fff',opacity:.4}}/>
+                  </div>
+                  <div style={{fontWeight:700,fontSize:13,color:'var(--text)',marginBottom:2}}>{opt.label}</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{opt.desc}</div>
+                  {theme===opt.id && <div style={{marginTop:8,fontSize:11,fontWeight:700,color:'var(--accent)'}}>✓ Active</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:700,marginBottom:4}}>Sidebar Icons</div>
+            <div style={{color:'var(--text-muted)',fontSize:12,marginBottom:16}}>Choose between emoji icons or clean minimal SVG icons.</div>
+            <div style={{display:'flex',gap:12}}>
+              {[
+                {id:'emoji',   label:'Emoji', desc:'Colourful emoji icons', icons:['📊','📦','↩','📧','🚚']},
+                {id:'minimal', label:'Minimal', desc:'Clean monochrome SVG icons',
+                  svgs:['dashboard','orders','returns','emails','shipping']},
+              ].map(opt=>(
+                <button key={opt.id} onClick={()=>setIconPreset(opt.id)} style={{
+                  flex:1,padding:'14px 16px',borderRadius:10,cursor:'pointer',textAlign:'left',transition:'all .15s',
+                  background:iconPreset===opt.id?'var(--bg-card2)':'var(--bg-card)',
+                  border:`1.5px solid ${iconPreset===opt.id?'var(--accent)':'var(--border)'}`,
+                }}>
+                  <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'center',height:32}}>
+                    {opt.id==='emoji'
+                      ? opt.icons.map(e=><span key={e} style={{fontSize:16}}>{e}</span>)
+                      : opt.svgs.map(k=><span key={k} style={{color:'var(--text-muted)',display:'flex'}}>{SIDEBAR_ICONS_MINIMAL[k]}</span>)
+                    }
+                  </div>
+                  <div style={{fontWeight:700,fontSize:13,color:'var(--text)',marginBottom:2}}>{opt.label}</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{opt.desc}</div>
+                  {iconPreset===opt.id && <div style={{marginTop:8,fontSize:11,fontWeight:700,color:'var(--accent)'}}>✓ Active</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab==='store' && (
         <div className="card" style={{maxWidth:440}}>
           <div style={{fontWeight:700,marginBottom:14}}>Shopify Store Connection</div>
@@ -1973,8 +2072,15 @@ function SyncLogs() {
 
 /* ─── App Shell ───────────────────────────────────────────────── */
 function App() {
-  const [authed,setAuthed] = useState(!!token());
-  const [tab,setTab]       = useState('dashboard');
+  const [authed,setAuthed]   = useState(!!token());
+  const [tab,setTab]         = useState('dashboard');
+  const [theme,setThemeState] = useState(getStoredTheme);
+  const [iconPreset,setIconPresetState] = useState(getStoredIcons);
+
+  useEffect(() => { applyTheme(theme); }, [theme]);
+
+  const setTheme = (t) => { setThemeState(t); applyTheme(t); };
+  const setIconPreset = (p) => { setIconPresetState(p); localStorage.setItem('fc_icons', p); };
 
   const logout = async () => {
     try { await apiFetch('/admin/logout',{method:'POST'}); } catch {}
@@ -1985,12 +2091,13 @@ function App() {
 
   const views = {
     dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>,
-    emails: <Emails/>, shipping: <Shipping/>, synclogs: <SyncLogs/>, settings: <Settings/>,
+    emails: <Emails/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
+    settings: <Settings theme={theme} setTheme={setTheme} iconPreset={iconPreset} setIconPreset={setIconPreset}/>,
   };
 
   return (
     <div style={{display:'flex',minHeight:'100vh'}}>
-      <Sidebar tab={tab} setTab={setTab} onLogout={logout}/>
+      <Sidebar tab={tab} setTab={setTab} onLogout={logout} iconPreset={iconPreset}/>
       <main style={{flex:1,overflow:'auto',minHeight:'100vh'}}>
         <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 28px'}}>
           {views[tab] || <Dashboard/>}
