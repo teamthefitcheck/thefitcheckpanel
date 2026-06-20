@@ -1983,15 +1983,17 @@ function toShipSagarCourierCode(courier) {
   return map[c] || (courier || '').toUpperCase();
 }
 
-async function shipsagarPushShipment({ awb, courierCode, orderNo, customerName, email, mobileNo }) {
+async function shipsagarPushShipment({ awb, courierCode, orderNo, customerName, email, mobileNo, shipmentType = 'Forward' }) {
   const creds = JSON.parse((await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }))?.credentials || 'null');
   if (!creds) throw new Error('ShipSagar not connected. Go to Settings → Shipping.');
   const res = await fetch('https://app.shipsagar.com/api/Web/PushShipment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
     body: JSON.stringify({
-      ClientCode: creds.client_code, AWBNo: awb, CourierCode: courierCode,
-      OrderNo: orderNo, CustomerName: customerName, Email: email, MobileNo: mobileNo,
+      Token: creds.api_key, ClientCode: creds.client_code,
+      TrackingNo: awb, CompanyName: courierCode, CourierCode: courierCode, CountryName: 'India', ShipmentType: shipmentType,
+      EmailID: creds.admin_email || email, MobileNo: mobileNo || creds.admin_phone,
+      OrderNo: orderNo, CustomerName: customerName,
     }),
     signal: AbortSignal.timeout(15000),
   });
@@ -2004,12 +2006,13 @@ async function shipsagarTrackShipment(awb) {
   const res = await fetch('https://app.shipsagar.com/api/Web/TrackShipment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
-    body: JSON.stringify({ ClientCode: creds.client_code, AWBNo: awb }),
+    body: JSON.stringify({ Token: creds.api_key, ClientCode: creds.client_code, TrackingNo: awb }),
     signal: AbortSignal.timeout(15000),
   });
   const data = await res.json();
+  if (data?.status === 'ERROR' || !data?.trackingDetails) return null;
   // trackingDetails comes back double-JSON-encoded
-  let details = data?.trackingDetails;
+  let details = data.trackingDetails;
   if (typeof details === 'string') {
     try { details = JSON.parse(details); } catch { return null; }
     if (typeof details === 'string') { try { details = JSON.parse(details); } catch { return null; } }
