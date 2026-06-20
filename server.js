@@ -1368,6 +1368,7 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
             customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
             email: email || '', mobileNo: order.phone || order.customer?.phone || '',
           });
+          await mdb.collection('order_stage').updateOne({ shopify_id: sid }, { $set: { shipsagar_pushed: true } });
           console.log(`[fulfillments/create] ShipSagar push registered for AWB ${tracking}`);
         }).catch(e => console.error('[fulfillments/create] ShipSagar push error:', e.message));
       } catch(e) { console.error('[fulfillments/create] email error:', e.message); }
@@ -2096,6 +2097,24 @@ async function runShipsagarSync({ orderIds } = {}) {
 
     for (const [awb, recs] of byAwb) {
       checked++;
+
+      // Register the AWB with ShipSagar first if we haven't already — without
+      // this, TrackShipment always comes back "Tracking Not Found".
+      const notYetPushed = recs.filter(r => !r.shipsagar_pushed);
+      for (const rec of notYetPushed) {
+        try {
+          const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json?fields=id,name,email,customer,phone`);
+          const pushResult = await shipsagarPushShipment({
+            awb, courierCode: toShipSagarCourierCode(rec.courier), orderNo: order.name,
+            customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+            email: order.email || order.contact_email || '', mobileNo: order.phone || order.customer?.phone || '',
+          });
+          await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $set: { shipsagar_pushed: true } });
+          log(`📤  ${rec.shopify_id} | AWB ${awb} | registered with ShipSagar — ${pushResult?.message || pushResult?.status || 'ok'}`);
+        } catch (e) { log(`⚠️  ${rec.shopify_id} | AWB ${awb} | push failed: ${e.message}`); }
+      }
+      if (notYetPushed.length) await sleep(300);
+
       let result;
       try { result = await shipsagarTrackShipment(awb); }
       catch (e) { log(`❌  AWB ${awb} | track error: ${e.message}`); errors++; continue; }
@@ -2168,6 +2187,7 @@ app.post('/admin/shipsagar/push', adminAuth, async (req, res) => {
       customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
       email: order.email || '', mobileNo: order.phone || order.customer?.phone || '',
     });
+    await mdb.collection('order_stage').updateOne({ shopify_id: String(orderId) }, { $set: { shipsagar_pushed: true } });
     res.json({ ok: true, result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
