@@ -1281,6 +1281,62 @@ function RRModal({ rr, onClose }) {
 }
 
 /* ─── Emails ─────────────────────────────────────────────────── */
+const STAGE_EMAIL_LABELS = {
+  confirmed: ['Order Confirmed 🎉', 'Sent when an order moves to Confirmed'],
+  pickup: ['Order Shipped 🚚', 'Sent when a courier picks up the order'],
+  transit: ['In Transit 📦', 'Sent when tracking shows the shipment in transit'],
+  ofd: ['Out for Delivery 🛵', 'Sent when tracking shows out for delivery'],
+  delivered: ['Delivered ✅', 'Sent when tracking shows delivered'],
+  rto: ['RTO Update', 'Sent when a shipment is returned to origin'],
+  partial_collected: ['Partial Payment Collected 💰', 'Sent when a partial COD payment is recorded'],
+  hold: ['Order On Hold ⏸', 'Sent when an order sits unconfirmed for 7+ days'],
+  ndr: ['Delivery Failed / NDR ⚠️', 'Sent when a delivery attempt fails'],
+};
+
+function StageEmailToggles() {
+  const [toggles,setToggles] = useState({});
+  const [loading,setLoading] = useState(true);
+  const [msg,setMsg] = useState(null);
+
+  useEffect(()=>{
+    apiFetch('/admin/stage-email-settings').then(d=>{setToggles(d||{});setLoading(false);}).catch(()=>setLoading(false));
+  },[]);
+
+  const toggle = async (stage, val) => {
+    setToggles(prev=>({...prev,[stage]:val})); setMsg(null);
+    try { await apiFetch('/admin/stage-email-settings',{method:'POST',body:JSON.stringify({stage,enabled:val})}); }
+    catch(e){ setMsg({type:'error',text:e.message}); setToggles(prev=>({...prev,[stage]:!val})); }
+  };
+
+  return (
+    <div className="card" style={{maxWidth:560}}>
+      <div style={{fontWeight:700,marginBottom:6}}>Stage Email Toggles</div>
+      <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>
+        Turn off the customer-facing email for any stage — useful if you want to stop a particular
+        notification (e.g. Hold or Confirmed) without disabling email entirely. Admin alert emails
+        (NDR/Hold admin alerts) are not affected by these toggles.
+      </p>
+      {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+      {loading && <div style={{color:'var(--text-muted)',fontSize:13}}>Loading…</div>}
+      {!loading && Object.keys(STAGE_EMAIL_LABELS).map(stage=>{
+        const [label,desc] = STAGE_EMAIL_LABELS[stage];
+        const enabled = toggles[stage]!==false;
+        return (
+          <div key={stage} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,marginBottom:8}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13}}>{label}</div>
+              <div style={{fontSize:11,color:'var(--text-muted)'}}>{desc}</div>
+            </div>
+            <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+              <input type="checkbox" checked={enabled} onChange={e=>toggle(stage,e.target.checked)} style={{width:18,height:18,accentColor:'#111'}}/>
+            </label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Emails() {
   const [tab,setTab] = useState('config');
   const [cfg,setCfg] = useState(null);
@@ -1426,7 +1482,7 @@ function Emails() {
     <div>
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Emails</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18}}>
-        {[['config','SMTP Config'],['test','Preview & Test'],['logs','Email Logs']].map(([id,label])=>(
+        {[['config','SMTP Config'],['test','Preview & Test'],['toggles','Stage Email Toggles'],['logs','Email Logs']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===id?'var(--pill-border-active)':'var(--border)'),background:tab===id?'var(--overlay-3)':'transparent',color:tab===id?'var(--text)':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
@@ -1484,6 +1540,8 @@ function Emails() {
           </div>
         </div>
       )}
+
+      {tab==='toggles' && <StageEmailToggles/>}
 
       {tab==='logs' && (
         <div className="card" style={{padding:0,overflow:'auto'}}>

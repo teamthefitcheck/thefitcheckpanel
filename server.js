@@ -571,7 +571,9 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
           else if (stage === 'ofd')      { html = templateOFD({ order, awb: awbVal, courier: courierVal, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
           else if (stage === 'delivered'){ html = templateDelivered({ order, imageMap }); subject = `Your order ${order.name} has been delivered ✅`; }
           else if (stage === 'partial_collected'){ html = templatePartialCollected({ order, imageMap }); subject = `Partial payment received for ${order.name} — balance due on delivery`; }
-          if (html) {
+          if (html && !(await isStageEmailEnabled(stage))) {
+            console.log(`[stage-email] ${stage} email disabled in Settings — skipping`);
+          } else if (html) {
             const rec2 = await OS.get(req.params.id);
             const alreadySent = (rec2?.emails_sent || []).includes(stage);
             if (!alreadySent) {
@@ -654,6 +656,29 @@ function getSmtpTransporter(cfg) {
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Per-stage on/off switch for customer-facing transactional emails — admin
+// alert emails (hold_admin, ndr_admin) are not gated by this.
+const STAGE_EMAIL_KEYS = ['confirmed', 'pickup', 'transit', 'ofd', 'delivered', 'rto', 'partial_collected', 'hold', 'ndr'];
+async function isStageEmailEnabled(stage) {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { stage_email_toggles: 1, _id: 0 } });
+  return doc?.stage_email_toggles?.[stage] !== false;
+}
+
+app.get('/admin/stage-email-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { stage_email_toggles: 1, _id: 0 } });
+  const toggles = doc?.stage_email_toggles || {};
+  res.json(Object.fromEntries(STAGE_EMAIL_KEYS.map(k => [k, toggles[k] !== false])));
+});
+
+app.post('/admin/stage-email-settings', adminAuth, async (req, res) => {
+  try {
+    const { stage, enabled } = req.body || {};
+    if (!STAGE_EMAIL_KEYS.includes(stage)) return res.status(400).json({ error: 'Invalid stage' });
+    await mdb.collection('settings').updateOne({}, { $set: { [`stage_email_toggles.${stage}`]: !!enabled, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 async function sendEmail({ to, subject, html, replyTo }) {
   const cfg = await getSmtpConfig();
@@ -1269,6 +1294,7 @@ app.post('/webhooks/orders/create', async (req, res) => {
       // Send email async after DB save — don't block the webhook response
       (async () => {
         try {
+          if (!(await isStageEmailEnabled('confirmed'))) { console.log(`[orders/create] confirmed email disabled in Settings — skipping ${order.name}`); return; }
           const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
           await sendEmail({ to: email, subject: `Order Placed Successfully – ${order.name} 🎉`, html: templateOrderConfirmed(order, imageMap) });
           console.log(`[orders/create] confirmation email sent to ${email}`);
@@ -1351,10 +1377,12 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
       try {
         const { order } = await shopifyREST(`/orders/${sid}.json`);
         const email = order.email || order.contact_email;
-        if (email) {
+        if (email && await isStageEmailEnabled('pickup')) {
           const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
           await sendEmail({ to: email, subject: `Your order ${order.name} has shipped! 🚚`, html: templateShipped({ order, awb: tracking, courier, trackingUrl: trackUrl, imageMap }) });
           console.log(`[fulfillments/create] shipped email sent to ${email}`);
+        } else if (email) {
+          console.log(`[fulfillments/create] pickup email disabled in Settings — skipping ${order.name}`);
         }
 
         // Auto-register with ShipSagar for ongoing tracking — fire-and-forget,
@@ -1503,13 +1531,17 @@ async function runTrackingSync({ manual } = {}) {
         const awb = rec.awb || '', courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
         const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
 
+        const stageEmailOn = await isStageEmailEnabled(result.stage);
+
         if (result.stage === 'ndr') {
           // Customer email (best-effort)
-          if (email) {
+          if (email && stageEmailOn) {
             await sendEmail({ to: email, subject: `Delivery attempt failed for ${order.name}`, html: templateNDR({ order, message: result.message?.trim(), imageMap }) });
             log(`📨  ${rec.shopify_id} | NDR email sent → ${email}`);
+          } else if (email) {
+            log(`📧  ${rec.shopify_id} | NDR email disabled in Settings — skipping`);
           }
-          // Admin alert
+          // Admin alert — not gated by the customer-email toggle
           const cfg = await getSmtpConfig();
           if (cfg) {
             await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} flagged NDR`, html: templateNDRAdmin({ order, message: result.message?.trim(), city: result.city }) });
@@ -1520,6 +1552,7 @@ async function runTrackingSync({ manual } = {}) {
         }
 
         if (!email) { log(`⚠️  ${rec.shopify_id} | no customer email on file`); continue; }
+        if (!stageEmailOn) { log(`📧  ${rec.shopify_id} | ${result.stage} email disabled in Settings — skipping`); continue; }
         let html, subject;
         if (result.stage === 'transit')    { html = templateInTransit({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
         else if (result.stage === 'ofd')   { html = templateOFD({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
@@ -1726,10 +1759,12 @@ async function runHoldCheck() {
       const waMessage = encodeURIComponent(`I confirm my order ${order.name}`);
       const whatsappUrl = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : `https://wa.me/?text=${waMessage}`;
 
-      if (email) {
+      if (email && await isStageEmailEnabled('hold')) {
         try {
           await sendEmail({ to: email, subject: `Action needed — confirm your order ${order.name}`, html: templateOrderHold({ order, whatsappUrl }) });
         } catch (e) { console.error(`[hold-check] customer email failed for ${order.name}:`, e.message); }
+      } else if (email) {
+        console.log(`[hold-check] hold email disabled in Settings — skipping ${order.name}`);
       }
 
       if (cfg) {
@@ -2154,11 +2189,12 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
           const email = order.email || order.contact_email;
           const courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
           const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+          const stageEmailOn = await isStageEmailEnabled(newStage);
           if (newStage === 'ndr') {
-            if (email) await sendEmail({ to: email, subject: `Delivery attempt failed for ${order.name}`, html: templateNDR({ order, message: result.description, imageMap }) });
+            if (email && stageEmailOn) await sendEmail({ to: email, subject: `Delivery attempt failed for ${order.name}`, html: templateNDR({ order, message: result.description, imageMap }) });
             const cfg = await getSmtpConfig();
             if (cfg) await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} flagged NDR`, html: templateNDRAdmin({ order, message: result.description }) });
-          } else if (email) {
+          } else if (email && stageEmailOn) {
             let html, subject;
             if (newStage === 'transit')        { html = templateInTransit({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
             else if (newStage === 'ofd')        { html = templateOFD({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
