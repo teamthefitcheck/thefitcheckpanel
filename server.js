@@ -2197,6 +2197,63 @@ app.get('/admin/shipsagar/debug', adminAuth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// On-demand live status check for a single order — registers the AWB with
+// ShipSagar first if it hasn't been already, then pulls the latest status.
+// Shared by the admin order modal's "Refresh" button and the customer track page.
+async function refreshShipsagarStatus(shopify_id) {
+  const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+  if (!creds) return { connected: false };
+
+  const rec = await OS.get(shopify_id) || {};
+  if (!rec.awb) return { connected: true, registered: false, reason: 'no_awb' };
+
+  if (!rec.shipsagar_pushed) {
+    try {
+      const { order } = await shopifyREST(`/orders/${shopify_id}.json?fields=id,name,email,customer,phone`);
+      await shipsagarPushShipment({
+        awb: rec.awb, courierCode: toShipSagarCourierCode(rec.courier), orderNo: order.name,
+        customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+        email: order.email || order.contact_email || '', mobileNo: order.phone || order.customer?.phone || '',
+      });
+      await mdb.collection('order_stage').updateOne({ shopify_id }, { $set: { shipsagar_pushed: true } });
+    } catch (e) {
+      return { connected: true, registered: false, reason: 'push_failed', error: e.message };
+    }
+  }
+
+  let result;
+  try { result = await shipsagarTrackShipment(rec.awb); }
+  catch (e) { return { connected: true, registered: true, status: null, error: e.message }; }
+  if (!result) return { connected: true, registered: true, status: null };
+
+  const newStage = shipsagarStatusToStage(result.description);
+  if (newStage !== rec.stage) {
+    const tagMap = await ensureShipsagarTagDefaults();
+    const newTag = resolveTagForStage(newStage, tagMap);
+    await OS.upsert(shopify_id, { stage: newStage, updated_at: new Date().toISOString() });
+    try {
+      await applyShipsagarTag(shopify_id, newTag, rec.shipsagar_tag);
+      await mdb.collection('order_stage').updateOne({ shopify_id }, { $set: { shipsagar_tag: newTag } });
+    } catch {}
+  }
+
+  return { connected: true, registered: true, status: result.description, stage: newStage, timestamp: result.timestamp };
+}
+
+app.get('/admin/orders/:id/shipsagar-status', adminAuth, async (req, res) => {
+  try { res.json(await refreshShipsagarStatus(String(req.params.id))); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Public — used by the customer track page's "Refresh" button.
+app.get('/track/shipsagar-status', async (req, res) => {
+  try {
+    const orderId = String(req.query.orderId || '');
+    if (!orderId) return res.status(400).json({ error: 'orderId required' });
+    res.json(await refreshShipsagarStatus(orderId));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/shipsagar/logs', adminAuth, async (req, res) => {
   const logs = await mdb.collection('shipsagar_cron_log').find({}).sort({ started_at: -1 }).limit(20).toArray();
   res.json(logs);

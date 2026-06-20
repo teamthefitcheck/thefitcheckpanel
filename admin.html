@@ -675,6 +675,8 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
   const [tagging,setTagging] = useState(false);
   const [msg,setMsg]         = useState(null);
   const [activeTab,setActiveTab] = useState('details');
+  const [ssStatus,setSsStatus] = useState(null);
+  const [ssLoading,setSsLoading] = useState(false);
 
   useEffect(()=>{
     apiFetch(`/orders/${initOrder.id}`).then(d=>{
@@ -711,6 +713,13 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
       onUpdated && onUpdated();
     } catch(e){setMsg({type:'error',text:e.message});}
     setCreating(false);
+  };
+
+  const refreshShipsagar = async () => {
+    setSsLoading(true); setSsStatus(null);
+    try { const d = await apiFetch(`/admin/orders/${initOrder.id}/shipsagar-status`); setSsStatus(d); }
+    catch(e){ setSsStatus({error:e.message}); }
+    setSsLoading(false);
   };
 
   const applyTag = async () => {
@@ -847,6 +856,25 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
               <button className="btn-primary btn-sm" onClick={saveStage} disabled={saving}>{saving?'Saving…':'Save Stage'}</button>
 
               <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'20px 0'}}/>
+
+              <div className="section-title">Live Tracking Status (ShipSagar)</div>
+              <button className="btn-ghost btn-sm" onClick={refreshShipsagar} disabled={ssLoading} style={{marginBottom:10}}>
+                {ssLoading?<><span className="spin">↻</span> Checking…</>:'↻ Refresh Status'}
+              </button>
+              {ssStatus && (
+                <div style={{padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,fontSize:12,marginBottom:14}}>
+                  {ssStatus.error && <span style={{color:'var(--red)'}}>Error: {ssStatus.error}</span>}
+                  {!ssStatus.error && !ssStatus.connected && <span style={{color:'var(--text-muted)'}}>ShipSagar isn't connected — go to Settings → Shipping.</span>}
+                  {!ssStatus.error && ssStatus.connected && !ssStatus.registered && <span style={{color:'var(--text-muted)'}}>Not registered with ShipSagar yet{ssStatus.reason==='no_awb'?' — no AWB on this order.':'.'}</span>}
+                  {!ssStatus.error && ssStatus.connected && ssStatus.registered && !ssStatus.status && <span style={{color:'var(--yellow)'}}>Tracking request sent to ShipSagar — refresh in a few moments for live status.</span>}
+                  {!ssStatus.error && ssStatus.connected && ssStatus.registered && ssStatus.status && (
+                    <>
+                      <div style={{fontWeight:700,marginBottom:2}}>{ssStatus.status}</div>
+                      <div style={{color:'var(--text-muted)'}}>Mapped stage: {ssStatus.stage} {ssStatus.timestamp?`· ${ssStatus.timestamp}`:''}</div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="section-title">Create Shipment via Courier API</div>
               <div className="grid-2" style={{marginBottom:10}}>

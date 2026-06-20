@@ -261,6 +261,32 @@ async function loadOrderById(id){
   }catch{}
 }
 
+async function refreshShipsagarStatus(orderId){
+  const btn=document.getElementById('ssRefreshBtn');
+  const box=document.getElementById('ssStatusBox');
+  if(!box) return;
+  if(btn){ btn.disabled=true; btn.textContent='Checking…'; }
+  box.innerHTML='';
+  try{
+    const r=await fetch(`${API}/track/shipsagar-status?orderId=${orderId}`);
+    const d=await r.json();
+    let html='';
+    if(!d.connected){
+      html=`<div style="font-size:12px;color:var(--text-muted);padding:10px 12px;background:#f7f7f7;border-radius:8px">Tracking partner not connected yet.</div>`;
+    } else if(!d.registered){
+      html=`<div style="font-size:12px;color:var(--text-muted);padding:10px 12px;background:#f7f7f7;border-radius:8px">Tracking requested from courier partner — refresh in a few moments.</div>`;
+    } else if(!d.status){
+      html=`<div style="font-size:12px;color:#92400e;padding:10px 12px;background:#fff8ed;border:1px solid #f59e0b55;border-radius:8px">Tracking requested from courier partner — refresh in a few moments for live status.</div>`;
+    } else {
+      html=`<div style="font-size:13px;font-weight:700;padding:10px 12px;background:#f0fdf4;border:1px solid #22c55e55;border-radius:8px;color:#15803d">${d.status}</div>`;
+    }
+    box.innerHTML=html;
+  }catch(e){
+    box.innerHTML=`<div style="font-size:12px;color:var(--text-muted)">Could not check live status right now.</div>`;
+  }
+  if(btn){ btn.disabled=false; btn.textContent='↻ Refresh'; }
+}
+
 function resetAll(){
   document.getElementById('searchSection').style.display='block';
   document.getElementById('allOrdersSection').style.display='none';
@@ -353,14 +379,18 @@ function showOrderDetail(order){
       </div>
 
       ${order.awb?`
-        <div class="tracking-box" style="margin-bottom:16px">
+        <div class="tracking-box" style="margin-bottom:8px">
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px">Tracking</div>
             <div style="font-size:15px;font-weight:700;font-family:monospace;margin-top:2px">${order.awb}</div>
             ${order.courier?`<div style="font-size:12px;color:var(--text-muted)">${order.courier}</div>`:''}
           </div>
-          ${trackUrl?`<a href="${trackUrl}" target="_blank" class="btn btn-black btn-sm">Track →</a>`:''}
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-outline btn-sm" id="ssRefreshBtn" onclick="refreshShipsagarStatus('${order.shopify_order_id}')">↻ Refresh</button>
+            ${trackUrl?`<a href="${trackUrl}" target="_blank" class="btn btn-black btn-sm">Track →</a>`:''}
+          </div>
         </div>
+        <div id="ssStatusBox" style="margin-bottom:16px"></div>
       `:''}
 
       <div class="timeline">${tlHtml}</div>
