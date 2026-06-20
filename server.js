@@ -1356,6 +1356,20 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
           await sendEmail({ to: email, subject: `Your order ${order.name} has shipped! 🚚`, html: templateShipped({ order, awb: tracking, courier, trackingUrl: trackUrl, imageMap }) });
           console.log(`[fulfillments/create] shipped email sent to ${email}`);
         }
+
+        // Auto-register with ShipSagar for ongoing tracking — fire-and-forget,
+        // never blocks fulfillment; the cron self-heals if this push fails.
+        mdb.collection('settings').findOne({}, { projection: { shipsagar_auto_enabled: 1, _id: 0 } }).then(async (s) => {
+          if (s?.shipsagar_auto_enabled === false) return;
+          const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+          if (!creds) return;
+          await shipsagarPushShipment({
+            awb: tracking, courierCode: toShipSagarCourierCode(courier), orderNo: order.name,
+            customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+            email: email || '', mobileNo: order.phone || order.customer?.phone || '',
+          });
+          console.log(`[fulfillments/create] ShipSagar push registered for AWB ${tracking}`);
+        }).catch(e => console.error('[fulfillments/create] ShipSagar push error:', e.message));
       } catch(e) { console.error('[fulfillments/create] email error:', e.message); }
     }
   } catch(e) { console.error('[fulfillments/create] error:', e.message); }
@@ -1923,6 +1937,275 @@ app.post('/track/verify-return-code', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── ShipSagar Tracking ─────────────────────────────────────────────────────
+// One tracking API across couriers — pushes AWBs on fulfillment, polls status
+// on a cron, and reflects status as a Shopify order tag (tag → stage mapping
+// is admin-editable on the Tag Mapping settings page, same mechanism used
+// for manually-tagged orders).
+
+const SHIPSAGAR_DEFAULT_TAGS = {
+  'Pickup Scheduled':  'pickup',
+  'In Transit':        'transit',
+  'Out For Delivery':  'ofd',
+  'Delivered':         'delivered',
+  'RTO':                'rto',
+  'NDR':                'ndr',
+};
+
+// Ensure the default ShipSagar tags exist in the tag-mapping settings (admin
+// can rename/repoint them afterwards — we only seed missing keys).
+async function ensureShipsagarTagDefaults() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { tag_mappings: 1, _id: 0 } });
+  const current = doc?.tag_mappings || {};
+  const merged = { ...SHIPSAGAR_DEFAULT_TAGS, ...current };
+  if (JSON.stringify(merged) !== JSON.stringify(current)) {
+    await mdb.collection('settings').updateOne({}, { $set: { tag_mappings: merged, updated_at: new Date() } }, { upsert: true });
+  }
+  return merged;
+}
+
+// Given a target stage, find which Shopify tag the admin has mapped to it
+// (reverse lookup on tag_mappings); falls back to our own default tag name.
+function resolveTagForStage(stage, tagMap) {
+  const found = Object.entries(tagMap || {}).find(([, s]) => s === stage);
+  if (found) return found[0];
+  const fallback = Object.entries(SHIPSAGAR_DEFAULT_TAGS).find(([, s]) => s === stage);
+  return fallback ? fallback[0] : null;
+}
+
+function toShipSagarCourierCode(courier) {
+  const c = (courier || '').toLowerCase().replace(/[^a-z]/g, '');
+  const map = {
+    delhivery: 'DELHIVERY', xpressbees: 'XPRESSBEES', bluedart: 'BLUEDART',
+    dtdc: 'DTDC', ecomexpress: 'ECOMEXPRESS', shadowfax: 'SHADOWFAX',
+    ekart: 'EKART', shiprocket: 'SHIPROCKET', indiapost: 'INDIAPOST',
+  };
+  return map[c] || (courier || '').toUpperCase();
+}
+
+async function shipsagarPushShipment({ awb, courierCode, orderNo, customerName, email, mobileNo }) {
+  const creds = JSON.parse((await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }))?.credentials || 'null');
+  if (!creds) throw new Error('ShipSagar not connected. Go to Settings → Shipping.');
+  const res = await fetch('https://app.shipsagar.com/api/Web/PushShipment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
+    body: JSON.stringify({
+      ClientCode: creds.client_code, AWBNo: awb, CourierCode: courierCode,
+      OrderNo: orderNo, CustomerName: customerName, Email: email, MobileNo: mobileNo,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  return res.json();
+}
+
+async function shipsagarTrackShipment(awb) {
+  const creds = JSON.parse((await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }))?.credentials || 'null');
+  if (!creds) throw new Error('ShipSagar not connected.');
+  const res = await fetch('https://app.shipsagar.com/api/Web/TrackShipment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
+    body: JSON.stringify({ ClientCode: creds.client_code, AWBNo: awb }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const data = await res.json();
+  // trackingDetails comes back double-JSON-encoded
+  let details = data?.trackingDetails;
+  if (typeof details === 'string') {
+    try { details = JSON.parse(details); } catch { return null; }
+    if (typeof details === 'string') { try { details = JSON.parse(details); } catch { return null; } }
+  }
+  const history = details?.TrackingHistory || details?.[0]?.TrackingHistory;
+  if (!history || !history.length) return null;
+  const latest = history[history.length - 1];
+  return { description: latest.ActionDescription || '', timestamp: latest.ActionDate || latest.Timestamp || '' };
+}
+
+// Free-text courier remark → internal stage. Order matters: specific
+// phrases must be checked before generic ones they're substrings of
+// (e.g. "out for delivery" contains "delivery" so check it before "delivered").
+function shipsagarStatusToStage(description) {
+  const d = (description || '').toLowerCase();
+  if (/return\s*to\s*origin|\brto\b|returned\s*to\s*shipper/.test(d)) return 'rto';
+  if (/undelivered|refus(ed|al)|not\s*available|held\s*at|\bndr\b|address\s*(incorrect|incomplete)/.test(d)) return 'ndr';
+  if (/out\s*for\s*delivery/.test(d)) return 'ofd';
+  if (/delivered/.test(d)) return 'delivered';
+  if (/picked\s*up|pickup\s*(done|completed|generated)/.test(d)) return 'pickup';
+  return 'transit';
+}
+
+// Resolve the configured ShipSagar sync scope to a set of shopify_ids (null = no limit).
+async function getShipsagarSyncOrderIds() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { shipsagar_sync_scope: 1, _id: 0 } });
+  const scope = doc?.shipsagar_sync_scope || '10';
+  if (scope === 'all') return null;
+
+  if (scope === '10') {
+    const orders = await mdb.collection('orders').find({ fulfillment_status: 'fulfilled' }, { projection: { shopify_id: 1, _id: 0 } }).sort({ created_at: -1 }).limit(10).toArray();
+    return new Set(orders.map(o => o.shopify_id));
+  }
+  if (scope.endsWith('d')) {
+    const days = parseInt(scope) || 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const orders = await mdb.collection('orders').find({ created_at: { $gte: cutoff } }, { projection: { shopify_id: 1, _id: 0 } }).toArray();
+    return new Set(orders.map(o => o.shopify_id));
+  }
+  const limit = parseInt(scope) || 100;
+  const orders = await mdb.collection('orders').find({}, { projection: { shopify_id: 1, _id: 0 } }).sort({ created_at: -1 }).limit(limit).toArray();
+  return new Set(orders.map(o => o.shopify_id));
+}
+
+async function applyShipsagarTag(shopify_id, tag, prevTag) {
+  const { order } = await shopifyREST(`/orders/${shopify_id}.json?fields=id,tags`);
+  let tags = (order.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  if (prevTag) tags = tags.filter(t => t !== prevTag);
+  if (tag && !tags.includes(tag)) tags.push(tag);
+  await shopifyREST(`/orders/${shopify_id}.json`, { method: 'PUT', body: JSON.stringify({ order: { id: shopify_id, tags: tags.join(', ') } }) });
+}
+
+async function runShipsagarSync({ orderIds } = {}) {
+  const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+  if (!creds) return { skipped: true, reason: 'ShipSagar not connected' };
+
+  const startedAt = new Date();
+  const logLines = [];
+  const log = (msg) => { console.log(`[shipsagar-sync] ${msg}`); logLines.push(msg); };
+  log(`━━━ Sync started at ${startedAt.toISOString()} ━━━`);
+
+  let checked = 0, updated = 0, errors = 0;
+  try {
+    const tagMap = await ensureShipsagarTagDefaults();
+
+    let records = await mdb.collection('order_stage').find({
+      stage: { $nin: ['new', 'cancelled'] },
+      awb: { $exists: true, $ne: '' },
+    }).toArray();
+
+    const scopeIds = orderIds ? new Set(orderIds) : await getShipsagarSyncOrderIds();
+    if (scopeIds) records = records.filter(r => scopeIds.has(r.shopify_id));
+
+    // Dedupe by AWB — one ShipSagar call per shipment, not per order row
+    const byAwb = new Map();
+    for (const r of records) {
+      if (!byAwb.has(r.awb)) byAwb.set(r.awb, []);
+      byAwb.get(r.awb).push(r);
+    }
+    log(`Found ${byAwb.size} unique AWB(s) across ${records.length} order(s) in scope`);
+
+    for (const [awb, recs] of byAwb) {
+      checked++;
+      let result;
+      try { result = await shipsagarTrackShipment(awb); }
+      catch (e) { log(`❌  AWB ${awb} | track error: ${e.message}`); errors++; continue; }
+      if (!result) { log(`❓  AWB ${awb} | no tracking history yet`); continue; }
+
+      const newStage = shipsagarStatusToStage(result.description);
+      const newTag = resolveTagForStage(newStage, tagMap);
+
+      for (const rec of recs) {
+        if (rec.stage === newStage) {
+          log(`✓   ${rec.shopify_id} | AWB ${awb} | ${rec.stage} (no change) | ${result.description}`);
+          continue;
+        }
+        log(`🔄  ${rec.shopify_id} | AWB ${awb} | ${rec.stage} → ${newStage} | ${result.description}`);
+        await OS.upsert(rec.shopify_id, { stage: newStage, updated_at: new Date().toISOString() });
+        updated++;
+
+        try { await applyShipsagarTag(rec.shopify_id, newTag, rec.shipsagar_tag); await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $set: { shipsagar_tag: newTag } }); }
+        catch (e) { log(`⚠️  ${rec.shopify_id} | tag apply failed: ${e.message}`); }
+
+        const emailsSent = rec.emails_sent || [];
+        if (emailsSent.includes(newStage)) continue;
+        try {
+          const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
+          const email = order.email || order.contact_email;
+          const courier = rec.courier || '', trackingUrl = rec.tracking_url || '';
+          const imageMap = await fetchProductImages((order.line_items || []).map(li => li.product_id).filter(Boolean));
+          if (newStage === 'ndr') {
+            if (email) await sendEmail({ to: email, subject: `Delivery attempt failed for ${order.name}`, html: templateNDR({ order, message: result.description, imageMap }) });
+            const cfg = await getSmtpConfig();
+            if (cfg) await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} flagged NDR`, html: templateNDRAdmin({ order, message: result.description }) });
+          } else if (email) {
+            let html, subject;
+            if (newStage === 'transit')        { html = templateInTransit({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is on the way 📦`; }
+            else if (newStage === 'ofd')        { html = templateOFD({ order, awb, courier, trackingUrl, imageMap }); subject = `Your order ${order.name} is out for delivery today! 🛵`; }
+            else if (newStage === 'delivered')  { html = templateDelivered({ order, imageMap }); subject = `Your order ${order.name} has been delivered ✅`; }
+            if (html) await sendEmail({ to: email, subject, html });
+          }
+          await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: newStage } });
+        } catch (e) { log(`❌  ${rec.shopify_id} | email error: ${e.message}`); errors++; }
+      }
+      await sleep(300); // be gentle on ShipSagar's API
+    }
+  } catch (e) {
+    log(`❌  sync error: ${e.message}`); errors++;
+  }
+
+  const summary = `━━━ Sync done | checked: ${checked} | updated: ${updated} | errors: ${errors} | duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s ━━━`;
+  log(summary);
+  await mdb.collection('shipsagar_cron_log').insertOne({ started_at: startedAt, finished_at: new Date(), checked, updated, errors, lines: logLines });
+  const all = await mdb.collection('shipsagar_cron_log').find({}, { projection: { _id: 1 } }).sort({ started_at: -1 }).toArray();
+  if (all.length > 30) {
+    const toDelete = all.slice(30).map(d => d._id);
+    await mdb.collection('shipsagar_cron_log').deleteMany({ _id: { $in: toDelete } });
+  }
+  return { checked, updated, errors };
+}
+
+app.post('/admin/shipsagar/sync', adminAuth, async (req, res) => {
+  try { res.json(await runShipsagarSync({ orderIds: req.body?.orderIds })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/admin/shipsagar/push', adminAuth, async (req, res) => {
+  try {
+    const { awb, courier, orderId } = req.body || {};
+    const { order } = await shopifyREST(`/orders/${orderId}.json?fields=id,name,email,customer,phone`);
+    const result = await shipsagarPushShipment({
+      awb, courierCode: toShipSagarCourierCode(courier), orderNo: order.name,
+      customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+      email: order.email || '', mobileNo: order.phone || order.customer?.phone || '',
+    });
+    res.json({ ok: true, result });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/admin/shipsagar/debug', adminAuth, async (req, res) => {
+  try { res.json(await shipsagarTrackShipment(req.query.awb)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/admin/shipsagar/logs', adminAuth, async (req, res) => {
+  const logs = await mdb.collection('shipsagar_cron_log').find({}).sort({ started_at: -1 }).limit(20).toArray();
+  res.json(logs);
+});
+
+app.get('/admin/shipsagar/test-orders', adminAuth, async (req, res) => {
+  const orders = await mdb.collection('orders').find({ fulfillment_status: 'fulfilled' }, { projection: { shopify_id: 1, name: 1, _id: 0 } }).sort({ created_at: -1 }).limit(10).toArray();
+  const stages = await mdb.collection('order_stage').find({ shopify_id: { $in: orders.map(o => o.shopify_id) } }, { projection: { shopify_id: 1, awb: 1, courier: 1, stage: 1, _id: 0 } }).toArray();
+  const byId = Object.fromEntries(stages.map(s => [s.shopify_id, s]));
+  res.json(orders.map(o => ({ ...o, ...byId[o.shopify_id] })));
+});
+
+const SHIPSAGAR_SYNC_SCOPES = ['10', '50', '100', '7d', '30d', '80d', 'all'];
+
+app.get('/admin/shipsagar/sync-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { shipsagar_sync_scope: 1, shipsagar_auto_enabled: 1, _id: 0 } });
+  res.json({ shipsagar_sync_scope: doc?.shipsagar_sync_scope || '10', shipsagar_auto_enabled: doc?.shipsagar_auto_enabled !== false });
+});
+
+app.post('/admin/shipsagar/sync-settings', adminAuth, async (req, res) => {
+  try {
+    const { shipsagar_sync_scope, shipsagar_auto_enabled } = req.body || {};
+    if (shipsagar_sync_scope && !SHIPSAGAR_SYNC_SCOPES.includes(shipsagar_sync_scope))
+      return res.status(400).json({ error: 'Invalid scope' });
+    const update = { updated_at: new Date() };
+    if (shipsagar_sync_scope) update.shipsagar_sync_scope = shipsagar_sync_scope;
+    if (shipsagar_auto_enabled !== undefined) update.shipsagar_auto_enabled = !!shipsagar_auto_enabled;
+    await mdb.collection('settings').updateOne({}, { $set: update }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, brand: BRAND_NAME, shop: SHOP_DOMAIN }));
 
@@ -2223,6 +2506,14 @@ connectMongo().then(async () => {
       // Move orders stuck in 'new' for 7+ days to 'hold' — runs every 6 hours
       runHoldCheck();
       setInterval(runHoldCheck, 6 * 60 * 60 * 1000);
+
+      // ShipSagar AWB tracking — every 2 hours, only if credentials connected
+      mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }).then(creds => {
+        if (!creds) return;
+        runShipsagarSync();
+        setInterval(runShipsagarSync, 2 * 60 * 60 * 1000);
+        console.log('✅  ShipSagar auto-sync enabled (every 2 hours)');
+      }).catch(()=>{});
     }, 30000);
     console.log('✅  Tracking auto-sync enabled (every 2 hours)');
     console.log('✅  Order DB refresh enabled (every 30 min)');
