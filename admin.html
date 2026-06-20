@@ -18,6 +18,8 @@
   --radius:10px;--radius-sm:6px;
   --sb-bg:#0d0d0d;--sb-border:#1a1a1a;--sb-active:#1e1e1e;--sb-active-border:#2a2a2a;
   --sb-text:#666;--sb-text-active:#fff;
+  --overlay-1:#ffffff0d;--overlay-2:#ffffff11;--overlay-3:#ffffff14;--overlay-4:#ffffff18;--overlay-5:#ffffff22;
+  --pill-border-active:#555;
 }
 body[data-theme="bw"]{
   --bg:#000000;--bg-card:#0a0a0a;--bg-card2:#111111;
@@ -44,6 +46,8 @@ body[data-theme="light"]{
   --green:#16a34a;--red:#dc2626;--yellow:#d97706;--cyan:#0891b2;--purple:#7c3aed;
   --sb-bg:#ffffff;--sb-border:#e8e8e8;--sb-active:#f0f0f0;--sb-active-border:#d0d0d0;
   --sb-text:#999;--sb-text-active:#000;
+  --overlay-1:#0000000a;--overlay-2:#0000000e;--overlay-3:#00000012;--overlay-4:#00000016;--overlay-5:#0000001f;
+  --pill-border-active:#999;
 }
 body[data-theme="light"] .badge-green{background:#16a34a18;color:#16a34a}
 body[data-theme="light"] .badge-red{background:#dc262618;color:#dc2626}
@@ -63,7 +67,7 @@ body[data-theme="light"] .alert-success{background:#16a34a10;border-color:#16a34
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
 input,select,textarea{background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border-color .15s;font-family:inherit}
 input:focus,select:focus,textarea:focus{border-color:#666}
-select option{background:#1c1c1c}
+select option{background:var(--bg-card2);color:var(--text)}
 button{cursor:pointer;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;padding:8px 16px;transition:all .15s}
 .btn-primary{background:#fff;color:#000;padding:9px 20px}
 .btn-primary:hover{background:#e5e5e5}
@@ -264,13 +268,13 @@ function DateRangePicker({ from, to, onChange }) {
               return (
                 <div key={p.label} onClick={()=>applyPreset(p)} style={{
                   padding:'8px 16px', fontSize:13, cursor:'pointer',
-                  background: active ? '#ffffff11' : 'transparent',
-                  color: active ? '#fff' : 'var(--text-muted)',
+                  background: active ? 'var(--overlay-2)' : 'transparent',
+                  color: active ? 'var(--text)' : 'var(--text-muted)',
                   fontWeight: active ? 700 : 400,
                   display:'flex', justifyContent:'space-between', alignItems:'center',
                 }}
-                onMouseEnter={e=>e.currentTarget.style.background='#ffffff0d'}
-                onMouseLeave={e=>e.currentTarget.style.background=active?'#ffffff11':'transparent'}>
+                onMouseEnter={e=>e.currentTarget.style.background='var(--overlay-1)'}
+                onMouseLeave={e=>e.currentTarget.style.background=active?'var(--overlay-2)':'transparent'}>
                   {p.label}
                   {active && <span style={{fontSize:10,color:'var(--green)'}}>✓</span>}
                 </div>
@@ -344,7 +348,7 @@ function Sidebar({ tab, setTab, onLogout, iconPreset }) {
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:34,height:34,background:'#fff',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:900,color:'#000',flexShrink:0}}>✓</div>
           <div>
-            <div style={{fontWeight:800,fontSize:14,color:'#fff',letterSpacing:'-0.3px'}}>{brand()}</div>
+            <div style={{fontWeight:800,fontSize:14,color:'var(--sb-text-active)',letterSpacing:'-0.3px'}}>{brand()}</div>
             <div style={{fontSize:10,color:'var(--sb-text)'}}>by Tisco</div>
           </div>
         </div>
@@ -385,7 +389,7 @@ function MiniStat({ label, value, sub, color }) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:2}}>
       <div style={{fontSize:11,color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:.6}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:800,color:color||'#fff'}}>{value}</div>
+      <div style={{fontSize:20,fontWeight:800,color:color||'var(--text)'}}>{value}</div>
       {sub && <div style={{fontSize:11,color:'var(--text-muted)'}}>{sub}</div>}
     </div>
   );
@@ -427,7 +431,7 @@ function Dashboard() {
     <div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
         <div>
-          <h2 style={{fontSize:20,fontWeight:800,color:'#fff'}}>Dashboard</h2>
+          <h2 style={{fontSize:20,fontWeight:800,color:'var(--text)'}}>Dashboard</h2>
           <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Store performance overview</p>
         </div>
         <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}} />
@@ -438,7 +442,7 @@ function Dashboard() {
         {/* Row 1 — Top KPIs */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12,marginBottom:16}}>
           {[
-            {label:'Total Orders',value:(s.total||0).toLocaleString(),color:'#fff',icon:'📦'},
+            {label:'Total Orders',value:(s.total||0).toLocaleString(),color:'var(--text)',icon:'📦'},
             {label:'Revenue',value:fmtMoney(s.revenue||0),color:'var(--purple)',icon:'💰'},
             {label:'Avg Order Value',value:fmtMoney(s.aov||0),color:'var(--cyan)',icon:'📊'},
             {label:'Dispatched',value:dispatchedOrders.toLocaleString(),color:'var(--cyan)',icon:'🚀',sub:dispatchRate+'% of total'},
@@ -751,8 +755,8 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
         <div style={{display:'flex',gap:0,padding:'0 24px',borderBottom:'1px solid var(--border)'}}>
           {tabs.map(([id,label])=>(
             <button key={id} onClick={()=>setActiveTab(id)} style={{
-              padding:'10px 14px',background:'transparent',border:'none',borderBottom:`2px solid ${activeTab===id?'#fff':'transparent'}`,
-              color:activeTab===id?'#fff':'var(--text-muted)',fontSize:13,fontWeight:activeTab===id?700:400,cursor:'pointer',transition:'all .15s'
+              padding:'10px 14px',background:'transparent',border:'none',borderBottom:`2px solid ${activeTab===id?'var(--accent)':'transparent'}`,
+              color:activeTab===id?'var(--text)':'var(--text-muted)',fontSize:13,fontWeight:activeTab===id?700:400,cursor:'pointer',transition:'all .15s'
             }}>{label}</button>
           ))}
         </div>
@@ -1020,12 +1024,12 @@ function Orders() {
           const label = s===''?'All':s.charAt(0).toUpperCase()+s.slice(1);
           return (
             <button key={s} onClick={()=>{setStage(s);setPage(1);}} style={{
-              padding:'5px 12px',borderRadius:20,border:'1px solid '+(active?'#555':'var(--border)'),
-              background:active?'#ffffff18':'transparent',color:active?'#fff':'var(--text-muted)',
+              padding:'5px 12px',borderRadius:20,border:'1px solid '+(active?'var(--pill-border-active)':'var(--border)'),
+              background:active?'var(--overlay-4)':'transparent',color:active?'var(--text)':'var(--text-muted)',
               fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',transition:'all .15s',display:'flex',alignItems:'center',gap:5
             }}>
               {label}
-              <span style={{background:active?'#ffffff22':'var(--bg-card2)',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{count}</span>
+              <span style={{background:active?'var(--overlay-5)':'var(--bg-card2)',color:'var(--text)',borderRadius:10,padding:'1px 6px',fontSize:10,fontWeight:700}}>{count}</span>
             </button>
           );
         })}
@@ -1107,8 +1111,8 @@ function Returns() {
         {['pending','approved','rejected','in_progress','completed'].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{
             padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
-            border:'1px solid '+(tab===t?'#555':'var(--border)'),
-            background:tab===t?'#ffffff14':'transparent',color:tab===t?'#fff':'var(--text-muted)',textTransform:'capitalize'
+            border:'1px solid '+(tab===t?'var(--pill-border-active)':'var(--border)'),
+            background:tab===t?'var(--overlay-3)':'transparent',color:tab===t?'var(--text)':'var(--text-muted)',textTransform:'capitalize'
           }}>{t.replace('_',' ')}</button>
         ))}
       </div>
@@ -1423,7 +1427,7 @@ function Emails() {
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Emails</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18}}>
         {[['config','SMTP Config'],['test','Preview & Test'],['logs','Email Logs']].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
+          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 14px',borderRadius:6,border:'1px solid '+(tab===id?'var(--pill-border-active)':'var(--border)'),background:tab===id?'var(--overlay-3)':'transparent',color:tab===id?'var(--text)':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
@@ -1706,7 +1710,7 @@ function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }
                     <div key={t} onClick={()=>addTag(t)} style={{
                       padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'monospace',
                     }}
-                    onMouseEnter={e=>e.currentTarget.style.background='#ffffff0d'}
+                    onMouseEnter={e=>e.currentTarget.style.background='var(--overlay-1)'}
                     onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                       {t}
                     </div>
@@ -1918,7 +1922,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
         {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['sync','Tracking Sync'],['security','Security'],['store','Store'],['appearance','Appearance']].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'#555':'var(--border)'),background:tab===id?'#ffffff14':'transparent',color:tab===id?'#fff':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
+          <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'var(--pill-border-active)':'var(--border)'),background:tab===id?'var(--overlay-3)':'transparent',color:tab===id?'var(--text)':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
