@@ -1433,8 +1433,12 @@ async function scrapeEshipzStatus(trackingUrl) {
   }
 }
 
-async function runTrackingSync() {
+async function runTrackingSync({ manual } = {}) {
   if (!SHOPIFY_TOKEN || !SHOP_DOMAIN || SHOP_DOMAIN.startsWith('.')) return;
+  if (!manual) {
+    const cfg = await mdb.collection('settings').findOne({}, { projection: { eshipz_cron_enabled: 1, _id: 0 } });
+    if (cfg?.eshipz_cron_enabled === false) { console.log('[tracking-sync] skipped — eShipz cron disabled in Settings'); return; }
+  }
   const startedAt = new Date();
   const logLines = [];
   const log = (msg) => { console.log(`[tracking-sync] ${msg}`); logLines.push(msg); };
@@ -1749,7 +1753,7 @@ app.post('/admin/run-hold-check', adminAuth, async (req, res) => {
 // Manual trigger endpoint
 app.post('/admin/sync-tracking', adminAuth, async (req, res) => {
   res.json({ ok: true, message: 'Tracking sync started' });
-  runTrackingSync();
+  runTrackingSync({ manual: true });
 });
 
 app.get('/admin/sync-tracking/status', adminAuth, async (req, res) => {
@@ -1895,16 +1899,19 @@ app.post('/admin/rr-settings', adminAuth, async (req, res) => {
 const TRACKING_SYNC_SCOPES = ['50', '100', '7d', '30d', '80d', 'all'];
 
 app.get('/admin/sync-settings', adminAuth, async (req, res) => {
-  const doc = await mdb.collection('settings').findOne({}, { projection: { tracking_sync_scope: 1, _id: 0 } });
-  res.json({ tracking_sync_scope: doc?.tracking_sync_scope || '100' });
+  const doc = await mdb.collection('settings').findOne({}, { projection: { tracking_sync_scope: 1, eshipz_cron_enabled: 1, _id: 0 } });
+  res.json({ tracking_sync_scope: doc?.tracking_sync_scope || '100', eshipz_cron_enabled: doc?.eshipz_cron_enabled !== false });
 });
 
 app.post('/admin/sync-settings', adminAuth, async (req, res) => {
   try {
-    const { tracking_sync_scope } = req.body || {};
-    if (!TRACKING_SYNC_SCOPES.includes(tracking_sync_scope))
+    const { tracking_sync_scope, eshipz_cron_enabled } = req.body || {};
+    if (tracking_sync_scope && !TRACKING_SYNC_SCOPES.includes(tracking_sync_scope))
       return res.status(400).json({ error: 'Invalid scope' });
-    await mdb.collection('settings').updateOne({}, { $set: { tracking_sync_scope, updated_at: new Date() } }, { upsert: true });
+    const update = { updated_at: new Date() };
+    if (tracking_sync_scope) update.tracking_sync_scope = tracking_sync_scope;
+    if (eshipz_cron_enabled !== undefined) update.eshipz_cron_enabled = !!eshipz_cron_enabled;
+    await mdb.collection('settings').updateOne({}, { $set: update }, { upsert: true });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2066,9 +2073,14 @@ async function applyShipsagarTag(shopify_id, tag, prevTag) {
   await shopifyREST(`/orders/${shopify_id}.json`, { method: 'PUT', body: JSON.stringify({ order: { id: shopify_id, tags: tags.join(', ') } }) });
 }
 
-async function runShipsagarSync({ orderIds } = {}) {
+async function runShipsagarSync({ orderIds, manual } = {}) {
   const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
   if (!creds) return { skipped: true, reason: 'ShipSagar not connected' };
+
+  if (!manual) {
+    const cfg = await mdb.collection('settings').findOne({}, { projection: { shipsagar_cron_enabled: 1, _id: 0 } });
+    if (cfg?.shipsagar_cron_enabled === false) { console.log('[shipsagar-sync] skipped — ShipSagar cron disabled in Settings'); return { skipped: true, reason: 'ShipSagar cron disabled' }; }
+  }
 
   const startedAt = new Date();
   const logLines = [];
@@ -2174,7 +2186,7 @@ async function runShipsagarSync({ orderIds } = {}) {
 }
 
 app.post('/admin/shipsagar/sync', adminAuth, async (req, res) => {
-  try { res.json(await runShipsagarSync({ orderIds: req.body?.orderIds })); }
+  try { res.json(await runShipsagarSync({ orderIds: req.body?.orderIds, manual: true })); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2269,18 +2281,23 @@ app.get('/admin/shipsagar/test-orders', adminAuth, async (req, res) => {
 const SHIPSAGAR_SYNC_SCOPES = ['10', '50', '100', '7d', '30d', '80d', 'all'];
 
 app.get('/admin/shipsagar/sync-settings', adminAuth, async (req, res) => {
-  const doc = await mdb.collection('settings').findOne({}, { projection: { shipsagar_sync_scope: 1, shipsagar_auto_enabled: 1, _id: 0 } });
-  res.json({ shipsagar_sync_scope: doc?.shipsagar_sync_scope || '10', shipsagar_auto_enabled: doc?.shipsagar_auto_enabled !== false });
+  const doc = await mdb.collection('settings').findOne({}, { projection: { shipsagar_sync_scope: 1, shipsagar_auto_enabled: 1, shipsagar_cron_enabled: 1, _id: 0 } });
+  res.json({
+    shipsagar_sync_scope: doc?.shipsagar_sync_scope || '10',
+    shipsagar_auto_enabled: doc?.shipsagar_auto_enabled !== false,
+    shipsagar_cron_enabled: doc?.shipsagar_cron_enabled !== false,
+  });
 });
 
 app.post('/admin/shipsagar/sync-settings', adminAuth, async (req, res) => {
   try {
-    const { shipsagar_sync_scope, shipsagar_auto_enabled } = req.body || {};
+    const { shipsagar_sync_scope, shipsagar_auto_enabled, shipsagar_cron_enabled } = req.body || {};
     if (shipsagar_sync_scope && !SHIPSAGAR_SYNC_SCOPES.includes(shipsagar_sync_scope))
       return res.status(400).json({ error: 'Invalid scope' });
     const update = { updated_at: new Date() };
     if (shipsagar_sync_scope) update.shipsagar_sync_scope = shipsagar_sync_scope;
     if (shipsagar_auto_enabled !== undefined) update.shipsagar_auto_enabled = !!shipsagar_auto_enabled;
+    if (shipsagar_cron_enabled !== undefined) update.shipsagar_cron_enabled = !!shipsagar_cron_enabled;
     await mdb.collection('settings').updateOne({}, { $set: update }, { upsert: true });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }

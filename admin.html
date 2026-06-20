@@ -1734,13 +1734,14 @@ function AudienceSettings({ segments, shopifyTags, tagsLoading, onSave, saving }
 function ShipsagarPanel() {
   const [scope,setScope]       = useState('10');
   const [autoEnabled,setAutoEnabled] = useState(true);
+  const [cronEnabled,setCronEnabled] = useState(true);
   const [testOrders,setTestOrders]   = useState([]);
   const [logs,setLogs]         = useState([]);
   const [syncing,setSyncing]   = useState(false);
   const [msg,setMsg]           = useState(null);
 
   const load = () => {
-    apiFetch('/admin/shipsagar/sync-settings').then(d=>{ setScope(d?.shipsagar_sync_scope||'10'); setAutoEnabled(d?.shipsagar_auto_enabled!==false); });
+    apiFetch('/admin/shipsagar/sync-settings').then(d=>{ setScope(d?.shipsagar_sync_scope||'10'); setAutoEnabled(d?.shipsagar_auto_enabled!==false); setCronEnabled(d?.shipsagar_cron_enabled!==false); });
     apiFetch('/admin/shipsagar/test-orders').then(d=>setTestOrders(d||[]));
     apiFetch('/admin/shipsagar/logs').then(d=>setLogs(d||[]));
   };
@@ -1755,6 +1756,12 @@ function ShipsagarPanel() {
   const saveAuto = async (val) => {
     setAutoEnabled(val);
     try { await apiFetch('/admin/shipsagar/sync-settings',{method:'POST',body:JSON.stringify({shipsagar_auto_enabled:val})}); }
+    catch(e){ setMsg({type:'error',text:e.message}); }
+  };
+
+  const saveCronEnabled = async (val) => {
+    setCronEnabled(val); setMsg(null);
+    try { await apiFetch('/admin/shipsagar/sync-settings',{method:'POST',body:JSON.stringify({shipsagar_cron_enabled:val})}); setMsg({type:'success',text:`ShipSagar cron ${val?'enabled':'disabled'}!`}); }
     catch(e){ setMsg({type:'error',text:e.message}); }
   };
 
@@ -1788,6 +1795,16 @@ function ShipsagarPanel() {
         API key under Settings → Shipping first.
       </p>
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,marginBottom:10}}>
+        <div>
+          <div style={{fontWeight:600,fontSize:13}}>ShipSagar Cron Tracking</div>
+          <div style={{fontSize:11,color:'var(--text-muted)'}}>Turn off if you want to rely on eShipz only, or to avoid both running at once</div>
+        </div>
+        <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+          <input type="checkbox" checked={cronEnabled} onChange={e=>saveCronEnabled(e.target.checked)} style={{width:18,height:18,accentColor:'#111'}}/>
+        </label>
+      </div>
 
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,marginBottom:16}}>
         <div>
@@ -1855,6 +1872,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
   const [tagsLoading,setTagsLoading] = useState(false);
   const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7,force_return_code:''});
   const [syncScope,setSyncScope] = useState('100');
+  const [eshipzEnabled,setEshipzEnabled] = useState(true);
   const [segments,setSegments]   = useState([]);
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
@@ -1863,7 +1881,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
     apiFetch('/admin/staff').then(d=>setStaff(d||[]));
     apiFetch('/admin/tag-mappings').then(d=>setTagMap(d||{}));
     apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
-    apiFetch('/admin/sync-settings').then(d=>setSyncScope(d?.tracking_sync_scope||'100'));
+    apiFetch('/admin/sync-settings').then(d=>{ setSyncScope(d?.tracking_sync_scope||'100'); setEshipzEnabled(d?.eshipz_cron_enabled!==false); });
     apiFetch('/admin/audience-segments').then(d=>setSegments(d||[]));
     setTagsLoading(true);
     apiFetch('/admin/shopify-tags').then(d=>setShopifyTags(d||[])).finally(()=>setTagsLoading(false));
@@ -1915,6 +1933,11 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
     setSyncScope(val); setSaving(true); setMsg(null);
     try { await apiFetch('/admin/sync-settings',{method:'POST',body:JSON.stringify({tracking_sync_scope:val})}); setMsg({type:'success',text:'Tracking sync range saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
     setSaving(false);
+  };
+
+  const saveEshipzEnabled = async (val) => {
+    setEshipzEnabled(val); setMsg(null);
+    try { await apiFetch('/admin/sync-settings',{method:'POST',body:JSON.stringify({eshipz_cron_enabled:val})}); setMsg({type:'success',text:`eShipz cron ${val?'enabled':'disabled'}!`}); } catch(e){setMsg({type:'error',text:e.message});}
   };
 
   return (
@@ -2042,6 +2065,15 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
 
       {tab==='sync' && (
         <div className="card" style={{maxWidth:480}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,marginBottom:16}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13}}>eShipz Cron Tracking</div>
+              <div style={{fontSize:11,color:'var(--text-muted)'}}>Turn off if you want to rely on ShipSagar only, or to avoid both running at once</div>
+            </div>
+            <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+              <input type="checkbox" checked={eshipzEnabled} onChange={e=>saveEshipzEnabled(e.target.checked)} style={{width:18,height:18,accentColor:'#111'}}/>
+            </label>
+          </div>
           <div style={{fontWeight:700,marginBottom:6}}>Tracking Sync Range</div>
           <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>
             The auto tracking sync (runs every 2 hours) checks shipment status for orders within this range.
