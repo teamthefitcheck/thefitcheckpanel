@@ -2127,13 +2127,21 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
   try {
     const tagMap = await ensureShipsagarTagDefaults();
 
-    let records = await mdb.collection('order_stage').find({
-      stage: { $nin: ['new', 'cancelled'] },
-      awb: { $exists: true, $ne: '' },
-    }).toArray();
-
-    const scopeIds = orderIds ? new Set(orderIds) : await getShipsagarSyncOrderIds();
-    if (scopeIds) records = records.filter(r => scopeIds.has(r.shopify_id));
+    // Cron always tracks every registered AWB that hasn't reached a terminal stage.
+    // Manual calls with explicit orderIds bypass this and use whatever is passed.
+    let records;
+    if (orderIds) {
+      records = await mdb.collection('order_stage').find({
+        shopify_id: { $in: [...orderIds] },
+        awb: { $exists: true, $ne: '' },
+      }).toArray();
+    } else {
+      records = await mdb.collection('order_stage').find({
+        shipsagar_pushed: true,
+        stage: { $nin: ['delivered', 'rto', 'cancelled'] },
+        awb: { $exists: true, $ne: '' },
+      }).toArray();
+    }
 
     // Enrich records with order_name for reporting
     const orderNames = await mdb.collection('orders').find({ shopify_id: { $in: records.map(r => r.shopify_id) } }, { projection: { shopify_id: 1, name: 1, _id: 0 } }).toArray();
