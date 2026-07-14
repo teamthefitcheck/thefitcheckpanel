@@ -2119,6 +2119,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
 
   const startedAt = new Date();
   const logLines = [];
+  const stageChanges = []; // per-order detail for report
   const log = (msg) => { console.log(`[shipsagar-sync] ${msg}`); logLines.push(msg); };
   log(`━━━ Sync started at ${startedAt.toISOString()} ━━━`);
 
@@ -2133,6 +2134,11 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
 
     const scopeIds = orderIds ? new Set(orderIds) : await getShipsagarSyncOrderIds();
     if (scopeIds) records = records.filter(r => scopeIds.has(r.shopify_id));
+
+    // Enrich records with order_name for reporting
+    const orderNames = await mdb.collection('orders').find({ shopify_id: { $in: records.map(r => r.shopify_id) } }, { projection: { shopify_id: 1, name: 1, _id: 0 } }).toArray();
+    const nameMap = Object.fromEntries(orderNames.map(o => [o.shopify_id, o.name]));
+    records.forEach(r => { r.order_name = nameMap[r.shopify_id] || r.shopify_id; });
 
     // Dedupe by AWB — one ShipSagar call per shipment, not per order row
     const byAwb = new Map();
@@ -2178,6 +2184,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
         log(`🔄  ${rec.shopify_id} | AWB ${awb} | ${rec.stage} → ${newStage} | ${result.description}`);
         await OS.upsert(rec.shopify_id, { stage: newStage, updated_at: new Date().toISOString() });
         updated++;
+        stageChanges.push({ shopify_id: rec.shopify_id, order_name: rec.order_name || rec.shopify_id, awb, from_stage: rec.stage || 'unknown', to_stage: newStage, courier_message: result.description, timestamp: new Date().toISOString() });
 
         try { await applyShipsagarTag(rec.shopify_id, newTag, rec.shipsagar_tag); await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $set: { shipsagar_tag: newTag } }); }
         catch (e) { log(`⚠️  ${rec.shopify_id} | tag apply failed: ${e.message}`); }
@@ -2210,20 +2217,71 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
     log(`❌  sync error: ${e.message}`); errors++;
   }
 
-  const summary = `━━━ Sync done | checked: ${checked} | updated: ${updated} | errors: ${errors} | duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s ━━━`;
+  const duration = ((Date.now() - startedAt) / 1000).toFixed(1);
+  const summary = `━━━ Sync done | checked: ${checked} | updated: ${updated} | errors: ${errors} | duration: ${duration}s ━━━`;
   log(summary);
-  await mdb.collection('shipsagar_cron_log').insertOne({ started_at: startedAt, finished_at: new Date(), checked, updated, errors, lines: logLines });
+
+  // Persist cron log (last 30 kept)
+  const reportDoc = { started_at: startedAt, finished_at: new Date(), checked, updated, errors, lines: logLines, stage_changes: stageChanges, triggered_by: manual ? 'manual' : 'cron' };
+  await mdb.collection('shipsagar_cron_log').insertOne(reportDoc);
   const all = await mdb.collection('shipsagar_cron_log').find({}, { projection: { _id: 1 } }).sort({ started_at: -1 }).toArray();
   if (all.length > 30) {
     const toDelete = all.slice(30).map(d => d._id);
     await mdb.collection('shipsagar_cron_log').deleteMany({ _id: { $in: toDelete } });
   }
-  return { checked, updated, errors };
+
+  // Send admin email summary if anything changed or errored
+  if (updated > 0 || errors > 0) {
+    try {
+      const cfg = await getSmtpConfig();
+      if (cfg) {
+        const stageRows = stageChanges.map(c =>
+          `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${c.order_name}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${c.awb}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${c.from_stage}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600">${c.to_stage}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#666;font-size:11px">${c.courier_message}</td></tr>`
+        ).join('');
+        const adminHtml = `<div style="font-family:sans-serif;max-width:680px;margin:0 auto">
+  <div style="background:#111;padding:20px 28px;border-radius:8px 8px 0 0">
+    <span style="color:#fff;font-size:18px;font-weight:700">ShipSagar Sync Report</span>
+    <span style="color:#aaa;font-size:12px;margin-left:12px">${new Date(startedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</span>
+  </div>
+  <div style="background:#f9f9f9;padding:20px 28px">
+    <div style="display:flex;gap:24px;margin-bottom:20px">
+      <div style="background:#fff;padding:14px 20px;border-radius:8px;text-align:center;flex:1;border:1px solid #eee"><div style="font-size:24px;font-weight:700">${checked}</div><div style="font-size:12px;color:#666">Checked</div></div>
+      <div style="background:#fff;padding:14px 20px;border-radius:8px;text-align:center;flex:1;border:1px solid #eee"><div style="font-size:24px;font-weight:700;color:#22c55e">${updated}</div><div style="font-size:12px;color:#666">Updated</div></div>
+      <div style="background:#fff;padding:14px 20px;border-radius:8px;text-align:center;flex:1;border:1px solid #eee"><div style="font-size:24px;font-weight:700;color:${errors>0?'#ef4444':'#999'}">${errors}</div><div style="font-size:12px;color:#666">Errors</div></div>
+      <div style="background:#fff;padding:14px 20px;border-radius:8px;text-align:center;flex:1;border:1px solid #eee"><div style="font-size:24px;font-weight:700">${duration}s</div><div style="font-size:12px;color:#666">Duration</div></div>
+    </div>
+    ${stageChanges.length > 0 ? `<div style="background:#fff;border-radius:8px;border:1px solid #eee;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid #eee;font-weight:600;font-size:13px">Stage Movements (${stageChanges.length})</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f3f4f6"><th style="padding:8px 10px;text-align:left">Order</th><th style="padding:8px 10px;text-align:left">AWB</th><th style="padding:8px 10px;text-align:left">From</th><th style="padding:8px 10px;text-align:left">To</th><th style="padding:8px 10px;text-align:left">Courier Message</th></tr></thead>
+        <tbody>${stageRows}</tbody>
+      </table>
+    </div>` : '<p style="color:#666;font-size:13px">No stage changes this run.</p>'}
+  </div>
+  <div style="background:#111;padding:14px 28px;border-radius:0 0 8px 8px;text-align:center">
+    <span style="color:#aaa;font-size:11px">Antortiq Admin Panel · ShipSagar Auto-Sync</span>
+  </div>
+</div>`;
+        await sendEmail({ to: cfg.from || cfg.user, subject: `ShipSagar Sync — ${updated} updated, ${errors} errors (${new Date(startedAt).toLocaleDateString('en-IN')})`, html: adminHtml });
+      }
+    } catch (e) { console.error('[shipsagar-sync] admin email error:', e.message); }
+  }
+
+  return { checked, updated, errors, stage_changes: stageChanges };
 }
 
 app.post('/admin/shipsagar/sync', adminAuth, async (req, res) => {
   try { res.json(await runShipsagarSync({ orderIds: req.body?.orderIds, manual: true })); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Convenience: crosscheck last 50 fulfilled orders specifically
+app.post('/admin/shipsagar/sync-50', adminAuth, async (req, res) => {
+  try {
+    const orders = await mdb.collection('orders').find({ fulfillment_status: 'fulfilled' }, { projection: { shopify_id: 1, _id: 0 } }).sort({ created_at: -1 }).limit(50).toArray();
+    const ids = orders.map(o => o.shopify_id);
+    res.json(await runShipsagarSync({ orderIds: ids, manual: true }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/admin/shipsagar/push', adminAuth, async (req, res) => {
@@ -2303,8 +2361,17 @@ app.get('/track/shipsagar-status', async (req, res) => {
 });
 
 app.get('/admin/shipsagar/logs', adminAuth, async (req, res) => {
-  const logs = await mdb.collection('shipsagar_cron_log').find({}).sort({ started_at: -1 }).limit(20).toArray();
+  const logs = await mdb.collection('shipsagar_cron_log').find({}, { projection: { lines: 0 } }).sort({ started_at: -1 }).limit(30).toArray();
   res.json(logs);
+});
+
+app.get('/admin/shipsagar/logs/:id', adminAuth, async (req, res) => {
+  const { ObjectId } = require('mongodb');
+  try {
+    const doc = await mdb.collection('shipsagar_cron_log').findOne({ _id: new ObjectId(req.params.id) });
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    res.json(doc);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.get('/admin/shipsagar/test-orders', adminAuth, async (req, res) => {
