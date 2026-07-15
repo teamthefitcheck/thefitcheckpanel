@@ -1924,23 +1924,11 @@ function ShipsagarPanel() {
         </div>
         <button className="btn-ghost btn-sm" onClick={runTest} disabled={syncing||testOrders.length===0} style={{marginBottom:20}}>{syncing?'Syncing…':'Run Test Sync on These 10 →'}</button>
 
-        <div style={{marginBottom:6,fontWeight:600,fontSize:13}}>Cron Tracking Range</div>
-        <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:12}}>Once you've verified the test batch works, pick the range the every-2-hour cron should track going forward.</p>
-        {[
-          ['10','Last 10 fulfilled orders (test)'],
-          ['50','Last 50 orders'],
-          ['100','Last 100 orders'],
-          ['7d','Last 7 days'],
-          ['30d','Last 30 days'],
-          ['80d','Last 80 days'],
-          ['all','All orders (no limit)'],
-        ].map(([val,label])=>(
-          <label key={val} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',border:'1px solid '+(scope===val?'var(--accent)':'var(--border)'),borderRadius:8,marginBottom:6,cursor:'pointer',background:scope===val?'var(--bg-card2)':'transparent'}}>
-            <input type="radio" name="ssScope" value={val} checked={scope===val} onChange={()=>saveScope(val)} style={{accentColor:'#111',width:16,height:16}}/>
-            <span style={{fontSize:13,fontWeight:600}}>{label}</span>
-          </label>
-        ))}
-        <button className="btn-primary btn-sm" onClick={runScopedSync} disabled={syncing} style={{marginTop:6}}>{syncing?'Syncing…':'Run Sync Now (selected range) →'}</button>
+        <div style={{background:'var(--bg-card2)',border:'1px solid var(--border)',borderRadius:8,padding:'12px 14px',marginBottom:4}}>
+          <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>What the cron tracks</div>
+          <div style={{fontSize:12,color:'var(--text-muted)',lineHeight:1.6}}>Every 2 hours the cron checks <b>all orders registered on ShipSagar</b> whose stage is not yet <b>delivered</b> or <b>rto</b>. Once an order reaches a terminal stage it drops out automatically — no manual scope needed.</div>
+        </div>
+        <button className="btn-primary btn-sm" onClick={runScopedSync} disabled={syncing} style={{marginTop:10}}>{syncing?'Syncing…':'Run Manual Sync Now (all registered) →'}</button>
       </>}
 
       {ssTab==='reports' && <>
