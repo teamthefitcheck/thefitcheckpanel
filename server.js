@@ -696,9 +696,11 @@ async function sendEmail({ to, subject, html, replyTo }) {
     } catch (e) {
       lastErr = e;
       console.warn(`[sendEmail] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${to} (${subject}): ${e.message}`);
-      // a stale pooled connection can cause spurious timeouts — drop it and reconnect fresh on retry
       _smtpTransporter && _smtpTransporter.close();
       _smtpTransporter = null;
+      // Don't retry auth/config failures — bad creds won't fix themselves
+      const fatal = /invalid login|authentication|credentials|ECONNREFUSED|ENOTFOUND|self.signed|timeout/i.test(e.message);
+      if (fatal) break;
       if (attempt < MAX_ATTEMPTS) await sleep(attempt * 5000); // 5s, 10s, 15s backoff
     }
   }
