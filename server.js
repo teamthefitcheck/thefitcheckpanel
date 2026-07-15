@@ -2071,7 +2071,7 @@ async function shipsagarTrackShipment(awb) {
 // (e.g. "out for delivery" contains "delivery" so check it before "delivered").
 function shipsagarStatusToStage(description) {
   const d = (description || '').toLowerCase();
-  if (/return\s*to\s*origin|\brto\b|returned\s*to\s*shipper/.test(d)) return 'rto';
+  if (/return(ed)?\s*to\s*(origin|shipper)|\brto\b|shipper'?s\s*request/.test(d)) return 'rto';
   if (/undelivered|refus(ed|al)|not\s*available|held\s*at|\bndr\b|address\s*(incorrect|incomplete)/.test(d)) return 'ndr';
   if (/out\s*for\s*delivery/.test(d)) return 'ofd';
   if (/delivered/.test(d)) return 'delivered';
