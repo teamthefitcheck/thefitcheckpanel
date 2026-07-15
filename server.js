@@ -665,6 +665,19 @@ async function isStageEmailEnabled(stage) {
   return doc?.stage_email_toggles?.[stage] !== false;
 }
 
+app.get('/admin/global-email-enabled', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { global_email_enabled: 1, _id: 0 } });
+  res.json({ enabled: doc?.global_email_enabled !== false });
+});
+
+app.post('/admin/global-email-enabled', adminAuth, async (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: { global_email_enabled: !!enabled, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/stage-email-settings', adminAuth, async (req, res) => {
   const doc = await mdb.collection('settings').findOne({}, { projection: { stage_email_toggles: 1, _id: 0 } });
   const toggles = doc?.stage_email_toggles || {};
@@ -680,7 +693,13 @@ app.post('/admin/stage-email-settings', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+async function isGlobalEmailEnabled() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { global_email_enabled: 1, _id: 0 } });
+  return doc?.global_email_enabled !== false;
+}
+
 async function sendEmail({ to, subject, html, replyTo }) {
+  if (!(await isGlobalEmailEnabled())) { console.log(`[sendEmail] skipped (emails globally off) — ${subject}`); return; }
   const cfg = await getSmtpConfig();
   if (!cfg) throw new Error('Email not configured. Go to Settings → Email.');
   const transporter = getSmtpTransporter(cfg);
@@ -698,9 +717,6 @@ async function sendEmail({ to, subject, html, replyTo }) {
       console.warn(`[sendEmail] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${to} (${subject}): ${e.message}`);
       _smtpTransporter && _smtpTransporter.close();
       _smtpTransporter = null;
-      // Don't retry auth/config failures — bad creds won't fix themselves
-      const fatal = /invalid login|authentication|credentials|ECONNREFUSED|ENOTFOUND|self.signed|timeout/i.test(e.message);
-      if (fatal) break;
       if (attempt < MAX_ATTEMPTS) await sleep(attempt * 5000); // 5s, 10s, 15s backoff
     }
   }

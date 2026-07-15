@@ -1294,13 +1294,21 @@ const STAGE_EMAIL_LABELS = {
 };
 
 function StageEmailToggles() {
-  const [toggles,setToggles] = useState({});
-  const [loading,setLoading] = useState(true);
-  const [msg,setMsg] = useState(null);
+  const [globalOn,setGlobalOn]   = useState(true);
+  const [toggles,setToggles]     = useState({});
+  const [loading,setLoading]     = useState(true);
+  const [msg,setMsg]             = useState(null);
 
   useEffect(()=>{
+    apiFetch('/admin/global-email-enabled').then(d=>setGlobalOn(d?.enabled!==false));
     apiFetch('/admin/stage-email-settings').then(d=>{setToggles(d||{});setLoading(false);}).catch(()=>setLoading(false));
   },[]);
+
+  const setGlobal = async (val) => {
+    setGlobalOn(val); setMsg(null);
+    try { await apiFetch('/admin/global-email-enabled',{method:'POST',body:JSON.stringify({enabled:val})}); setMsg({type:'success',text:val?'Emails enabled — customers will receive notifications.':'Emails paused — no emails will be sent until you turn this back on.'}); }
+    catch(e){ setMsg({type:'error',text:e.message}); setGlobalOn(!val); }
+  };
 
   const toggle = async (stage, val) => {
     setToggles(prev=>({...prev,[stage]:val})); setMsg(null);
@@ -1310,13 +1318,25 @@ function StageEmailToggles() {
 
   return (
     <div className="card" style={{maxWidth:560}}>
-      <div style={{fontWeight:700,marginBottom:6}}>Stage Email Toggles</div>
-      <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>
-        Turn off the customer-facing email for any stage — useful if you want to stop a particular
-        notification (e.g. Hold or Confirmed) without disabling email entirely. Admin alert emails
-        (NDR/Hold admin alerts) are not affected by these toggles.
-      </p>
+      <div style={{fontWeight:700,marginBottom:6}}>Email Notifications</div>
+
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',background:globalOn?'var(--bg-card2)':'#ef444420',border:'1px solid '+(globalOn?'var(--border)':'#ef4444'),borderRadius:10,marginBottom:16}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:14}}>{globalOn?'Emails ON':'Emails PAUSED'}</div>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{globalOn?'Customers are receiving notifications':'No emails are being sent — toggle on when ready to go live'}</div>
+        </div>
+        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+          <span style={{fontSize:12,color:'var(--text-muted)'}}>{globalOn?'On':'Off'}</span>
+          <input type="checkbox" checked={globalOn} onChange={e=>setGlobal(e.target.checked)} style={{width:20,height:20,accentColor:'#111'}}/>
+        </label>
+      </div>
+
       {msg && <div className={`alert alert-${msg.type}`} style={{marginBottom:14}}>{msg.text}</div>}
+
+      <div style={{fontWeight:600,fontSize:13,marginBottom:8,opacity:globalOn?1:0.4}}>Per-stage toggles</div>
+      <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:12,opacity:globalOn?1:0.4}}>
+        Fine-grained control — turn off a specific stage's email without pausing everything.
+      </p>
       {loading && <div style={{color:'var(--text-muted)',fontSize:13}}>Loading…</div>}
       {!loading && Object.keys(STAGE_EMAIL_LABELS).map(stage=>{
         const [label,desc] = STAGE_EMAIL_LABELS[stage];
