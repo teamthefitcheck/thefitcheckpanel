@@ -171,6 +171,9 @@ function normaliseOrder(node) {
 
 // ─── Order Stage ─────────────────────────────────────────────────────────────
 const STAGE_ORDER = ['new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'];
+function isStageAfter(stage, than) {
+  return STAGE_ORDER.indexOf(stage || 'new') > STAGE_ORDER.indexOf(than);
+}
 function higherStage(a, b) {
   const ai = STAGE_ORDER.indexOf(a || 'new');
   const bi = STAGE_ORDER.indexOf(b || 'new');
@@ -1389,7 +1392,10 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
     const tracking = ful.tracking_numbers?.[0] || ful.tracking_number || '';
     const trackUrl = ful.tracking_urls?.[0] || ful.tracking_url || '';
     const courier = ful.tracking_company || '';
-    await OS.upsert(sid, { stage: 'pickup', awb: tracking, courier, tracking_url: trackUrl, updated_at: new Date().toISOString() });
+    // Set to 'ready' on fulfillment — ShipSagar cron advances to pickup/transit etc as courier scans happen
+    const current = await OS.get(sid);
+    const newStage = isStageAfter(current?.stage, 'ready') ? current.stage : 'ready';
+    await OS.upsert(sid, { stage: newStage, awb: tracking, courier, tracking_url: trackUrl, updated_at: new Date().toISOString() });
     console.log(`[fulfillments/create] order=${sid} awb=${tracking} courier=${courier}`);
     if (tracking) {
       try {
