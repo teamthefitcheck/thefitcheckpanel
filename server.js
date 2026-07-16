@@ -493,6 +493,47 @@ app.get('/orders/stats', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Finance stats — pre-fills the P&L calculator with live data
+app.get('/admin/finance-stats', adminAuth, async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    let since = null;
+    if (period === '7d')  since = new Date(Date.now() - 7  * 86400000).toISOString();
+    if (period === '30d') since = new Date(Date.now() - 30 * 86400000).toISOString();
+    if (period === '90d') since = new Date(Date.now() - 90 * 86400000).toISOString();
+
+    const orderQuery = since
+      ? { created_at: { $gte: since }, fulfillment_status: 'fulfilled' }
+      : { fulfillment_status: 'fulfilled' };
+
+    const fulfilledOrders = await mdb.collection('orders').find(orderQuery, {
+      projection: { shopify_id: 1, total_price: 1, _id: 0 }
+    }).toArray();
+
+    const ids = fulfilledOrders.map(o => o.shopify_id);
+    const stages = await mdb.collection('order_stage').find(
+      { shopify_id: { $in: ids } },
+      { projection: { shopify_id: 1, stage: 1, _id: 0 } }
+    ).toArray();
+    const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
+
+    let totalRevenue = 0, deliveredCount = 0, rtoCount = 0, terminalCount = 0;
+    for (const o of fulfilledOrders) {
+      totalRevenue += parseFloat(o.total_price || 0);
+      const stage = stageMap[o.shopify_id];
+      if (stage === 'delivered') { deliveredCount++; terminalCount++; }
+      else if (stage === 'rto')  { rtoCount++;       terminalCount++; }
+    }
+
+    const totalOrders  = fulfilledOrders.length;
+    const aov          = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    const rtoRate      = terminalCount > 0 ? (rtoCount / terminalCount) * 100 : 0;
+    const deliveryRate = 100 - rtoRate;
+
+    res.json({ totalOrders, totalRevenue: Math.round(totalRevenue), aov: Math.round(aov), rtoRate: parseFloat(rtoRate.toFixed(1)), deliveryRate: parseFloat(deliveryRate.toFixed(1)), deliveredCount, rtoCount, terminalCount, period });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Must be before /orders/:id to avoid being swallowed by the wildcard
 app.get('/orders/audience', adminAuth, async (req, res) => {
   try {

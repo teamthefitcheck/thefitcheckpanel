@@ -122,7 +122,7 @@ const { useState, useEffect, useCallback, useRef } = React;
 
 /* ─── Theme & Icon preset ────────────────────────────────────── */
 const SIDEBAR_ICONS_EMOJI = {
-  dashboard:'📊', orders:'📦', returns:'↩', emails:'📧',
+  dashboard:'📊', orders:'📦', returns:'↩', emails:'📧', finance:'💰',
   shipping:'🚚', synclogs:'🔄', settings:'⚙',
 };
 const SIDEBAR_ICONS_MINIMAL = {
@@ -133,6 +133,7 @@ const SIDEBAR_ICONS_MINIMAL = {
   shipping:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   synclogs:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>,
   settings:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  finance:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
 };
 
 function applyTheme(theme) {
@@ -339,7 +340,7 @@ function Login({ onLogin }) {
 function Sidebar({ tab, setTab, onLogout, iconPreset }) {
   const items = [
     ['dashboard','Dashboard'],['orders','Orders'],['returns','Returns'],
-    ['emails','Emails'],['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings'],
+    ['emails','Emails'],['finance','Finance'],['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings'],
   ];
   const icons = iconPreset === 'minimal' ? SIDEBAR_ICONS_MINIMAL : SIDEBAR_ICONS_EMOJI;
   return (
@@ -2339,6 +2340,249 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
 }
 
 /* ─── Sync Logs ───────────────────────────────────────────────── */
+/* ─── Finance / P&L Calculator ───────────────── */
+function Finance() {
+  const [period, setPeriod]       = useState('30d');
+  const [loading, setLoading]     = useState(true);
+  const [live, setLive]           = useState(null);
+  const [mktMode, setMktMode]     = useState('cpp');
+
+  // Inputs — pre-filled from live, editable
+  const [totalOrders,  setTotalOrders]  = useState(500);
+  const [totalRevenue, setTotalRevenue] = useState(1200000);
+  const [rtoRate,      setRtoRate]      = useState(28);
+  const [cpp,          setCpp]          = useState(300);
+  const [totalMkt,     setTotalMkt]     = useState(150000);
+  const [productCost,  setProductCost]  = useState(380);
+  const [fwdShipping,  setFwdShipping]  = useState(100);
+  const [rtoShipping,  setRtoShipping]  = useState(100);
+  const [codRate,      setCodRate]      = useState(1.5);
+
+  const loadStats = (p) => {
+    setLoading(true);
+    apiFetch(`/admin/finance-stats?period=${p}`).then(d => {
+      if (!d || d.error) return;
+      setLive(d);
+      setTotalOrders(d.totalOrders || 500);
+      setTotalRevenue(d.totalRevenue || 1200000);
+      setRtoRate(parseFloat((d.rtoRate || 28).toFixed(1)));
+    }).finally(() => setLoading(false));
+  };
+  useEffect(() => loadStats(period), []);
+
+  const changePeriod = (p) => { setPeriod(p); loadStats(p); };
+
+  // Derived
+  const aov              = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  const rtoFrac          = rtoRate / 100;
+  const rtoOrders        = Math.round(totalOrders * rtoFrac);
+  const deliveredOrders  = totalOrders - rtoOrders;
+  const deliveryRate     = (100 - rtoRate).toFixed(1);
+  const marketing        = mktMode === 'cpp' ? totalOrders * cpp : totalMkt;
+  const effectiveCpp     = totalOrders > 0 ? marketing / totalOrders : 0;
+  const cogs             = deliveredOrders * productCost;
+  const totalFwdShip     = totalOrders * fwdShipping;
+  const totalRTOShip     = rtoOrders * rtoShipping;
+  const codCharges       = totalRevenue * codRate / 100;
+  const totalCosts       = cogs + totalFwdShip + totalRTOShip + marketing + codCharges;
+  const netProfit        = totalRevenue - totalCosts;
+  const margin           = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  const rtoLoss          = rtoOrders * (fwdShipping + rtoShipping);
+  const profitPerOrder   = deliveredOrders > 0 ? netProfit / deliveredOrders : 0;
+  const roas             = marketing > 0 ? totalRevenue / marketing : 0;
+
+  const fmtINR = (n) => {
+    const abs = Math.abs(n);
+    if (abs >= 10000000) return '₹' + (n/10000000).toFixed(2) + ' Cr';
+    if (abs >= 100000)   return '₹' + (n/100000).toFixed(1) + 'L';
+    if (abs >= 1000)     return '₹' + (n/1000).toFixed(1) + 'K';
+    return '₹' + Math.round(n).toLocaleString('en-IN');
+  };
+  const fmtBig = (n) => {
+    const sign = n < 0 ? '−₹' : '₹';
+    const abs = Math.abs(n);
+    if (abs >= 10000000) return sign + (abs/10000000).toFixed(2) + ' Cr';
+    if (abs >= 100000)   return sign + (abs/100000).toFixed(1) + 'L';
+    if (abs >= 1000)     return sign + (abs/1000).toFixed(1) + 'K';
+    return sign + Math.round(abs).toLocaleString('en-IN');
+  };
+
+  const healthColor  = netProfit < 0 ? '#FF5252' : margin < 8 ? '#FFB347' : margin < 20 ? '#C8F56A' : '#4DDB8A';
+  const healthLabel  = netProfit < 0 ? 'Loss-Making' : margin < 5 ? 'Break-Even Zone' : margin < 15 ? 'Getting There' : margin < 25 ? 'Healthy' : 'Excellent';
+  const healthWidth  = netProfit < 0 ? 0 : Math.min((margin / 40) * 100, 100);
+
+  let insight = '';
+  if (netProfit < 0) {
+    insight = `You're losing ${fmtINR(Math.abs(netProfit))} this period. Biggest drain: COGS ${fmtINR(cogs)} + Marketing ${fmtINR(marketing)}. Saving ₹${Math.ceil(Math.abs(netProfit)/totalOrders)} per order closes the gap.`;
+  } else if (rtoRate > 20) {
+    insight = `RTO is costing ${fmtINR(rtoLoss)} in wasted shipping on ${rtoOrders.toLocaleString('en-IN')} returns. Cutting RTO by 5% saves ~${fmtINR(totalOrders * 0.05 * (fwdShipping + rtoShipping))} per period.`;
+  } else if (roas < 3 && marketing > 0) {
+    insight = `ROAS is ${roas.toFixed(1)}x — aim for 3x+. Reducing CPP by 20% would add ${fmtINR(marketing * 0.2)} to profit.`;
+  } else {
+    insight = `Solid at ${margin.toFixed(1)}% margin — ${fmtINR(profitPerOrder)} profit per delivered order. ROAS ${roas.toFixed(1)}x means every ₹1 in marketing returns ₹${roas.toFixed(1)}.`;
+  }
+
+  const NumSlider = ({label, badge, value, setValue, min, max, step=1, prefix='₹', suffix='', sliderMax}) => (
+    <div style={{marginBottom:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>{label}</span>
+        {badge && <span style={{fontSize:10,padding:'2px 7px',borderRadius:20,background:'var(--overlay-2)',color:'#4DDB8A',border:'1px solid #2a4a2a'}}>{badge}</span>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:12,color:'var(--text-muted)',width:10,flexShrink:0}}>{prefix}</span>
+        <input type="number" value={value} min={min} max={max} step={step}
+          onChange={e=>setValue(parseFloat(e.target.value)||0)}
+          style={{width:110,padding:'6px 8px',background:'var(--bg-card2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontSize:14,fontWeight:600,outline:'none'}}/>
+        <span style={{fontSize:12,color:'var(--text-muted)'}}>{suffix}</span>
+        <input type="range" min={min} max={sliderMax||max} step={step} value={Math.min(value,sliderMax||max)}
+          onChange={e=>setValue(parseFloat(e.target.value))}
+          style={{flex:1,accentColor:'var(--accent)',cursor:'pointer'}}/>
+      </div>
+    </div>
+  );
+
+  const PnlRow = ({label, value, type='cost', pct}) => (
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid var(--border)',fontSize:13}}>
+      <span style={{color:'var(--text-muted)'}}>{type==='cost'?'− ':''}{label}</span>
+      <span style={{fontVariantNumeric:'tabular-nums',fontWeight:600,color:type==='revenue'?'var(--text)':type==='profit'?(netProfit>=0?'#4DDB8A':'#FF5252'):'var(--text-muted)'}}>
+        {type==='profit'?(netProfit<0?'−₹':'₹')+Math.abs(Math.round(value)).toLocaleString('en-IN'):'₹'+Math.round(value).toLocaleString('en-IN')}
+        {pct!=null && <span style={{fontSize:10,color:'var(--text-muted)',marginLeft:4}}>{pct.toFixed(1)}%</span>}
+      </span>
+    </div>
+  );
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:0,minHeight:'100%'}}>
+      {/* Header */}
+      <div style={{padding:'20px 24px 14px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:16}}>P&L Calculator</div>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>Pre-filled from your live Shopify + ShipSagar data — adjust any input</div>
+        </div>
+        <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+          {[['7d','7 Days'],['30d','30 Days'],['90d','90 Days'],['all','All Time']].map(([p,l])=>(
+            <button key={p} onClick={()=>changePeriod(p)} style={{padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,border:'1px solid '+(period===p?'var(--accent)':'var(--border)'),background:period===p?'var(--accent)':'transparent',color:period===p?'#000':'var(--text-muted)',cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+        {loading && <span style={{fontSize:11,color:'var(--text-muted)'}}>Refreshing…</span>}
+        {live && !loading && <span style={{fontSize:11,color:'#4DDB8A'}}>● Live data loaded</span>}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',flex:1}}>
+
+        {/* ── LEFT: INPUTS ── */}
+        <div style={{padding:'20px 24px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:14,overflowY:'auto'}}>
+
+          {/* Revenue & Scale */}
+          <div className="card">
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:14}}>Revenue &amp; Scale</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+              <NumSlider label="Total Orders" badge="Shopify" value={totalOrders} setValue={setTotalOrders} min={1} max={99999} prefix="" suffix="orders" sliderMax={5000}/>
+              <NumSlider label="Total Revenue" badge="Shopify" value={totalRevenue} setValue={setTotalRevenue} min={0} max={999999999} step={1000} sliderMax={10000000}/>
+            </div>
+            <div style={{display:'flex',gap:24,padding:'10px 0 0',borderTop:'1px solid var(--border)',fontSize:12,color:'var(--text-muted)'}}>
+              <span>Avg Order Value: <b style={{color:'var(--text)'}}>₹{Math.round(aov).toLocaleString('en-IN')}</b></span>
+              <span>Delivered: <b style={{color:'#4DDB8A'}}>{deliveredOrders.toLocaleString('en-IN')}</b></span>
+              <span>RTO: <b style={{color:'#FF5252'}}>{rtoOrders.toLocaleString('en-IN')}</b></span>
+            </div>
+          </div>
+
+          {/* Marketing */}
+          <div className="card">
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:10}}>Marketing Spend</div>
+            <div style={{display:'flex',gap:6,marginBottom:14}}>
+              {[['cpp','Cost Per Purchase'],['total','Total Spend']].map(([m,l])=>(
+                <button key={m} onClick={()=>setMktMode(m)} style={{flex:1,padding:'7px',fontSize:12,fontWeight:600,borderRadius:6,border:'1px solid '+(mktMode===m?'var(--accent)':'var(--border)'),background:mktMode===m?'var(--accent)':'transparent',color:mktMode===m?'#000':'var(--text-muted)',cursor:'pointer'}}>{l}</button>
+              ))}
+            </div>
+            {mktMode==='cpp'
+              ? <><NumSlider label="Cost Per Purchase (CPP)" value={cpp} setValue={setCpp} min={0} max={9999} step={10} sliderMax={2000}/>
+                  <div style={{fontSize:11,color:'var(--text-muted)'}}>Total marketing spend: <b style={{color:'var(--text)'}}>{fmtINR(marketing)}</b></div></>
+              : <><NumSlider label="Total Marketing Spend" value={totalMkt} setValue={setTotalMkt} min={0} max={99999999} step={1000} sliderMax={5000000}/>
+                  <div style={{fontSize:11,color:'var(--text-muted)'}}>Effective CPP: <b style={{color:'var(--text)'}}>₹{Math.round(effectiveCpp).toLocaleString('en-IN')}</b></div></>
+            }
+          </div>
+
+          {/* Unit Economics */}
+          <div className="card">
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:14}}>Unit Economics</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+              <NumSlider label="Avg Product Cost" value={productCost} setValue={setProductCost} min={0} max={9999} step={10} sliderMax={3000}/>
+              <NumSlider label="COD Charges" value={codRate} setValue={setCodRate} min={0} max={10} step={0.1} prefix="" suffix="% of revenue" sliderMax={5}/>
+            </div>
+          </div>
+
+          {/* Logistics + RTO */}
+          <div className="card">
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:14}}>Logistics &amp; RTO</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
+              <NumSlider label="RTO Rate" badge="ShipSagar" value={rtoRate} setValue={setRtoRate} min={0} max={100} step={0.5} prefix="" suffix="%" sliderMax={70}/>
+              <NumSlider label="Forward Shipping" value={fwdShipping} setValue={setFwdShipping} min={0} max={999} step={5} sliderMax={500}/>
+              <NumSlider label="RTO Reverse" value={rtoShipping} setValue={setRtoShipping} min={0} max={999} step={5} sliderMax={500}/>
+            </div>
+            <div style={{display:'flex',gap:24,padding:'10px 0 0',borderTop:'1px solid var(--border)',fontSize:12,color:'var(--text-muted)'}}>
+              <span>Delivery Rate: <b style={{color:'#4DDB8A'}}>{deliveryRate}%</b></span>
+              <span>RTO shipping loss: <b style={{color:'#FF5252'}}>{fmtINR(rtoLoss)}</b></span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── RIGHT: SUMMARY ── */}
+        <div style={{padding:'20px 18px',display:'flex',flexDirection:'column',gap:12,overflowY:'auto',position:'sticky',top:0,maxHeight:'calc(100vh - 120px)'}}>
+
+          {/* Big number */}
+          <div className="card" style={{textAlign:'center',padding:'20px 16px'}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:8}}>Net Profit / Loss</div>
+            <div style={{fontSize:38,fontWeight:800,letterSpacing:'-0.03em',fontVariantNumeric:'tabular-nums',color:healthColor,lineHeight:1,marginBottom:6}}>{fmtBig(netProfit)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:healthColor,marginBottom:14}}>{netProfit>=0?'+':''}{margin.toFixed(1)}% margin</div>
+            <div style={{height:6,borderRadius:3,background:'var(--overlay-2)',overflow:'hidden',marginBottom:8}}>
+              <div style={{height:'100%',width:healthWidth+'%',background:healthColor,borderRadius:3,transition:'width .4s ease'}}/>
+            </div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:healthColor}}>{healthLabel}</div>
+          </div>
+
+          {/* P&L breakdown */}
+          <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:10,overflow:'hidden'}}>
+            <div style={{padding:'10px 14px',fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',borderBottom:'1px solid var(--border)'}}>P&amp;L Breakdown</div>
+            <PnlRow label="Revenue" value={totalRevenue} type="revenue"/>
+            <PnlRow label="Cost of Goods" value={cogs} pct={totalRevenue>0?cogs/totalRevenue*100:0}/>
+            <PnlRow label="Forward Shipping" value={totalFwdShip} pct={totalRevenue>0?totalFwdShip/totalRevenue*100:0}/>
+            <PnlRow label="RTO Shipping" value={totalRTOShip} pct={totalRevenue>0?totalRTOShip/totalRevenue*100:0}/>
+            <PnlRow label="Marketing" value={marketing} pct={totalRevenue>0?marketing/totalRevenue*100:0}/>
+            <PnlRow label="COD Charges" value={codCharges} pct={totalRevenue>0?codCharges/totalRevenue*100:0}/>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',background:'var(--overlay-1)',fontWeight:700,fontSize:14}}>
+              <span>Net Profit</span>
+              <span style={{fontVariantNumeric:'tabular-nums',color:netProfit>=0?'#4DDB8A':'#FF5252'}}>{netProfit<0?'−₹':'₹'}{Math.abs(Math.round(netProfit)).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          {/* Key metrics */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {[
+              { label:'ROAS', val: marketing>0?roas.toFixed(1)+'x':'—', color: roas>=3?'#4DDB8A':roas>=1.5?'#FFB347':'#FF5252' },
+              { label:'Profit / Delivered', val: fmtINR(profitPerOrder), color: profitPerOrder>=0?'#4DDB8A':'#FF5252' },
+              { label:'RTO Shipping Loss', val: fmtINR(rtoLoss), color: '#FF5252' },
+              { label:'Effective CPP', val: '₹'+Math.round(effectiveCpp).toLocaleString('en-IN'), color: 'var(--text)' },
+            ].map(m=>(
+              <div key={m.label} className="card" style={{padding:'12px 14px'}}>
+                <div style={{fontSize:20,fontWeight:800,color:m.color,fontVariantNumeric:'tabular-nums',letterSpacing:'-0.02em'}}>{m.val}</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Insight */}
+          <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderLeft:'3px solid var(--accent)',borderRadius:10,padding:'12px 14px',fontSize:12,color:'var(--text-muted)',lineHeight:1.7}}>
+            {insight}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SyncLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -2448,7 +2692,7 @@ function App() {
 
   const views = {
     dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>,
-    emails: <Emails/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
+    emails: <Emails/>, finance: <Finance/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
     settings: <Settings theme={theme} setTheme={setTheme} iconPreset={iconPreset} setIconPreset={setIconPreset}/>,
   };
 
