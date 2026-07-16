@@ -2348,8 +2348,9 @@ function Finance() {
   const [mktMode, setMktMode]     = useState('cpp');
 
   // Inputs — pre-filled from live, editable
-  const [totalOrders,  setTotalOrders]  = useState(500);
   const [totalRevenue, setTotalRevenue] = useState(1200000);
+  const [asp,          setAsp]          = useState(2400); // avg selling price — drives order count
+  const [totalOrders,  setTotalOrders]  = useState(500);  // derived from revenue/asp but also editable
   const [rtoRate,      setRtoRate]      = useState(28);
   const [cpp,          setCpp]          = useState(300);
   const [totalMkt,     setTotalMkt]     = useState(150000);
@@ -2363,8 +2364,10 @@ function Finance() {
     apiFetch(`/admin/finance-stats?period=${p}`).then(d => {
       if (!d || d.error) return;
       setLive(d);
-      setTotalOrders(d.totalOrders || 500);
       setTotalRevenue(d.totalRevenue || 1200000);
+      const liveAsp = d.aov || 2400;
+      setAsp(Math.round(liveAsp));
+      setTotalOrders(d.totalOrders || Math.round((d.totalRevenue || 1200000) / liveAsp));
       setRtoRate(parseFloat((d.rtoRate || 28).toFixed(1)));
     }).finally(() => setLoading(false));
   };
@@ -2373,7 +2376,7 @@ function Finance() {
   const changePeriod = (p) => { setPeriod(p); loadStats(p); };
 
   // Derived
-  const aov              = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  const aov              = asp; // ASP is now the explicit input; orders = revenue / asp
   const rtoFrac          = rtoRate / 100;
   const rtoOrders        = Math.round(totalOrders * rtoFrac);
   const deliveredOrders  = totalOrders - rtoOrders;
@@ -2477,11 +2480,11 @@ function Finance() {
           <div className="card">
             <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:14}}>Revenue &amp; Scale</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-              <NumSlider label="Total Orders" badge="Shopify" value={totalOrders} setValue={setTotalOrders} min={1} max={99999} prefix="" suffix="orders" sliderMax={5000}/>
-              <NumSlider label="Total Revenue" badge="Shopify" value={totalRevenue} setValue={setTotalRevenue} min={0} max={999999999} step={1000} sliderMax={10000000}/>
+              <NumSlider label="Total Revenue" badge="Shopify" value={totalRevenue} setValue={v=>{ setTotalRevenue(v); setTotalOrders(asp>0?Math.round(v/asp):totalOrders); }} min={0} max={999999999} step={1000} sliderMax={10000000}/>
+              <NumSlider label="Avg Selling Price (ASP)" badge="Shopify" value={asp} setValue={v=>{ setAsp(v); setTotalOrders(v>0?Math.round(totalRevenue/v):totalOrders); }} min={1} max={99999} step={50} sliderMax={10000}/>
             </div>
-            <div style={{display:'flex',gap:24,padding:'10px 0 0',borderTop:'1px solid var(--border)',fontSize:12,color:'var(--text-muted)'}}>
-              <span>Avg Order Value: <b style={{color:'var(--text)'}}>₹{Math.round(aov).toLocaleString('en-IN')}</b></span>
+            <div style={{display:'flex',gap:24,padding:'10px 0 0',borderTop:'1px solid var(--border)',fontSize:12,color:'var(--text-muted)',flexWrap:'wrap'}}>
+              <span>Total Orders: <b style={{color:'var(--text)'}}>{totalOrders.toLocaleString('en-IN')}</b> <span style={{fontSize:10}}>(Revenue ÷ ASP)</span></span>
               <span>Delivered: <b style={{color:'#4DDB8A'}}>{deliveredOrders.toLocaleString('en-IN')}</b></span>
               <span>RTO: <b style={{color:'#FF5252'}}>{rtoOrders.toLocaleString('en-IN')}</b></span>
             </div>
