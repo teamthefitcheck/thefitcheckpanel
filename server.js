@@ -1643,6 +1643,58 @@ app.post('/webhooks/whatsapp-cloud', async (req, res) => {
   } catch (e) { console.error('[wa-inbound] error:', e.message); }
 });
 
+// ─── Meta Ads insights (system-user token with ads_read) ─────────────────────
+const META_API = 'https://graph.facebook.com/v21.0';
+const META_TOKEN = process.env.META_ACCESS_TOKEN || WA_CLOUD_TOKEN;
+const META_AD_ACCOUNT = process.env.META_AD_ACCOUNT_ID || 'act_1059841430547889';
+async function metaGet(pathname, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const r = await fetch(`${META_API}${pathname}?${qs}`, { headers: { Authorization: `Bearer ${META_TOKEN}` } });
+  const d = await r.json();
+  if (d.error) throw new Error(`Meta API: ${d.error.message}`);
+  return d;
+}
+function metaRow(item = {}) {
+  const act = (t) => parseFloat((item.actions || []).find(a => a.action_type === t)?.value || 0);
+  const val = (t) => parseFloat((item.action_values || []).find(a => a.action_type === t)?.value || 0);
+  const purchases = act('purchase') || act('omni_purchase') || act('offsite_conversion.fb_pixel_purchase');
+  const revenue = val('purchase') || val('omni_purchase') || val('offsite_conversion.fb_pixel_purchase');
+  const spend = parseFloat(item.spend || 0);
+  const roas = item.purchase_roas?.[0]?.value ? parseFloat(item.purchase_roas[0].value) : (spend ? revenue / spend : 0);
+  return {
+    spend, impressions: parseInt(item.impressions || 0), clicks: parseInt(item.clicks || 0), reach: parseInt(item.reach || 0),
+    ctr: parseFloat(item.ctr || 0), cpm: parseFloat(item.cpm || 0), cpc: parseFloat(item.cpc || 0),
+    purchases, revenue, roas, cpp: purchases ? spend / purchases : 0,
+    lpv: act('landing_page_view'), atc: act('add_to_cart'), ic: act('initiate_checkout'),
+  };
+}
+const _metaCache = new Map();
+app.get('/admin/meta-ads/insights', adminAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+    const key = `${from}|${to}`;
+    const hit = _metaCache.get(key);
+    if (hit && Date.now() - hit.t < 5 * 60 * 1000) return res.json(hit.data);
+    const time = { time_range: JSON.stringify({ since: from, until: to }) };
+    const f = 'spend,impressions,clicks,ctr,cpm,cpc,reach,actions,action_values,purchase_roas';
+    const [overview, daily, camps, status] = await Promise.all([
+      metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: f, ...time }),
+      metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: f, ...time, time_increment: 1, limit: 400 }),
+      metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: `campaign_id,campaign_name,${f}`, ...time, level: 'campaign', limit: 100 }),
+      metaGet(`/${META_AD_ACCOUNT}/campaigns`, { fields: 'id,effective_status', limit: 500 }).catch(() => ({ data: [] })),
+    ]);
+    const st = Object.fromEntries((status.data || []).map(c => [c.id, c.effective_status]));
+    const data = {
+      overview: metaRow(overview.data?.[0]),
+      daily: (daily.data || []).map(d => ({ date: d.date_start, ...metaRow(d) })),
+      campaigns: (camps.data || []).map(c => ({ id: c.campaign_id, name: c.campaign_name, status: st[c.campaign_id] || '', ...metaRow(c) })).sort((a, b) => b.spend - a.spend).slice(0, 15),
+    };
+    _metaCache.set(key, { t: Date.now(), data });
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 async function shopifyRESTAddOrderTag(orderId, tag) {
   const { order } = await shopifyREST(`/orders/${orderId}.json?fields=id,tags`);
   const tags = (order.tags || '').split(',').map(t => t.trim()).filter(Boolean);

@@ -618,14 +618,15 @@ function AreaChart({ series, metric, color }) {
     setHi(Math.max(0,Math.min(n-1, Math.round((rel-pl)/((W-pl-pr)/Math.max(1,n-1))))));
   };
   const cur = hi!=null ? series[hi] : null;
-  const fmtV = v => metric==='revenue' ? fmtMoney(v) : `${v} orders`;
+  const isMoney = metric!=='orders';
+  const fmtV = v => isMoney ? fmtMoney(v) : `${v} orders`;
   return (
     <div className="chart">
       <svg viewBox={`0 0 ${W} ${H}`} onMouseMove={onMove} onMouseLeave={()=>setHi(null)} style={{cursor:'crosshair'}}>
         <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".32"/><stop offset="1" stopColor={color} stopOpacity="0"/></linearGradient></defs>
         {ticks.map(t=>(<g key={t}>
           <line x1={pl} x2={W-pr} y1={y(max*t)} y2={y(max*t)} stroke="var(--border)" strokeDasharray={t?'3 5':''}/>
-          <text x={pl-8} y={y(max*t)+3.5} textAnchor="end" fontSize="10" fill="var(--text-dim)">{metric==='revenue'?'₹'+compact(max*t):Math.round(max*t)}</text>
+          <text x={pl-8} y={y(max*t)+3.5} textAnchor="end" fontSize="10" fill="var(--text-dim)">{isMoney?'₹'+compact(max*t):Math.round(max*t)}</text>
         </g>))}
         <path d={area} fill="url(#ag)"/>
         <path d={d} fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round"/>
@@ -666,12 +667,93 @@ function StatBar({ items }) {
   );
 }
 
+function AdsSection({ ads, err, shopRevenue, shopOrders }) {
+  const [m,setM] = useState('spend');
+  if (err) return (<div className="panel" style={{marginBottom:14}}><div className="panel-h"><div><div className="panel-t">Ad Performance</div><div className="panel-m">Meta Ads</div></div><span className="tag" style={{'--c':'var(--red)'}}>Unavailable</span></div><div style={{fontSize:12,color:'var(--text-muted)'}}>{err}</div></div>);
+  if (!ads) return <div className="skel" style={{height:320,marginBottom:14}}/>;
+  const o = ads.overview || {};
+  const series = (ads.daily||[]).map(d=>({label:new Date(d.date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}),spend:d.spend,revenue:d.revenue,orders:d.purchases}));
+  const mer = o.spend ? shopRevenue/o.spend : 0;
+  const cac = o.spend && shopOrders ? o.spend/shopOrders : 0;
+  const roasC = r => r>=3?'var(--green)':r>=1.5?'var(--yellow)':'var(--red)';
+  const funnel = [['Impressions',o.impressions],['Clicks',o.clicks],['Landing views',o.lpv],['Add to cart',o.atc],['Checkout',o.ic],['Purchases',o.purchases]];
+  const fmax = Math.max(1,o.impressions||1);
+  const stTag = s => s==='ACTIVE'?['Active','var(--green)']:s==='PAUSED'?['Paused','var(--text-muted)']:[(s||'—').replace(/_/g,' ').toLowerCase(),'var(--yellow)'];
+  return (
+    <div style={{marginBottom:14}}>
+      <div className="panel" style={{marginBottom:14}}>
+        <div className="panel-h">
+          <div><div className="panel-t">Ad Performance</div><div className="panel-m">Meta Ads · TheFitCheck account · selected period</div></div>
+          <span className="tag" style={{'--c':'var(--blue)'}}>Meta Ads</span>
+        </div>
+        <div className="kpis" style={{marginBottom:16}}>
+          <Kpi label="Ad Spend" value={o.spend||0} format={v=>fmtMoney(Math.round(v))} color="var(--indigo)" icon="📣" sub={`${compact(o.impressions||0)} impressions`} spark={series.map(d=>d.spend)}/>
+          <Kpi label="Meta ROAS" value={o.roas||0} format={v=>v.toFixed(2)+'x'} color={roasC(o.roas||0)} icon="🎯" sub={`${fmtMoney(Math.round(o.revenue||0))} attributed`} spark={series.map(d=>d.spend?d.revenue/d.spend:0)}/>
+          <Kpi label="Purchases" value={o.purchases||0} format={v=>Math.round(v).toLocaleString()} color="var(--green)" icon="🛍️" sub={`${fmtMoney(Math.round(o.cpp||0))} per purchase`} spark={series.map(d=>d.orders)}/>
+          <Kpi label="Blended ROAS" value={mer} format={v=>v.toFixed(2)+'x'} color={roasC(mer)} icon="⚖️" sub="store revenue ÷ ad spend"/>
+        </div>
+        <div className="chips" style={{marginBottom:10}}>
+          {[['spend','Spend'],['revenue','Attributed revenue'],['orders','Purchases']].map(([k,l])=><button key={k} className={`chip ${m===k?'on':''}`} onClick={()=>setM(k)}>{l}</button>)}
+        </div>
+        <AreaChart series={series} metric={m} color={m==='spend'?'#5b5bf0':m==='revenue'?'#12a150':'#f76b15'}/>
+        <div className="pills">
+          <div className="pill">CTR <b>{(o.ctr||0).toFixed(2)}%</b></div>
+          <div className="pill">CPM <b>{fmtMoney(Math.round(o.cpm||0))}</b></div>
+          <div className="pill">CPC <b>{fmtMoney(Math.round((o.cpc||0)*100)/100)}</b></div>
+          <div className="pill">Reach <b>{compact(o.reach||0)}</b></div>
+          {cac>0 && <div className="pill">Cost / store order <b>{fmtMoney(Math.round(cac))}</b></div>}
+        </div>
+      </div>
+      <div className="grid g2" style={{marginBottom:0}}>
+        <div className="panel">
+          <div className="panel-h"><div><div className="panel-t">Conversion Funnel</div><div className="panel-m">From impression to purchase</div></div></div>
+          {funnel.map(([l,v],i)=>{
+            const prevV = i? funnel[i-1][1] : null;
+            return (
+              <div key={l} style={{marginBottom:11}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:5}}>
+                  <span style={{color:'var(--text-muted)'}}>{l}</span>
+                  <span><b>{compact(v||0)}</b>{prevV ? <span style={{color:'var(--text-dim)',marginLeft:8}}>{((v||0)/prevV*100).toFixed(1)}%</span> : null}</span>
+                </div>
+                <div className="bar"><div style={{width:`${Math.max(2,(v||0)/fmax*100)}%`,background:AV_COLORS[i]}}/></div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="panel">
+          <div className="panel-h"><div><div className="panel-t">Campaigns</div><div className="panel-m">Ranked by spend</div></div><span className="tag" style={{'--c':'var(--purple)'}}>{(ads.campaigns||[]).length} campaigns</span></div>
+          <div style={{maxHeight:380,overflowY:'auto'}}>
+            {(ads.campaigns||[]).map(c=>{
+              const [sl,sc] = stTag(c.status);
+              return (
+                <div key={c.id} className="row" style={{'--c':roasC(c.roas)}}>
+                  <div className="sev"/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={c.name}>{c.name}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',display:'flex',gap:8,alignItems:'center',marginTop:2}}>
+                      <span style={{color:sc,fontWeight:600,textTransform:'capitalize'}}>● {sl}</span><span>{fmtMoney(Math.round(c.spend))} spent</span><span>{c.purchases} purch.</span>{c.cpp>0&&<span>{fmtMoney(Math.round(c.cpp))} CPP</span>}
+                    </div>
+                  </div>
+                  <div className="days">{c.roas.toFixed(1)}x<small>ROAS</small></div>
+                </div>
+              );
+            })}
+            {(ads.campaigns||[]).length===0 && <div style={{padding:30,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No ad spend in this period</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const [stats,setStats] = useState(null);
   const [prev,setPrev] = useState(null);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(true);
   const [audience,setAudience] = useState(null);
+  const [ads,setAds] = useState(null);
+  const [adsErr,setAdsErr] = useState('');
   const [metric,setMetric] = useState('revenue');
   const now = new Date();
   const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
@@ -690,6 +772,8 @@ function Dashboard() {
       setStats(s); setOrders(o.orders||[]);
       apiFetch(`/orders/stats?from=${pf}&to=${pt}`).then(setPrev).catch(()=>setPrev(null));
       apiFetch(`/orders/audience?from=${f}&to=${t}`).then(setAudience).catch(()=>{});
+      setAds(null); setAdsErr('');
+      apiFetch(`/admin/meta-ads/insights?from=${f}&to=${t}`).then(setAds).catch(e=>setAdsErr(e.message));
     } finally { setLoading(false); }
   }, []);
   useEffect(()=>{ load(from,to); },[from,to]);
@@ -834,6 +918,8 @@ function Dashboard() {
             </div>
           </div>
         </div>
+
+        <AdsSection ads={ads} err={adsErr} shopRevenue={s.revenue||0} shopOrders={s.total||0}/>
 
         <div className="grid g3">
           {[
