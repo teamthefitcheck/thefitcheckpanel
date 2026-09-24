@@ -2409,39 +2409,65 @@ function shipsagarCustomerName(o) {
   return `${c.first_name || c.firstName || a.first_name || a.firstName || ''} ${c.last_name || c.lastName || a.last_name || a.lastName || ''}`.trim() || a.name || 'Customer';
 }
 
+// ShipSagar returns trackingDetails double-JSON-encoded, with DUPLICATE keys: the first
+// CurrentStatus is the courier's real state (e.g. "RTO In Transit", "DELIVERED") and the second
+// is a generic bucket ("INTRANSIT") that JSON.parse keeps — so read the first one from raw text.
+function parseShipsagarDate(d, t) {
+  const m = String(d || '').match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (!m) return 0;
+  const mon = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[2].toLowerCase());
+  const [hh, mm] = String(t || '00:00').split(':').map(n => parseInt(n) || 0);
+  return mon < 0 ? 0 : Date.UTC(+m[3], mon, +m[1], hh, mm) - 5.5 * 3600e3;
+}
 async function shipsagarTrackShipment(awb) {
   const creds = JSON.parse((await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }))?.credentials || 'null');
   if (!creds) throw new Error('ShipSagar not connected.');
-  const res = await fetch('https://app.shipsagar.com/api/Web/TrackShipment', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
-    body: JSON.stringify({ Token: creds.api_key, ClientCode: creds.client_code, TrackingNo: awb }),
-    signal: AbortSignal.timeout(15000),
-  });
-  const data = await res.json();
-  if (data?.status === 'ERROR' || !data?.trackingDetails) return null;
-  // trackingDetails comes back double-JSON-encoded
-  let details = data.trackingDetails;
-  if (typeof details === 'string') {
-    try { details = JSON.parse(details); } catch { return null; }
-    if (typeof details === 'string') { try { details = JSON.parse(details); } catch { return null; } }
+  let data;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch('https://app.shipsagar.com/api/Web/TrackShipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Token': creds.api_key },
+        body: JSON.stringify({ Token: creds.api_key, ClientCode: creds.client_code, TrackingNo: awb }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const text = await res.text();
+      if (!text) throw new Error('empty response');
+      data = JSON.parse(text);
+      break;
+    } catch (e) { if (attempt === 3) throw e; await sleep(attempt * 800); }
   }
+  if (data?.status === 'ERROR' || !data?.trackingDetails) return null;
+  let raw = data.trackingDetails;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { return null; } }
+  const rawStr = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  const statuses = [...rawStr.matchAll(/"CurrentStatus"\s*:\s*"([^"]*)"/g)].map(m => m[1]);
+  let details = raw;
+  if (typeof details === 'string') { try { details = JSON.parse(details); } catch { return null; } }
   const history = details?.TrackingHistory || details?.[0]?.TrackingHistory;
   if (!history || !history.length) return null;
-  const latest = history[history.length - 1];
-  return { description: latest.ActionDescription || '', timestamp: latest.ActionDate || latest.Timestamp || '' };
+  // Latest event by real timestamp (array order isn't reliable and events are often duplicated)
+  let latest = history[history.length - 1], best = parseShipsagarDate(latest.ActionDate, latest.ActionTime);
+  for (const h of history) { const t = parseShipsagarDate(h.ActionDate, h.ActionTime); if (t >= best) { best = t; latest = h; } }
+  return {
+    description: latest.ActionDescription || '',
+    courierStatus: statuses[0] || '',
+    timestamp: latest.ActionDate ? `${latest.ActionDate} ${latest.ActionTime || ''}`.trim() : (latest.Timestamp || ''),
+    eventMs: best || 0,
+  };
 }
 
-// Free-text courier remark → internal stage. Order matters: specific
-// phrases must be checked before generic ones they're substrings of
-// (e.g. "out for delivery" contains "delivery" so check it before "delivered").
-function shipsagarStatusToStage(description) {
+function shipsagarStatusToStage(description, courierStatus) {
   const d = (description || '').toLowerCase();
-  if (/return(ed)?\s*to\s*(origin|shipper)|\breturned\b|\brto\b|shipper'?s\s*request/.test(d)) return 'rto';
-  if (/undelivered|not\s*delivered|refus(ed|al)|cancell?ed\s*by\s*(consignee|customer)|otp\s*not\s*shared|contact\s*customer\s*service|not\s*available|held\s*at|\bndr\b|address\s*(incorrect|incomplete)/.test(d)) return 'ndr';
-  if (/out\s*for\s*delivery/.test(d)) return 'ofd';
-  if (/delivered/.test(d)) return 'delivered';
-  if (/picked\s*up|pickup\s*(done|completed|generated)|(pickup|p\/u)\s*(employee|scheduled|assigned|requested|registered)|out\s*to\s*p\/u/.test(d)) return 'pickup';
+  const cs = (courierStatus || '').toLowerCase();
+  const both = `${cs} | ${d}`;
+  // 1. Anything on the return leg is RTO — the courier status says so even when the latest scan reads "Out For Delivery"/"Delivered"
+  if (/\brto\b|return(ed)?\s*to\s*(origin|shipper)|delivered\s*back\s*to\s*shipper|^returned$|\breturned\b|shipper'?s\s*request|return\s*(initiated|in\s*transit)/.test(both)) return 'rto';
+  // 2. Failed delivery / customer-side problems
+  if (/undelivered|not\s*delivered|refus(ed|al)|cancell?ed\s*by\s*(consignee|customer)|otp\s*not\s*shared|contact\s*customer\s*service|consignee\s*(not\s*available|has\s*given|unavailable)|not\s*available|no\s*such\s*consignee|premises\s*closed|address\s*(incorrect|incomplete)|incomplete\/incorrect|held\s*at|charges\s*pending|prohibited\s*area|\bndr\b/.test(both)) return 'ndr';
+  if (/out\s*for\s*delivery|out_delivery|\bofd\b/.test(both)) return 'ofd';
+  if (/\bdelivered\b/.test(both)) return 'delivered';
+  if (/picked\s*up|pickup\s*(done|completed|generated)|(pickup|p\/u)\s*(employee|scheduled|assigned|requested|registered)|out\s*to\s*p\/u/.test(both)) return 'pickup';
   return 'transit';
 }
 
@@ -2585,7 +2611,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
       catch (e) { log(`❌  AWB ${awb} | track error: ${e.message}`); errors++; continue; }
       if (!result) { log(`❓  AWB ${awb} | no tracking history yet`); continue; }
 
-      const newStage = shipsagarStatusToStage(result.description);
+      const newStage = shipsagarStatusToStage(result.description, result.courierStatus);
       const newTag = resolveTagForStage(newStage, tagMap);
 
       for (const rec of recs) {
@@ -2593,7 +2619,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
           log(`✓   ${rec.shopify_id} | AWB ${awb} | ${rec.stage} (no change) | ${result.description}`);
           continue;
         }
-        log(`🔄  ${rec.shopify_id} | AWB ${awb} | ${rec.stage} → ${newStage} | ${result.description}`);
+        log(`🔄  ${rec.shopify_id} | AWB ${awb} | ${rec.stage} → ${newStage} | ${result.courierStatus ? result.courierStatus + ' · ' : ''}${result.description}`);
         await OS.upsert(rec.shopify_id, { stage: newStage, updated_at: new Date().toISOString() });
         updated++;
         stageChanges.push({ shopify_id: rec.shopify_id, order_name: rec.order_name || rec.shopify_id, awb, from_stage: rec.stage || 'unknown', to_stage: newStage, courier_message: result.description, timestamp: new Date().toISOString() });
@@ -2603,6 +2629,8 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
 
         const emailsSent = rec.emails_sent || [];
         if (emailsSent.includes(newStage)) continue;
+        // Catch-up moves for old courier events must not spam customers with stale "delivered"/"NDR" emails
+        if (result.eventMs && Date.now() - result.eventMs > 48 * 3600e3) { await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $addToSet: { emails_sent: newStage } }); continue; }
         try {
           const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json`);
           const email = order.email || order.contact_email;
@@ -2744,7 +2772,7 @@ async function refreshShipsagarStatus(shopify_id) {
   catch (e) { return { connected: true, registered: true, status: null, error: e.message }; }
   if (!result) return { connected: true, registered: true, status: null };
 
-  const newStage = shipsagarStatusToStage(result.description);
+  const newStage = shipsagarStatusToStage(result.description, result.courierStatus);
   if (newStage !== rec.stage) {
     const tagMap = await ensureShipsagarTagDefaults();
     const newTag = resolveTagForStage(newStage, tagMap);
