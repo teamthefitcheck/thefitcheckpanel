@@ -2449,12 +2449,48 @@ async function shipsagarTrackShipment(awb) {
   // Latest event by real timestamp (array order isn't reliable and events are often duplicated)
   let latest = history[history.length - 1], best = parseShipsagarDate(latest.ActionDate, latest.ActionTime);
   for (const h of history) { const t = parseShipsagarDate(h.ActionDate, h.ActionTime); if (t >= best) { best = t; latest = h; } }
+  const seen = new Set(), clean = [];
+  for (const h of history) {
+    const key = `${h.ActionDate}|${h.ActionTime}|${h.ActionDescription}|${h.ActionLocation}`;
+    if (seen.has(key)) continue; seen.add(key);
+    clean.push({ at: parseShipsagarDate(h.ActionDate, h.ActionTime), date: h.ActionDate || '', time: h.ActionTime || '', desc: h.ActionDescription || '', loc: h.ActionLocation || '' });
+  }
+  clean.sort((a, b) => a.at - b.at);
   return {
+    history: clean, statuses,
     description: latest.ActionDescription || '',
     courierStatus: statuses[0] || '',
     timestamp: latest.ActionDate ? `${latest.ActionDate} ${latest.ActionTime || ''}`.trim() : (latest.Timestamp || ''),
     eventMs: best || 0,
   };
+}
+
+// ── Analysis logging: keep everything for orders placed 1 Sep → 30 Oct 2026 so the mapping can be tuned ──
+const SS_LOG_FROM = new Date('2026-09-01T00:00:00+05:30');
+const SS_LOG_UNTIL = new Date('2026-10-31T00:00:00+05:30');
+const ssLogActive = () => Date.now() < SS_LOG_UNTIL.getTime();
+async function ssLogObservation({ recs, awb, result, newStage, orderCreated }) {
+  try {
+    if (!ssLogActive() || !result) return;
+    const now = new Date();
+    const first = recs[0] || {};
+    await mdb.collection('shipsagar_tracks').updateOne({ awb }, {
+      $set: { awb, shopify_ids: recs.map(r => r.shopify_id), order_name: first.order_name || '', courier: first.courier || '', courier_status: result.courierStatus, all_statuses: result.statuses,
+        latest_desc: result.description, latest_event_at: result.eventMs ? new Date(result.eventMs) : null, mapped_stage: newStage, prev_stage: first.stage || '', history: result.history, scan_count: result.history.length, checked_at: now },
+      $setOnInsert: { first_seen: now }, $inc: { polls: 1 },
+    }, { upsert: true });
+    const key = `${(result.courierStatus || '').toLowerCase()} | ${(result.description || '').toLowerCase()}`;
+    await mdb.collection('shipsagar_status_catalog').updateOne({ key }, {
+      $set: { key, courier_status: result.courierStatus, description: result.description, mapped_stage: newStage, last_seen: now, sample_awb: awb, courier: first.courier || '' },
+      $setOnInsert: { first_seen: now }, $inc: { seen: 1 },
+    }, { upsert: true });
+  } catch (e) { console.warn('[ss-log] observation failed:', e.message); }
+}
+async function ssLogStageChange({ rec, awb, from, to, result, source }) {
+  try {
+    if (!ssLogActive()) return;
+    await mdb.collection('stage_history').insertOne({ shopify_id: rec.shopify_id, order_name: rec.order_name || '', awb, courier: rec.courier || '', from_stage: from || '', to_stage: to, courier_status: result?.courierStatus || '', description: result?.description || '', event_at: result?.eventMs ? new Date(result.eventMs) : null, source: source || 'shipsagar_cron', at: new Date() });
+  } catch (e) { console.warn('[ss-log] stage change failed:', e.message); }
 }
 
 function shipsagarStatusToStage(description, courierStatus) {
@@ -2613,6 +2649,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
 
       const newStage = shipsagarStatusToStage(result.description, result.courierStatus);
       const newTag = resolveTagForStage(newStage, tagMap);
+      await ssLogObservation({ recs, awb, result, newStage });
 
       for (const rec of recs) {
         if (rec.stage === newStage) {
@@ -2620,7 +2657,8 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
           continue;
         }
         log(`🔄  ${rec.shopify_id} | AWB ${awb} | ${rec.stage} → ${newStage} | ${result.courierStatus ? result.courierStatus + ' · ' : ''}${result.description}`);
-        await OS.upsert(rec.shopify_id, { stage: newStage, updated_at: new Date().toISOString() });
+        await OS.upsert(rec.shopify_id, { stage: newStage, delivery_status: `${result.courierStatus ? result.courierStatus + ' · ' : ''}${result.description}`, updated_at: new Date().toISOString() });
+        await ssLogStageChange({ rec, awb, from: rec.stage, to: newStage, result });
         updated++;
         stageChanges.push({ shopify_id: rec.shopify_id, order_name: rec.order_name || rec.shopify_id, awb, from_stage: rec.stage || 'unknown', to_stage: newStage, courier_message: result.description, timestamp: new Date().toISOString() });
 
@@ -2662,10 +2700,10 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
   log(summary);
 
   // Persist cron log (last 30 kept)
-  const reportDoc = { started_at: startedAt, finished_at: new Date(), checked, updated, errors, lines: logLines, stage_changes: stageChanges, triggered_by: manual ? 'manual' : 'cron' };
+  const reportDoc = { started_at: startedAt, finished_at: new Date(), checked, updated, errors, lines: logLines.filter(l => !l.startsWith('✓')), stage_changes: stageChanges, triggered_by: manual ? 'manual' : 'cron' };
   await mdb.collection('shipsagar_cron_log').insertOne(reportDoc);
   const all = await mdb.collection('shipsagar_cron_log').find({}, { projection: { _id: 1 } }).sort({ started_at: -1 }).toArray();
-  if (all.length > 30) {
+  if (all.length > 30 && !ssLogActive()) {
     const toDelete = all.slice(30).map(d => d._id);
     await mdb.collection('shipsagar_cron_log').deleteMany({ _id: { $in: toDelete } });
   }
