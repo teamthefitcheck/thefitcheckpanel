@@ -1454,6 +1454,7 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
         // never blocks fulfillment; the cron self-heals if this push fails.
         mdb.collection('settings').findOne({}, { projection: { shipsagar_auto_enabled: 1, _id: 0 } }).then(async (s) => {
           if (s?.shipsagar_auto_enabled === false) return;
+          if (!shipsagarEligible(order.created_at)) return;
           const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
           if (!creds) return;
           await shipsagarPushShipment({
@@ -2046,6 +2047,9 @@ app.post('/track/verify-return-code', async (req, res) => {
 });
 
 // ─── ShipSagar Tracking ─────────────────────────────────────────────────────
+// Only orders placed on/after this date are pushed to or tracked via ShipSagar.
+const SHIPSAGAR_START_DATE = new Date('2026-09-01T00:00:00+05:30');
+const shipsagarEligible = (createdAt) => !!createdAt && new Date(createdAt) >= SHIPSAGAR_START_DATE;
 // One tracking API across couriers — pushes AWBs on fulfillment, polls status
 // on a cron, and reflects status as a Shopify order tag (tag → stage mapping
 // is admin-editable on the Tag Mapping settings page, same mechanism used
@@ -2209,8 +2213,12 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
     }
 
     // Enrich records with order_name for reporting
-    const orderNames = await mdb.collection('orders').find({ shopify_id: { $in: records.map(r => r.shopify_id) } }, { projection: { shopify_id: 1, name: 1, _id: 0 } }).toArray();
+    const orderNames = await mdb.collection('orders').find({ shopify_id: { $in: records.map(r => r.shopify_id) } }, { projection: { shopify_id: 1, name: 1, created_at: 1, _id: 0 } }).toArray();
     const nameMap = Object.fromEntries(orderNames.map(o => [o.shopify_id, o.name]));
+    const createdMap = Object.fromEntries(orderNames.map(o => [o.shopify_id, o.created_at]));
+    const before = records.length;
+    records = records.filter(r => shipsagarEligible(createdMap[r.shopify_id]));
+    if (before !== records.length) log(`Skipped ${before - records.length} order(s) placed before 1 Sep 2026`);
     records.forEach(r => { r.order_name = nameMap[r.shopify_id] || r.shopify_id; });
 
     // Dedupe by AWB — one ShipSagar call per shipment, not per order row
