@@ -1685,7 +1685,7 @@ app.post('/webhooks/fulfillments/create', async (req, res) => {
           if (!creds) return;
           await shipsagarPushShipment({
             awb: tracking, courierCode: toShipSagarCourierCode(courier), orderNo: order.name,
-            customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+            customerName: shipsagarCustomerName(order),
             email: email || '', mobileNo: order.phone || order.customer?.phone || '',
           });
           await mdb.collection('order_stage').updateOne({ shopify_id: sid }, { $set: { shipsagar_pushed: true } });
@@ -2335,7 +2335,13 @@ async function shipsagarPushShipment({ awb, courierCode, orderNo, customerName, 
     }),
     signal: AbortSignal.timeout(15000),
   });
-  return res.json();
+  const out = await res.json();
+  if (String(out?.status || '').toUpperCase() === 'ERROR') throw new Error(`ShipSagar: ${out.message || 'push rejected'}`);
+  return out;
+}
+function shipsagarCustomerName(o) {
+  const c = o?.customer || {}, a = o?.shipping_address || {};
+  return `${c.first_name || c.firstName || a.first_name || a.firstName || ''} ${c.last_name || c.lastName || a.last_name || a.lastName || ''}`.trim() || a.name || 'Customer';
 }
 
 async function shipsagarTrackShipment(awb) {
@@ -2415,7 +2421,7 @@ app.post('/admin/shipsagar/register-backfill', adminAuth, async (req, res) => {
       try {
         await shipsagarPushShipment({
           awb: r.awb, courierCode: toShipSagarCourierCode(r.courier), orderNo: o.name,
-          customerName: o.customer ? `${o.customer.first_name || ''} ${o.customer.last_name || ''}`.trim() : '',
+          customerName: shipsagarCustomerName(o),
           email: o.email || o.contact_email || '', mobileNo: o.phone || o.customer?.phone || o.shipping_address?.phone || '',
         });
         await mdb.collection('order_stage').updateOne({ shopify_id: r.shopify_id }, { $set: { shipsagar_pushed: true } });
@@ -2500,7 +2506,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
           const { order } = await shopifyREST(`/orders/${rec.shopify_id}.json?fields=id,name,email,customer,phone`);
           const pushResult = await shipsagarPushShipment({
             awb, courierCode: toShipSagarCourierCode(rec.courier), orderNo: order.name,
-            customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+            customerName: shipsagarCustomerName(order),
             email: order.email || order.contact_email || '', mobileNo: order.phone || order.customer?.phone || '',
           });
           await mdb.collection('order_stage').updateOne({ shopify_id: rec.shopify_id }, { $set: { shipsagar_pushed: true } });
@@ -2631,7 +2637,7 @@ app.post('/admin/shipsagar/push', adminAuth, async (req, res) => {
     const { order } = await shopifyREST(`/orders/${orderId}.json?fields=id,name,email,customer,phone`);
     const result = await shipsagarPushShipment({
       awb, courierCode: toShipSagarCourierCode(courier), orderNo: order.name,
-      customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+      customerName: shipsagarCustomerName(order),
       email: order.email || '', mobileNo: order.phone || order.customer?.phone || '',
     });
     await mdb.collection('order_stage').updateOne({ shopify_id: String(orderId) }, { $set: { shipsagar_pushed: true } });
@@ -2659,7 +2665,7 @@ async function refreshShipsagarStatus(shopify_id) {
       const { order } = await shopifyREST(`/orders/${shopify_id}.json?fields=id,name,email,customer,phone`);
       await shipsagarPushShipment({
         awb: rec.awb, courierCode: toShipSagarCourierCode(rec.courier), orderNo: order.name,
-        customerName: order.customer ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() : '',
+        customerName: shipsagarCustomerName(order),
         email: order.email || order.contact_email || '', mobileNo: order.phone || order.customer?.phone || '',
       });
       await mdb.collection('order_stage').updateOne({ shopify_id }, { $set: { shipsagar_pushed: true } });
