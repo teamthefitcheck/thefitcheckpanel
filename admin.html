@@ -291,6 +291,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .mt{background:var(--bg-card2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
 .mt span{font-size:9.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted)}.mt b{font-family:'Sora';font-size:14px;font-weight:700}
 @media(max-width:1100px){.mtiles{grid-template-columns:repeat(3,1fr)}}
+
+.lg{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin:0 0 6px}
+.lg span{display:flex;align-items:center;gap:6px}.lg i{display:inline-block;width:12px;height:8px;border-radius:3px}
+.ptag{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:99px;text-transform:uppercase;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 28%,transparent)}
+.open-btn{font-size:11px;font-weight:600;padding:6px 14px;border-radius:99px;background:var(--text);color:var(--bg-card);flex-shrink:0}
+.open-btn:hover{opacity:.85}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -621,6 +627,12 @@ const custName = o => `${o.customer?.firstName||o.customer?.first_name||o.shippi
 const AV_COLORS = ['#5b5bf0','#f76b15','#12a150','#e5484d','#0891b2','#7c5cfc','#d98e04','#2f6fed'];
 const avColor = s => AV_COLORS[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0) % AV_COLORS.length];
 
+function payTag(o) {
+  const fs = (o.financial_status||'').toLowerCase();
+  const [t,c] = fs==='paid' ? ['Prepaid','var(--green)'] : fs==='partially_paid' ? ['PP COD','var(--orange)'] : ['COD','var(--yellow)'];
+  return <span className="ptag" style={{'--c':c}}>{t}</span>;
+}
+
 function useCountUp(target, dur=900) {
   const [v,setV] = useState(0);
   useEffect(()=>{
@@ -682,16 +694,77 @@ function buildSeries(orders, from, to) {
     const [ey,em] = keys[keys.length-1].split('-').map(Number);
     while (y<ey || (y===ey && m<=em)) {
       const k = `${y}-${pad2(m)}`, e = map.get(k)||{revenue:0,orders:0};
-      out.push({ ...e, label:new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'}) });
+      out.push({ ...e, date:`${y}-${pad2(m)}-01`, monthly:true, label:new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'}) });
       m++; if (m>12) { m=1; y++; }
     }
   } else {
     for (let i=0;i<days;i++) {
       const d = new Date(start.getTime()+i*86400000), e = map.get(localKey(d))||{revenue:0,orders:0};
-      out.push({ ...e, label:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) });
+      out.push({ ...e, date:localKey(d), label:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) });
     }
   }
   return out;
+}
+
+function RevBarChart({ series }) {
+  const W=880, H=300, pl=54, pr=44, pt=26, pb=30;
+  const [hi,setHi] = useState(null);
+  const n = series.length;
+  if (!n) return <div style={{padding:50,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No orders in this period</div>;
+  const rev = series.map(d=>d.revenue), ord = series.map(d=>d.orders);
+  const maxR = Math.max(1,...rev)*1.15, maxO = Math.max(1,...ord)*1.25;
+  const slot = (W-pl-pr)/n, bw = Math.max(3,Math.min(34,slot*0.64));
+  const cx = i => pl + slot*(i+0.5);
+  const yR = v => pt + (H-pt-pb)*(1-v/maxR), yO = v => pt + (H-pt-pb)*(1-v/maxO);
+  const peak = rev.indexOf(Math.max(...rev));
+  const win = Math.min(7,Math.max(2,Math.round(n/6)));
+  const ma = rev.map((_,i)=>{ const s=rev.slice(Math.max(0,i-win+1),i+1); return s.reduce((x,y)=>x+y,0)/s.length; });
+  const line = (arr,y) => arr.map((v,i)=>`${i?'L':'M'}${cx(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const smooth = (arr,y) => { const p=arr.map((v,i)=>[cx(i),y(v)]); let d=`M${p[0][0]},${p[0][1]}`; for(let i=1;i<p.length;i++){const [x0,y0]=p[i-1],[x1,y1]=p[i],m=(x0+x1)/2;d+=` C${m},${y0} ${m},${y1} ${x1},${y1}`;} return d; };
+  const step = Math.max(1,Math.ceil(n/16));
+  const isWe = s => !s.monthly && [0,6].includes(new Date(s.date+'T00:00:00').getDay());
+  const onMove = e => { const r=e.currentTarget.getBoundingClientRect(); const rel=(e.clientX-r.left)/r.width*W; setHi(Math.max(0,Math.min(n-1,Math.floor((rel-pl)/slot)))); };
+  const cur = hi!=null ? series[hi] : null;
+  const vsAvg = cur && ma[hi] ? (cur.revenue-ma[hi])/ma[hi]*100 : null;
+  return (
+    <div>
+      <div className="lg">
+        <span><i style={{background:'linear-gradient(#7c7cf5,#5b5bf0)'}}/>Revenue</span>
+        <span><i style={{background:'transparent',borderTop:'2px dashed var(--yellow)',height:0,borderRadius:0}}/>{win}-period avg</span>
+        <span><i style={{background:'var(--orange)',borderRadius:'50%'}}/>Orders (right axis)</span>
+        <span>⭐ Peak</span>
+        {!series[0].monthly && <span><i style={{background:'var(--yellow)',opacity:.7}}/>Weekend</span>}
+      </div>
+      <div className="chart">
+        <svg viewBox={`0 0 ${W} ${H}`} onMouseMove={onMove} onMouseLeave={()=>setHi(null)} style={{cursor:'crosshair'}}>
+          <defs>
+            <linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7c7cf5"/><stop offset="1" stopColor="#5b5bf0" stopOpacity=".78"/></linearGradient>
+            <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ff9f5a"/><stop offset="1" stopColor="#f76b15"/></linearGradient>
+          </defs>
+          {[0,.25,.5,.75,1].map(t=>(<g key={t}>
+            <line x1={pl} x2={W-pr} y1={yR(maxR*t)} y2={yR(maxR*t)} stroke="var(--border)" strokeDasharray={t?'3 5':''}/>
+            <text x={pl-8} y={yR(maxR*t)+3.5} textAnchor="end" fontSize="10" fill="var(--text-dim)">₹{compact(maxR*t)}</text>
+            <text x={W-pr+8} y={yR(maxR*t)+3.5} fontSize="10" fill="var(--orange)" opacity=".8">{Math.round(maxO*t)}</text>
+          </g>))}
+          {hi!=null && <rect x={pl+slot*hi} y={pt} width={slot} height={H-pt-pb} fill="var(--overlay-2)" rx="4"/>}
+          {series.map((s,i)=>{ const h=Math.max(1,(H-pb)-yR(s.revenue)); return (
+            <rect key={i} x={cx(i)-bw/2} y={(H-pb)-h} width={bw} height={h} rx={Math.min(5,bw/2)} fill={i===peak?'url(#bg2)':'url(#bg1)'} opacity={hi==null||hi===i?1:.55}/>
+          );})}
+          <path d={smooth(ma,yR)} fill="none" stroke="var(--yellow)" strokeWidth="2" strokeDasharray="5 4" opacity=".95"/>
+          <path d={smooth(ord,yO)} fill="none" stroke="var(--orange)" strokeWidth="2.2" strokeLinecap="round"/>
+          {n<=45 && ord.map((v,i)=><circle key={i} cx={cx(i)} cy={yO(v)} r="2.6" fill="var(--bg-card)" stroke="var(--orange)" strokeWidth="1.6"/>)}
+          {rev[peak]>0 && <text x={Math.min(W-pr-40,Math.max(pl+20,cx(peak)))} y={yR(rev[peak])-8} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--orange)">⭐ ₹{compact(rev[peak])}</text>}
+          {series.map((s,i)=> i%step===0 && <text key={i} x={cx(i)} y={H-10} textAnchor="middle" fontSize="10" fontWeight={isWe(s)?700:400} fill={isWe(s)?'var(--yellow)':'var(--text-dim)'}>{s.label}</text>)}
+        </svg>
+        {cur && <div className="tip" style={{left:`${Math.min(88,Math.max(12,cx(hi)/W*100))}%`,top:`${yR(cur.revenue)/H*100}%`}}>
+          {cur.label}{isWe(cur)?' · weekend':''}
+          <b>{fmtMoney(cur.revenue)}</b>
+          <span style={{display:'block',opacity:.8}}>{cur.orders} orders{cur.orders?` · AOV ${fmtMoney(Math.round(cur.revenue/cur.orders))}`:''}</span>
+          {vsAvg!=null && <span style={{display:'block',opacity:.8}}>{vsAvg>=0?'▲':'▼'} {Math.abs(vsAvg).toFixed(0)}% vs avg</span>}
+        </div>}
+      </div>
+    </div>
+  );
 }
 
 function AreaChart({ series, metric, color }) {
@@ -1086,6 +1159,7 @@ function Dashboard({ active=true }) {
     };
   },[orders]);
 
+  const [openOrder,setOpenOrder] = useState(null);
   const [imgs,setImgs] = useState({});
   const topIds = derived.topProducts.map(p=>p.pid).filter(Boolean).join(',');
   useEffect(()=>{ if(topIds) apiFetch(`/admin/product-images?ids=${topIds}`).then(setImgs).catch(()=>{}); },[topIds]);
@@ -1096,6 +1170,12 @@ function Dashboard({ active=true }) {
     return { revenue:s.revenue||0, orders:s.total||0, cancelled, rto, delivered, deliveredOrders };
   },[orders,stats]);
 
+  const wow = useMemo(()=>{
+    if (series.length<14 || series[0].monthly) return null;
+    const sum = arr => arr.reduce((x,d)=>x+d.revenue,0);
+    const l7 = sum(series.slice(-7)), p7 = sum(series.slice(-14,-7));
+    return p7 ? (l7-p7)/p7*100 : null;
+  },[series]);
   const bestDay = series.length ? [...series].sort((a,b)=>b.revenue-a.revenue)[0] : null;
   const avgPerDay = series.length ? (s.revenue||0)/series.length : 0;
   const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[new Date(o.created_at).getHours()]++);
@@ -1163,16 +1243,14 @@ function Dashboard({ active=true }) {
         <div className="grid g21">
           <div className="panel">
             <div className="panel-h">
-              <div><div className="panel-t">Revenue Intelligence</div><div className="panel-m">{series.length>0 && (series.length>90?'Monthly':'Daily')} trend · hover for details</div></div>
-              <div className="chips">
-                <button className={`chip ${metric==='revenue'?'on':''}`} onClick={()=>setMetric('revenue')}>Revenue</button>
-                <button className={`chip ${metric==='orders'?'on':''}`} onClick={()=>setMetric('orders')}>Orders</button>
-              </div>
+              <div><div className="panel-t">Revenue Intelligence</div><div className="panel-m">{series.length>0 && (series.length>90?'Monthly':'Daily')} revenue &amp; orders · hover for details</div></div>
+
             </div>
-            <AreaChart series={series} metric={metric} color={metric==='revenue'?'#5b5bf0':'#f76b15'}/>
+            <RevBarChart series={series}/>
             <div className="pills">
               {bestDay && bestDay.revenue>0 && <div className="pill">🏆 Best: <b>{bestDay.label}</b> · {fmtMoney(bestDay.revenue)}</div>}
               <div className="pill">📊 Avg / {series.length>90?'month':'day'}: <b>{fmtMoney(Math.round(avgPerDay))}</b></div>
+              {wow!=null && <div className="pill" style={{color:wow>=0?'var(--green)':'var(--red)'}}>{wow>=0?'▲':'▼'} Last 7d {Math.abs(wow).toFixed(0)}% vs prior 7d</div>}
               {orders.length>0 && <div className="pill">⏰ Peak hour: <b>{hourLbl(peakHour)}</b></div>}
               <div className="pill">💳 COD share: <b>{pct(s.cod)}%</b></div>
             </div>
@@ -1227,19 +1305,22 @@ function Dashboard({ active=true }) {
           <div className="panel">
             <div className="panel-h"><div><div className="panel-t">Needs Attention</div><div className="panel-m">Delayed or stuck · orders in selected period</div></div><span className="tag" style={{'--c':derived.stuck.length?'var(--red)':'var(--green)'}}>{derived.stuck.length?`${derived.stuck.length} open`:'All clear'}</span></div>
             {derived.stuck.length===0 && <div style={{padding:'34px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>🎉 Nothing is stuck. Nice work.</div>}
-            {derived.stuck.slice(0,6).map(({o,days,issue})=>{
+            <div style={{maxHeight:420,overflowY:'auto',margin:'0 -6px',padding:'0 6px'}}>
+            {derived.stuck.map(({o,days,issue})=>{
               const c = days>=7?'var(--red)':days>=4?'var(--orange)':'var(--yellow)';
               return (
                 <div key={o.shopify_id||o.id} className="row" style={{'--c':c}}>
                   <div className="sev"/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600}}>{o.name} <span style={{color:'var(--text-muted)',fontWeight:400}}>· {custName(o)}</span></div>
+                    <div style={{fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>{o.name} <span style={{color:'var(--text-muted)',fontWeight:400}}>· {custName(o)}</span> {payTag(o)}</div>
                     <div style={{fontSize:11,color:'var(--text-muted)'}}>{issue} · {fmtMoney(o.total_price)}</div>
                   </div>
                   <div className="days">{days}<small>days</small></div>
+                  <button className="open-btn" onClick={()=>setOpenOrder(o)}>Open</button>
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
 
@@ -1315,6 +1396,7 @@ function Dashboard({ active=true }) {
           </div>
         )}
       </>}
+      {openOrder && <OrderModal order={openOrder} onClose={()=>setOpenOrder(null)} onUpdated={()=>load(from,to,true)}/>}
     </div>
   );
 }
