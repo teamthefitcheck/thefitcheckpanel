@@ -276,6 +276,21 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .risk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding:12px;border-radius:12px;background:var(--bg-card2);border:1px dashed var(--border2)}
 .risk div{display:flex;flex-direction:column;gap:2px}.risk span{font-size:9.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted)}.risk b{font-family:'Sora';font-size:16px}
 .bx-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);line-height:1.5}.bx-foot b{color:var(--text)}
+
+.rc{border:1px solid var(--border);border-radius:14px;padding:16px 18px;background:var(--bg-card2)}
+.rc-h{font-family:'Sora',sans-serif;font-size:12px;font-weight:700;margin-bottom:12px;display:flex;flex-direction:column;gap:2px}
+.rc-h em{font-family:'Poppins';font-style:normal;font-weight:400;font-size:11px;color:var(--text-muted)}
+.lad{margin-bottom:11px}.lad-t{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--text-muted)}.lad-t b{font-family:'Sora';font-size:15px}
+.lad-s{font-size:10.5px;color:var(--text-dim);margin-top:4px}
+.rc-note{font-size:11px;color:var(--text-muted);line-height:1.55;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border2)}.rc-note b{color:var(--text)}
+.cmp{display:grid;grid-template-columns:1.3fr 1fr 1fr .9fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.cmp>span:first-child{color:var(--text-muted)}.cmp>b{font-weight:600}.cmp>span:last-child{text-align:right;font-weight:600;font-size:11.5px}
+.cmp-h{font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-dim);font-weight:700;border-bottom:1.5px solid var(--border2)}
+.cmp-h span:last-child{text-align:right}
+.mtiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:16px}
+.mt{background:var(--bg-card2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.mt span{font-size:9.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted)}.mt b{font-family:'Sora';font-size:14px;font-weight:700}
+@media(max-width:1100px){.mtiles{grid-template-columns:repeat(3,1fr)}}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -749,7 +764,8 @@ function StatBar({ items }) {
   );
 }
 
-function AdsSection({ ads, err, shopRevenue, shopOrders }) {
+function AdsSection({ ads, err, shop }) {
+  const shopRevenue = shop.revenue, shopOrders = shop.orders;
   const [m,setM] = useState('spend');
   if (err) return (<div className="panel" style={{marginBottom:14}}><div className="panel-h"><div><div className="panel-t">Ad Performance</div><div className="panel-m">Meta Ads</div></div><span className="tag" style={{'--c':'var(--red)'}}>Unavailable</span></div><div style={{fontSize:12,color:'var(--text-muted)'}}>{err}</div></div>);
   if (!ads) return <div className="skel" style={{height:320,marginBottom:14}}/>;
@@ -758,6 +774,30 @@ function AdsSection({ ads, err, shopRevenue, shopOrders }) {
   const mer = o.spend ? shopRevenue/o.spend : 0;
   const cac = o.spend && shopOrders ? o.spend/shopOrders : 0;
   const roasC = r => r>=3?'var(--green)':r>=1.5?'var(--yellow)':'var(--red)';
+  const sp = o.spend||0;
+  const netRev = Math.max(0, shop.revenue - shop.rto - shop.cancelled);
+  const ladder = [
+    {l:'Meta says', v:o.roas||0, sub:`${'₹'+compact(o.revenue||0)} from ${(o.purchases||0).toLocaleString()} purchases`, c:'var(--blue)'},
+    {l:'Store gross', v:sp?shop.revenue/sp:0, sub:`${'₹'+compact(shop.revenue)} from ${shop.orders.toLocaleString()} orders`, c:'var(--indigo)'},
+    {l:'After RTO + cancel', v:sp?netRev/sp:0, sub:`${'₹'+compact(netRev)} kept`, c:'var(--yellow)'},
+    {l:'Delivered so far', v:sp?shop.delivered/sp:0, sub:`${'₹'+compact(shop.delivered)} in hand · ${shop.deliveredOrders.toLocaleString()} orders`, c:'var(--green)'},
+  ];
+  const lmax = Math.max(1,...ladder.map(x=>x.v));
+  const claim = shop.revenue ? (o.revenue||0)/shop.revenue*100 : 0;
+  const erode = ladder[1].v ? (1-ladder[2].v/ladder[1].v)*100 : 0;
+  const cmp = [
+    ['Orders', (o.purchases||0).toLocaleString(), shop.orders.toLocaleString(), shop.orders-(o.purchases||0)],
+    ['Revenue', '₹'+compact(o.revenue||0), '₹'+compact(shop.revenue), shop.revenue-(o.revenue||0), true],
+    ['Avg order value', o.purchases?fmtMoney(Math.round(o.revenue/o.purchases)):'—', shop.orders?fmtMoney(Math.round(shop.revenue/shop.orders)):'—', null],
+    ['Cost per order', o.purchases?fmtMoney(Math.round(sp/o.purchases)):'—', shop.orders?fmtMoney(Math.round(sp/shop.orders)):'—', null],
+    ['Cost per delivered', '—', shop.deliveredOrders?fmtMoney(Math.round(sp/shop.deliveredOrders)):'—', null],
+  ];
+  const tiles = [
+    ['CTR',(o.ctr||0).toFixed(2)+'%'],['CPM',fmtMoney(Math.round(o.cpm||0))],['CPC',fmtMoney(Math.round((o.cpc||0)*100)/100)],
+    ['Frequency',o.reach?(o.impressions/o.reach).toFixed(2)+'x':'—'],['Reach',compact(o.reach||0)],
+    ['Cost / landing view',o.lpv?fmtMoney(+(sp/o.lpv).toFixed(1)):'—'],['Cost / add to cart',o.atc?fmtMoney(Math.round(sp/o.atc)):'—'],['Cost / checkout',o.ic?fmtMoney(Math.round(sp/o.ic)):'—'],
+    ['Click → landing',o.clicks?(o.lpv/o.clicks*100).toFixed(0)+'%':'—'],['Landing → cart',o.lpv?(o.atc/o.lpv*100).toFixed(1)+'%':'—'],['Cart → checkout',o.atc?(o.ic/o.atc*100).toFixed(0)+'%':'—'],['Checkout → buy',o.ic?(o.purchases/o.ic*100).toFixed(0)+'%':'—'],
+  ];
   const funnel = [['Impressions',o.impressions],['Clicks',o.clicks],['Landing views',o.lpv],['Add to cart',o.atc],['Checkout',o.ic],['Purchases',o.purchases]];
   const fmax = Math.max(1,o.impressions||1);
   const stTag = s => s==='ACTIVE'?['Active','var(--green)']:s==='PAUSED'?['Paused','var(--text-muted)']:[(s||'—').replace(/_/g,' ').toLowerCase(),'var(--yellow)'];
@@ -774,16 +814,35 @@ function AdsSection({ ads, err, shopRevenue, shopOrders }) {
           <Kpi label="Purchases" value={o.purchases||0} format={v=>Math.round(v).toLocaleString()} color="var(--green)" icon="🛍️" sub={`${fmtMoney(Math.round(o.cpp||0))} per purchase`} spark={series.map(d=>d.orders)}/>
           <Kpi label="Blended ROAS" value={mer} format={v=>v.toFixed(2)+'x'} color={roasC(mer)} icon="⚖️" sub="store revenue ÷ ad spend"/>
         </div>
+        <div className="grid g2" style={{marginBottom:16}}>
+          <div className="rc">
+            <div className="rc-h">ROAS reality check <em>What Meta claims vs what you keep</em></div>
+            {ladder.map(x=>(
+              <div key={x.l} className="lad">
+                <div className="lad-t"><span>{x.l}</span><b style={{color:x.c}}>{x.v.toFixed(2)}x</b></div>
+                <div className="bar" style={{height:9}}><div style={{width:`${x.v/lmax*100}%`,background:x.c}}/></div>
+                <div className="lad-s">{x.sub}</div>
+              </div>
+            ))}
+            <div className="rc-note">Meta attributes <b>{claim.toFixed(0)}%</b> of your store revenue. RTO and cancellations trim gross ROAS by <b>{erode.toFixed(0)}%</b>. “Delivered so far” keeps rising as in-flight orders land.</div>
+          </div>
+          <div className="rc">
+            <div className="rc-h">Meta vs store <em>Same period, side by side</em></div>
+            <div className="cmp cmp-h"><span/><span>Meta</span><span>Store</span><span>Gap</span></div>
+            {cmp.map(([l,m,s,g,money])=>(
+              <div key={l} className="cmp"><span>{l}</span><b>{m}</b><b>{s}</b>
+                <span style={{color:g==null?'var(--text-dim)':g>=0?'var(--green)':'var(--red)'}}>{g==null?'—':(g>=0?'+':'−')+(money?'₹'+compact(Math.abs(g)):Math.abs(g).toLocaleString())}</span>
+              </div>
+            ))}
+            <div className="rc-note">The gap is orders Meta didn’t credit: organic, direct, WhatsApp, influencer, or tracking loss.</div>
+          </div>
+        </div>
         <div className="chips" style={{marginBottom:10}}>
           {[['spend','Spend'],['revenue','Attributed revenue'],['orders','Purchases']].map(([k,l])=><button key={k} className={`chip ${m===k?'on':''}`} onClick={()=>setM(k)}>{l}</button>)}
         </div>
         <AreaChart series={series} metric={m} color={m==='spend'?'#5b5bf0':m==='revenue'?'#12a150':'#f76b15'}/>
-        <div className="pills">
-          <div className="pill">CTR <b>{(o.ctr||0).toFixed(2)}%</b></div>
-          <div className="pill">CPM <b>{fmtMoney(Math.round(o.cpm||0))}</b></div>
-          <div className="pill">CPC <b>{fmtMoney(Math.round((o.cpc||0)*100)/100)}</b></div>
-          <div className="pill">Reach <b>{compact(o.reach||0)}</b></div>
-          {cac>0 && <div className="pill">Cost / store order <b>{fmtMoney(Math.round(cac))}</b></div>}
+        <div className="mtiles">
+          {tiles.map(([l,v])=>(<div key={l} className="mt"><span>{l}</span><b>{v}</b></div>))}
         </div>
       </div>
       <div className="grid g2" style={{marginBottom:0}}>
@@ -1031,6 +1090,12 @@ function Dashboard({ active=true }) {
   const topIds = derived.topProducts.map(p=>p.pid).filter(Boolean).join(',');
   useEffect(()=>{ if(topIds) apiFetch(`/admin/product-images?ids=${topIds}`).then(setImgs).catch(()=>{}); },[topIds]);
 
+  const shopBook = useMemo(()=>{
+    let cancelled=0, rto=0, delivered=0, deliveredOrders=0;
+    for (const o of orders) { const p=o.total_price||0; if(o._stage==='cancelled')cancelled+=p; else if(o._stage==='rto')rto+=p; else if(o._stage==='delivered'){delivered+=p;deliveredOrders++;} }
+    return { revenue:s.revenue||0, orders:s.total||0, cancelled, rto, delivered, deliveredOrders };
+  },[orders,stats]);
+
   const bestDay = series.length ? [...series].sort((a,b)=>b.revenue-a.revenue)[0] : null;
   const avgPerDay = series.length ? (s.revenue||0)/series.length : 0;
   const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[new Date(o.created_at).getHours()]++);
@@ -1127,7 +1192,7 @@ function Dashboard({ active=true }) {
           </div>
         </div>
 
-        <AdsSection ads={ads} err={adsErr} shopRevenue={s.revenue||0} shopOrders={s.total||0}/>
+        <AdsSection ads={ads} err={adsErr} shop={shopBook}/>
 
         <FlowCards orders={orders}/>
 
