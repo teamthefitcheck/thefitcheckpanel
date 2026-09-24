@@ -3054,12 +3054,12 @@ connectMongo().then(async () => {
       runHoldCheck();
       setInterval(runHoldCheck, 6 * 60 * 60 * 1000);
 
-      // ShipSagar AWB tracking — every 2 hours, only if credentials connected
+      // ShipSagar AWB tracking — every 30 min, only if credentials connected
       mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }).then(creds => {
         if (!creds) return;
         runShipsagarSync();
-        setInterval(runShipsagarSync, 2 * 60 * 60 * 1000);
-        console.log('✅  ShipSagar auto-sync enabled (every 2 hours)');
+        setInterval(runShipsagarSync, 30 * 60 * 1000);
+        console.log('✅  ShipSagar auto-sync enabled (every 30 min)');
       }).catch(()=>{});
     }, 30000);
     console.log('✅  Tracking auto-sync enabled (every 2 hours)');
