@@ -1643,6 +1643,19 @@ app.post('/webhooks/whatsapp-cloud', async (req, res) => {
   } catch (e) { console.error('[wa-inbound] error:', e.message); }
 });
 
+const _prodImgCache = new Map();
+app.get('/admin/product-images', adminAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map(x => x.trim()).filter(x => /^\d+$/.test(x)).slice(0, 40);
+    const missing = ids.filter(id => !_prodImgCache.has(id));
+    if (missing.length) {
+      const got = await fetchProductImages(missing);
+      missing.forEach(id => _prodImgCache.set(id, got[id] || ''));
+    }
+    res.json(Object.fromEntries(ids.map(id => [id, _prodImgCache.get(id) || ''])));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Meta Ads insights (system-user token with ads_read) ─────────────────────
 const META_API = 'https://graph.facebook.com/v21.0';
 const META_TOKEN = process.env.META_ACCESS_TOKEN || WA_CLOUD_TOKEN;
