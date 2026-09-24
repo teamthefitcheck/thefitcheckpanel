@@ -632,8 +632,8 @@ function buildSeries(orders, from, to) {
   const monthly = days > 120;
   const map = new Map();
   for (const o of orders) {
-    const d = new Date(o.created_at);
-    const k = monthly ? `${d.getFullYear()}-${pad2(d.getMonth()+1)}` : localKey(d);
+    const day = String(o.created_at).slice(0,10);
+    const k = monthly ? day.slice(0,7) : day;
     const e = map.get(k) || { revenue:0, orders:0 };
     e.revenue += o.total_price||0; e.orders++;
     map.set(k,e);
@@ -807,7 +807,8 @@ function AdsSection({ ads, err, shopRevenue, shopOrders }) {
   );
 }
 
-function Dashboard() {
+function Dashboard({ active=true }) {
+  const lastLoad = useRef(0);
   const [stats,setStats] = useState(null);
   const [prev,setPrev] = useState(null);
   const [orders,setOrders] = useState([]);
@@ -820,8 +821,8 @@ function Dashboard() {
   const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
   const [to,setTo]     = useState(()=>now.toISOString().slice(0,10));
 
-  const load = useCallback(async (f,t) => {
-    setLoading(true);
+  const load = useCallback(async (f,t,silent) => {
+    if (!silent) setLoading(true);
     try {
       const len = Math.round((new Date(t)-new Date(f))/86400000)+1;
       const pf = new Date(new Date(f)-len*86400000).toISOString().slice(0,10);
@@ -833,11 +834,13 @@ function Dashboard() {
       setStats(s); setOrders(o.orders||[]);
       apiFetch(`/orders/stats?from=${pf}&to=${pt}`).then(setPrev).catch(()=>setPrev(null));
       apiFetch(`/orders/audience?from=${f}&to=${t}`).then(setAudience).catch(()=>{});
-      setAds(null); setAdsErr('');
+      if (!silent) { setAds(null); }
+      setAdsErr('');
       apiFetch(`/admin/meta-ads/insights?from=${f}&to=${t}`).then(setAds).catch(e=>setAdsErr(e.message));
-    } finally { setLoading(false); }
+    } finally { setLoading(false); lastLoad.current = Date.now(); }
   }, []);
   useEffect(()=>{ load(from,to); },[from,to]);
+  useEffect(()=>{ if (active && lastLoad.current && Date.now()-lastLoad.current > 60000) load(from,to,true); },[active]);
 
   const s = stats || {};
   const T = s.total || 1;
@@ -1030,7 +1033,7 @@ function Dashboard() {
             ))}
           </div>
           <div className="panel">
-            <div className="panel-h"><div><div className="panel-t">Needs Attention</div><div className="panel-m">Delayed or stuck orders</div></div><span className="tag" style={{'--c':derived.stuck.length?'var(--red)':'var(--green)'}}>{derived.stuck.length?`${derived.stuck.length} open`:'All clear'}</span></div>
+            <div className="panel-h"><div><div className="panel-t">Needs Attention</div><div className="panel-m">Delayed or stuck · orders in selected period</div></div><span className="tag" style={{'--c':derived.stuck.length?'var(--red)':'var(--green)'}}>{derived.stuck.length?`${derived.stuck.length} open`:'All clear'}</span></div>
             {derived.stuck.length===0 && <div style={{padding:'34px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>🎉 Nothing is stuck. Nice work.</div>}
             {derived.stuck.slice(0,6).map(({o,days,issue})=>{
               const c = days>=7?'var(--red)':days>=4?'var(--orange)':'var(--yellow)';
@@ -1406,7 +1409,8 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
 }
 
 /* ─── Orders ─────────────────────────────────────────────────── */
-function Orders() {
+function Orders({ active=true }) {
+  const lastLoad = React.useRef(0);
   const [allOrders,setAllOrders] = useState([]);
   const [loading,setLoading]     = useState(false);
   const [q,setQ]                 = useState('');
@@ -1425,20 +1429,21 @@ function Orders() {
 
   React.useEffect(() => { pollDbStatus(); }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent) => {
+    if (silent!==true) setLoading(true);
     try {
       const params = new URLSearchParams();
       if(from) params.set('from',from);
       if(to)   params.set('to',to);
       const d = await apiFetch(`/orders?${params}`);
       setAllOrders(d.orders||[]);
-      setPage(1);
+      if (silent!==true) setPage(1);
     } catch(e){ console.error(e); }
-    finally { setLoading(false); }
+    finally { setLoading(false); lastLoad.current = Date.now(); }
   },[from,to]);
 
   useEffect(()=>{ load(); },[from,to]);
+  useEffect(()=>{ if (active && lastLoad.current && Date.now()-lastLoad.current > 60000) load(true); },[active]);
 
   // Client-side filter + search
   const filtered = allOrders.filter(o=>{
@@ -1467,7 +1472,7 @@ function Orders() {
           <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>{filtered.length.toLocaleString()} {stage||'total'} orders</p>
         </div>
         <div style={{display:'flex',gap:6}}>
-          <button className="btn-primary btn-sm" onClick={load}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
+          <button className="btn-primary btn-sm" onClick={()=>load()}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
           <button className="btn-ghost btn-sm" onClick={async()=>{
             try{ await apiFetch('/admin/sync-tracking',{method:'POST'}); alert('Tracking sync started — stages will update in the background.'); }
             catch(e){ alert('Sync failed: '+e.message); }
@@ -1490,7 +1495,7 @@ function Orders() {
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input placeholder="Search order, customer…" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} style={{flex:'1 1 200px',minWidth:150}}/>
-        <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);load();}} />
+        <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}} />
       </div>
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
         {['','new','hold','confirmed','partial_collected','ready','pickup','transit','ofd','ndr','delivered','rto','cancelled','misc'].map(s=>{
@@ -1558,7 +1563,7 @@ function Orders() {
           <button className="btn-ghost btn-sm" onClick={()=>setPage(p=>p+1)} disabled={page>=pages || loading}>Next →</button>
         </div>
       )}
-      {modal && <OrderModal order={modal} onClose={()=>setModal(null)} onUpdated={load}/>}
+      {modal && <OrderModal order={modal} onClose={()=>setModal(null)} onUpdated={()=>load(true)}/>}
     </div>
   );
 }
@@ -3159,10 +3164,12 @@ function SyncLogs() {
 function App() {
   const [authed,setAuthed]   = useState(!!token());
   const [tab,setTab]         = useState('dashboard');
+  const [visited,setVisited] = useState({dashboard:true});
   const [theme,setThemeState] = useState(getStoredTheme);
   const [iconPreset,setIconPresetState] = useState(getStoredIcons);
 
   useEffect(() => { applyTheme(theme); }, [theme]);
+  useEffect(() => { setVisited(v => v[tab] ? v : { ...v, [tab]: true }); }, [tab]);
 
   const setTheme = (t) => { setThemeState(t); applyTheme(t); };
   const setIconPreset = (p) => { setIconPresetState(p); localStorage.setItem('fc_icons', p); };
@@ -3175,7 +3182,7 @@ function App() {
   if (!authed) return <Login onLogin={()=>setAuthed(true)}/>;
 
   const views = {
-    dashboard: <Dashboard/>, orders: <Orders/>, returns: <Returns/>,
+    dashboard: <Dashboard active={tab==='dashboard'}/>, orders: <Orders active={tab==='orders'}/>, returns: <Returns/>,
     emails: <Emails/>, finance: <Finance/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
     settings: <Settings theme={theme} setTheme={setTheme} iconPreset={iconPreset} setIconPreset={setIconPreset}/>,
   };
@@ -3192,7 +3199,7 @@ function App() {
           </div>
         </div>
         <div className="page">
-          {views[tab] || <Dashboard/>}
+          {Object.keys(visited).filter(k=>views[k]).map(k=>(<div key={k} style={{display:k===tab?'block':'none'}}>{views[k]}</div>))}
         </div>
       </div>
     </div>
