@@ -21,6 +21,14 @@ const ADMIN_PASS  = process.env.ADMIN_PASSWORD || 'admin123';
 
 let SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN || '';
 
+// WhatsApp Cloud API (Meta Graph API) — order confirmation messages
+const WA_CLOUD_API       = 'https://graph.facebook.com/v21.0';
+const WA_CLOUD_TOKEN     = process.env.WA_CLOUD_TOKEN || '';
+const WA_CLOUD_PHONE_ID  = process.env.WA_CLOUD_PHONE_NUMBER_ID || '';
+const WA_CLOUD_WABA_ID   = process.env.WA_CLOUD_WABA_ID || '';
+const WA_CLOUD_VERIFY_TOKEN = 'fitcheck_wa_cloud_verify';
+const COD_ADVANCE_AMOUNT = 99;
+
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
 let mdb;
 async function connectMongo() {
@@ -768,6 +776,161 @@ async function sendEmail({ to, subject, html, replyTo }) {
   throw lastErr;
 }
 
+// ─── WhatsApp Cloud API (order confirmation) ──────────────────────────────────
+// Template names must exactly match what's approved in Meta Business Manager
+// for this WABA — replace these once templates are submitted & approved.
+const WA_TPL = {
+  ORDER_CONFIRMED_PREPAID:     'order_confirmed_prepaid',
+  ORDER_CONFIRMED_COD_ADVANCE: 'order_confirmed_cod_advance',
+  ORDER_CONFIRM_CANCEL:        'order_confirm_cancel',
+};
+const WA_TPL_LANG = 'en';
+const WA_CLOUD_FALLBACK_IMAGE = `${SERVER_URL}/fitcheck-logo.png`;
+
+const STAGE_WA_KEYS = ['confirmed', 'cod_confirm_ask'];
+async function isGlobalWAEnabled() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { global_wa_enabled: 1, _id: 0 } });
+  return doc?.global_wa_enabled !== false;
+}
+async function isStageWAEnabled(stage) {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { stage_wa_toggles: 1, _id: 0 } });
+  return doc?.stage_wa_toggles?.[stage] !== false;
+}
+
+app.get('/admin/global-wa-enabled', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { global_wa_enabled: 1, _id: 0 } });
+  res.json({ enabled: doc?.global_wa_enabled !== false });
+});
+app.post('/admin/global-wa-enabled', adminAuth, async (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    await mdb.collection('settings').updateOne({}, { $set: { global_wa_enabled: !!enabled, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/admin/stage-wa-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { stage_wa_toggles: 1, _id: 0 } });
+  const toggles = doc?.stage_wa_toggles || {};
+  res.json(Object.fromEntries(STAGE_WA_KEYS.map(k => [k, toggles[k] !== false])));
+});
+app.post('/admin/stage-wa-settings', adminAuth, async (req, res) => {
+  try {
+    const { stage, enabled } = req.body || {};
+    if (!STAGE_WA_KEYS.includes(stage)) return res.status(400).json({ error: 'Invalid stage' });
+    await mdb.collection('settings').updateOne({}, { $set: { [`stage_wa_toggles.${stage}`]: !!enabled, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+function waConfigured() {
+  return !!(WA_CLOUD_TOKEN && WA_CLOUD_PHONE_ID);
+}
+
+// Sends an approved WhatsApp template message via the Cloud API.
+// components: header image (optional), body text params, url button suffix (optional).
+async function sendWACloudTemplate({ phone10, templateName, lang, headerImageUrl, bodyParams = [], urlButtonParam, buttonsPayload }) {
+  if (!waConfigured()) { console.warn('[sendWACloudTemplate] WA Cloud API not configured — skipping', templateName); return { sent: false, reason: 'not_configured' }; }
+  if (!phone10 || phone10.length !== 10) { console.warn('[sendWACloudTemplate] invalid phone', phone10); return { sent: false, reason: 'invalid_phone' }; }
+  const to = `91${phone10}`;
+  const components = [];
+  if (headerImageUrl) components.push({ type: 'header', parameters: [{ type: 'image', image: { link: headerImageUrl } }] });
+  if (bodyParams.length) components.push({ type: 'body', parameters: bodyParams.map(t => ({ type: 'text', text: String(t ?? '') })) });
+  if (urlButtonParam !== undefined) components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(urlButtonParam) }] });
+  const body = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: { name: templateName, language: { code: lang || WA_TPL_LANG }, components },
+  };
+  try {
+    const res = await fetch(`${WA_CLOUD_API}/${WA_CLOUD_PHONE_ID}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${WA_CLOUD_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    const messageId = data?.messages?.[0]?.id;
+    await mdb.collection('wa_send_log').insertOne({ to, template: templateName, sent: !!messageId, message_id: messageId || null, error: messageId ? null : data, sent_at: new Date() });
+    if (!messageId) { console.error('[sendWACloudTemplate] failed', templateName, JSON.stringify(data)); return { sent: false, reason: data?.error?.message || 'unknown' }; }
+    return { sent: true, messageId };
+  } catch (e) {
+    console.error('[sendWACloudTemplate] error', templateName, e.message);
+    await mdb.collection('wa_send_log').insertOne({ to, template: templateName, sent: false, error: e.message, sent_at: new Date() }).catch(() => {});
+    return { sent: false, reason: e.message };
+  }
+}
+
+function waOrderAddressLine(order) {
+  const addr = order.shipping_address || order.billing_address || {};
+  return [addr.address1, addr.address2, addr.city, addr.province, addr.zip].filter(Boolean).join(', ');
+}
+function waOrderItemsList(order) {
+  return (order.line_items || []).map(li => `${li.title}${li.variant_title ? ` (${li.variant_title})` : ''} x${li.quantity}`).join(', ');
+}
+
+// Sends the appropriate order-confirmation WA template based on financial_status.
+// Guards on global/stage toggles and per-order dedup (order_stage.wa_sent[]).
+async function sendOrderConfirmationWA(order) {
+  try {
+    if (!waConfigured()) return;
+    if (!(await isGlobalWAEnabled())) { console.log(`[wa] skipped (WA globally off) — ${order.name}`); return; }
+    const phone10 = normalizePhone(order.shipping_address?.phone || order.phone || order.billing_address?.phone || '');
+    if (phone10.length !== 10) { console.warn(`[wa] ${order.name} — no valid phone, skipping`); return; }
+
+    const sid = String(order.id || order.shopify_id);
+    const stageRec = await OS.get(sid);
+    const alreadySent = stageRec?.wa_sent || [];
+    const itemsList = waOrderItemsList(order);
+    const addressLine = waOrderAddressLine(order);
+    const total = Number(order.total_price || 0);
+    const orderSlug = `${order.name}`.replace('#', '');
+
+    const markSent = (key) => mdb.collection('order_stage').updateOne({ shopify_id: sid }, { $addToSet: { wa_sent: key } });
+
+    if (order.financial_status === 'paid') {
+      if (!(await isStageWAEnabled('confirmed')) || alreadySent.includes('confirmed')) return;
+      const result = await sendWACloudTemplate({
+        phone10,
+        templateName: WA_TPL.ORDER_CONFIRMED_PREPAID,
+        headerImageUrl: WA_CLOUD_FALLBACK_IMAGE,
+        bodyParams: [order.name, itemsList, addressLine, total.toFixed(0)],
+        urlButtonParam: `${orderSlug}`,
+      });
+      if (result.sent) { await markSent('confirmed'); console.log(`[wa] prepaid confirmation sent — ${order.name}`); }
+    } else if (order.financial_status === 'partially_paid') {
+      if (!(await isStageWAEnabled('confirmed')) || alreadySent.includes('confirmed')) return;
+      const remaining = Math.max(0, total - COD_ADVANCE_AMOUNT);
+      const result = await sendWACloudTemplate({
+        phone10,
+        templateName: WA_TPL.ORDER_CONFIRMED_COD_ADVANCE,
+        headerImageUrl: WA_CLOUD_FALLBACK_IMAGE,
+        bodyParams: [order.name, itemsList, addressLine, String(COD_ADVANCE_AMOUNT), remaining.toFixed(0)],
+        urlButtonParam: `${orderSlug}`,
+      });
+      if (result.sent) { await markSent('confirmed'); console.log(`[wa] advance-COD confirmation sent — ${order.name}`); }
+    } else {
+      // pure COD — ask customer to confirm or cancel via interactive template buttons
+      if (!(await isStageWAEnabled('cod_confirm_ask')) || alreadySent.includes('cod_confirm_ask')) return;
+      const result = await sendWACloudTemplate({
+        phone10,
+        templateName: WA_TPL.ORDER_CONFIRM_CANCEL,
+        headerImageUrl: WA_CLOUD_FALLBACK_IMAGE,
+        bodyParams: [order.name, itemsList, addressLine, total.toFixed(0)],
+      });
+      if (result.sent) {
+        await markSent('cod_confirm_ask');
+        // Remember which order this WAMID belongs to, so the inbound button-tap webhook can resolve it back
+        await mdb.collection('wa_pending_confirm').updateOne(
+          { message_id: result.messageId },
+          { $set: { message_id: result.messageId, shopify_id: sid, order_name: order.name, phone: phone10, created_at: new Date() } },
+          { upsert: true }
+        );
+        console.log(`[wa] COD confirm/cancel ask sent — ${order.name}`);
+      }
+    }
+  } catch (e) { console.error('[wa] sendOrderConfirmationWA error:', e.message); }
+}
+
 function trackButton(trackingUrl, awb, courier, label = 'Track Your Order →') {
   const c = (courier || '').toLowerCase();
   const fallback = awb ? (
@@ -1365,6 +1528,8 @@ app.post('/webhooks/orders/create', async (req, res) => {
     } else {
       console.warn(`[orders/create] ${order.name} has no email — skipping`);
     }
+    // WhatsApp order confirmation — fires immediately, branched by financial_status
+    sendOrderConfirmationWA(order).catch(e => console.error('[orders/create] WA send failed:', e.message));
   } catch(e) { console.error('[orders/create] error:', e.message); }
 });
 
@@ -1379,6 +1544,22 @@ app.post('/webhooks/orders/updated', async (req, res) => {
     if (order.cancelled_at) {
       await OS.upsert(sid, { stage: 'cancelled', updated_at: new Date().toISOString() });
       return;
+    }
+    // Customer tapped "Confirm" on the WA COD confirm/cancel template — order was tagged accordingly.
+    // Re-check financial_status now: if they've since paid the advance, send the real confirmed card;
+    // otherwise ask them to pay the COD advance to lock the order in.
+    const waTagsLower = (order.tags || '').split(',').map(t => t.trim().toLowerCase());
+    if (waTagsLower.includes('✅ order confirmed'.toLowerCase()) || waTagsLower.includes('wa-confirmed')) {
+      if (order.financial_status === 'paid' || order.financial_status === 'partially_paid') {
+        sendOrderConfirmationWA(order).catch(e => console.error('[orders/updated] WA confirm send failed:', e.message));
+      } else {
+        // Pure COD confirmed via WA button, no advance collected — just lock the order in, no extra WA nudge.
+        const current = await OS.get(sid);
+        if (!current?.stage || current.stage === 'new' || current.stage === 'hold') {
+          await OS.upsert(sid, { stage: 'confirmed', updated_at: new Date().toISOString() });
+          console.log(`[orders/updated] ${order.name} → confirmed (WA COD confirm)`);
+        }
+      }
     }
     // Auto-set partial_collected if Shopify marks order as partially paid
     if (order.financial_status === 'partially_paid') {
@@ -1423,6 +1604,51 @@ app.post('/webhooks/orders/updated', async (req, res) => {
     }
   } catch(e) { console.error('[orders/updated] error:', e.message); }
 });
+
+// ─── WhatsApp Cloud API inbound webhook (Confirm/Cancel button taps) ─────────
+// Meta's handshake — set this URL + WA_CLOUD_VERIFY_TOKEN in Meta Business Manager → WhatsApp → Configuration.
+app.get('/webhooks/whatsapp-cloud', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === WA_CLOUD_VERIFY_TOKEN) return res.status(200).send(challenge);
+  res.sendStatus(403);
+});
+
+app.post('/webhooks/whatsapp-cloud', async (req, res) => {
+  res.sendStatus(200); // ack immediately, Meta retries on non-2xx
+  try {
+    const body = JSON.parse(req.body);
+    const value = body?.entry?.[0]?.changes?.[0]?.value;
+    const msg = value?.messages?.[0];
+    if (!msg || msg.type !== 'button') return;
+
+    const buttonText = (msg.button?.text || '').trim().toLowerCase();
+    const contextId = msg.context?.id; // wamid of the template message this reply is answering
+    if (!contextId) return;
+
+    const pending = await mdb.collection('wa_pending_confirm').findOne({ message_id: contextId });
+    if (!pending) { console.warn('[wa-inbound] no pending confirm session for', contextId); return; }
+
+    if (buttonText.includes('confirm')) {
+      await shopifyRESTAddOrderTag(pending.shopify_id, '✅ Order Confirmed');
+      console.log(`[wa-inbound] ${pending.order_name} confirmed via WA button`);
+    } else if (buttonText.includes('cancel')) {
+      await shopifyRESTAddOrderTag(pending.shopify_id, '❌ Order Cancelled');
+      await shopifyREST(`/orders/${pending.shopify_id}/cancel.json`, { method: 'POST', body: JSON.stringify({ reason: 'customer', email: false }) });
+      await OS.upsert(pending.shopify_id, { stage: 'cancelled', updated_at: new Date().toISOString() });
+      console.log(`[wa-inbound] ${pending.order_name} cancelled via WA button`);
+    }
+    await mdb.collection('wa_pending_confirm').deleteOne({ message_id: contextId });
+  } catch (e) { console.error('[wa-inbound] error:', e.message); }
+});
+
+async function shopifyRESTAddOrderTag(orderId, tag) {
+  const { order } = await shopifyREST(`/orders/${orderId}.json?fields=id,tags`);
+  const tags = (order.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  if (!tags.includes(tag)) tags.push(tag);
+  await shopifyREST(`/orders/${orderId}.json`, { method: 'PUT', body: JSON.stringify({ order: { id: orderId, tags: tags.join(', ') } }) });
+}
 
 app.post('/webhooks/fulfillments/create', async (req, res) => {
   res.sendStatus(200);
@@ -2140,11 +2366,11 @@ async function shipsagarTrackShipment(awb) {
 // (e.g. "out for delivery" contains "delivery" so check it before "delivered").
 function shipsagarStatusToStage(description) {
   const d = (description || '').toLowerCase();
-  if (/return(ed)?\s*to\s*(origin|shipper)|\brto\b|shipper'?s\s*request/.test(d)) return 'rto';
-  if (/undelivered|refus(ed|al)|not\s*available|held\s*at|\bndr\b|address\s*(incorrect|incomplete)/.test(d)) return 'ndr';
+  if (/return(ed)?\s*to\s*(origin|shipper)|\breturned\b|\brto\b|shipper'?s\s*request/.test(d)) return 'rto';
+  if (/undelivered|not\s*delivered|refus(ed|al)|cancell?ed\s*by\s*(consignee|customer)|otp\s*not\s*shared|contact\s*customer\s*service|not\s*available|held\s*at|\bndr\b|address\s*(incorrect|incomplete)/.test(d)) return 'ndr';
   if (/out\s*for\s*delivery/.test(d)) return 'ofd';
   if (/delivered/.test(d)) return 'delivered';
-  if (/picked\s*up|pickup\s*(done|completed|generated)/.test(d)) return 'pickup';
+  if (/picked\s*up|pickup\s*(done|completed|generated)|(pickup|p\/u)\s*(employee|scheduled|assigned|requested|registered)|out\s*to\s*p\/u/.test(d)) return 'pickup';
   return 'transit';
 }
 
