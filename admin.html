@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.27.0/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -112,13 +113,150 @@ label{font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:.2px
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
 .section-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+/* ═══ Fit Check — design layer (Poppins + Sora, minimal white) ═══ */
+body{font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+h1,h2,h3,.sora{font-family:'Sora','Poppins',sans-serif}
+body[data-theme="light"]{
+  --bg:#f6f6f3;--bg-card:#ffffff;--bg-card2:#f3f3f0;
+  --border:#ebebe6;--border2:#dcdcd6;
+  --text:#0c0c0d;--text-muted:#6c6c72;--text-dim:#a0a0a6;
+  --accent:#0c0c0d;--accent-dim:#333;
+  --green:#12a150;--red:#e5484d;--yellow:#d98e04;--cyan:#0891b2;--purple:#7c5cfc;
+  --indigo:#5b5bf0;--orange:#f76b15;--blue:#2f6fed;
+  --sb-bg:#ffffff;--sb-border:#ebebe6;--sb-active:#0c0c0d;--sb-active-border:#0c0c0d;
+  --sb-text:#6c6c72;--sb-text-active:#ffffff;
+  --overlay-1:#0000000a;--overlay-2:#0000000e;--overlay-3:#00000012;--overlay-4:#00000016;--overlay-5:#0000001f;
+  --pill-border-active:#999;
+  --shadow:0 1px 2px rgba(16,16,20,.04),0 4px 16px rgba(16,16,20,.04);
+  --shadow-lg:0 12px 40px rgba(16,16,20,.12);
+}
+body[data-theme="dark"]{--indigo:#818cf8;--orange:#fb923c;--blue:#60a5fa;--shadow:none;--shadow-lg:0 12px 40px rgba(0,0,0,.6)}
+body[data-theme="bw"]{--indigo:#fff;--orange:#fff;--blue:#fff;--shadow:none;--shadow-lg:0 12px 40px rgba(0,0,0,.6)}
+.card{border-radius:14px;box-shadow:var(--shadow)}
+button{border-radius:10px;font-family:inherit}
+input,select,textarea{border-radius:10px;font-family:inherit}
+.modal{border-radius:18px;box-shadow:var(--shadow-lg)}
+.badge{padding:3px 10px;font-size:10.5px}
+tr:hover td{background:var(--overlay-1)}
+th{font-size:10px;letter-spacing:.9px}
+
+/* shell */
+.app{display:flex;min-height:100vh}
+.sb{width:236px;flex-shrink:0;background:var(--sb-bg);border-right:1px solid var(--sb-border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sb-brand{padding:22px 18px 16px;display:flex;align-items:center;gap:11px}
+.sb-mark{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#0c0c0d,#3b3b46);display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Sora',sans-serif;font-weight:800;font-size:15px;box-shadow:0 4px 14px rgba(12,12,13,.25);flex-shrink:0}
+body[data-theme="dark"] .sb-mark,body[data-theme="bw"] .sb-mark{background:#fff;color:#000;box-shadow:none}
+.sb-name{font-family:'Sora',sans-serif;font-weight:800;font-size:15px;letter-spacing:-.4px;color:var(--text)}
+.sb-sub{font-size:9.5px;letter-spacing:.9px;text-transform:uppercase;color:var(--text-muted);margin-top:1px}
+.sb-label{font-size:9.5px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;color:var(--text-dim);padding:16px 22px 6px}
+.sb nav{padding:0 10px}
+.ni{width:100%;display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;font-size:13px;font-weight:500;color:var(--sb-text);background:transparent;border:none;text-align:left;margin-bottom:2px;transition:all .15s}
+.ni:hover{background:var(--overlay-2);color:var(--text)}
+.ni.on{background:var(--sb-active);color:var(--sb-text-active);font-weight:600;box-shadow:0 4px 14px rgba(12,12,13,.18)}
+body[data-theme="dark"] .ni.on,body[data-theme="bw"] .ni.on{background:#fff;color:#000}
+.ni .ico{width:18px;display:flex;justify-content:center;opacity:.85}
+.sb-foot{margin-top:auto;padding:14px}
+.sb-card{background:var(--bg-card2);border:1px solid var(--border);border-radius:12px;padding:12px;font-size:11px;color:var(--text-muted);margin-bottom:10px}
+.sb-card b{color:var(--text);font-weight:600;display:block;font-size:12px;margin-bottom:2px}
+.main{flex:1;min-width:0}
+.topbar{height:58px;position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.tb-title{font-family:'Sora',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.2px;text-transform:uppercase}
+.tb-right{display:flex;align-items:center;gap:12px}
+.live{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:500;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);padding:6px 12px;border-radius:99px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(18,161,80,.5)}70%{box-shadow:0 0 0 8px rgba(18,161,80,0)}100%{box-shadow:0 0 0 0 rgba(18,161,80,0)}}
+.icon-btn{width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);border-radius:99px;font-size:14px}
+.icon-btn:hover{color:var(--text);border-color:var(--border2)}
+.page{max-width:1240px;margin:0 auto;padding:26px 28px 60px}
+
+/* dashboard */
+.d-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.d-hello{font-family:'Sora',sans-serif;font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1.15}
+.d-hello span{background:linear-gradient(90deg,var(--indigo),var(--purple),var(--orange));-webkit-background-clip:text;background-clip:text;color:transparent}
+.d-sub{font-size:13px;color:var(--text-muted);margin-top:4px}
+.ticker{overflow:hidden;border:1px solid var(--border);background:var(--bg-card);border-radius:12px;height:38px;display:flex;align-items:center;margin-bottom:18px;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.ticker-in{display:flex;gap:38px;white-space:nowrap;animation:tick 48s linear infinite;padding-left:20px}
+.ticker:hover .ticker-in{animation-play-state:paused}
+@keyframes tick{to{transform:translateX(-50%)}}
+.tk{font-size:12px;color:var(--text-muted);display:flex;gap:8px;align-items:center}
+.tk b{color:var(--text);font-weight:600}
+.tk i{font-style:normal;font-size:9px;font-weight:700;letter-spacing:.6px;padding:2px 7px;border-radius:99px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.kpi{position:relative;overflow:hidden;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.kpi::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--c)}
+.kpi-l{font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center}
+.kpi-ico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;background:color-mix(in srgb,var(--c) 12%,transparent)}
+.kpi-v{font-family:'Sora',sans-serif;font-size:27px;font-weight:800;letter-spacing:-1px;margin:10px 0 2px;line-height:1.05}
+.kpi-s{max-width:62%;flex-wrap:wrap;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;min-height:18px}
+.delta{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:99px}
+.delta.up{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.delta.down{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.kpi svg.spark{position:absolute;right:0;bottom:0;opacity:.9;pointer-events:none}
+.grid{display:grid;gap:14px;margin-bottom:14px}
+.g21{grid-template-columns:2fr 1fr}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.panel-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.panel-t{font-family:'Sora',sans-serif;font-size:14px;font-weight:700;letter-spacing:-.2px}
+.panel-m{font-size:11px;color:var(--text-muted);margin-top:2px}
+.tag{font-size:9.5px;font-weight:700;letter-spacing:.7px;padding:3px 10px;border-radius:99px;text-transform:uppercase;background:color-mix(in srgb,var(--c,var(--indigo)) 12%,transparent);color:var(--c,var(--indigo));border:1px solid color-mix(in srgb,var(--c,var(--indigo)) 26%,transparent)}
+.chips{display:flex;gap:6px}
+.chip{font-size:11px;font-weight:600;padding:5px 12px;border-radius:99px;background:transparent;border:1px solid var(--border2);color:var(--text-muted)}
+.chip.on{background:var(--text);color:var(--bg-card);border-color:var(--text)}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;top:0;transform:translate(-50%,-6px);pointer-events:none;background:var(--text);color:var(--bg-card);border-radius:10px;padding:8px 12px;font-size:11px;white-space:nowrap;box-shadow:var(--shadow-lg);z-index:5}
+.tip b{display:block;font-family:'Sora',sans-serif;font-size:14px}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.pill{font-size:11px;color:var(--text-muted);background:var(--bg-card2);border-radius:99px;padding:6px 12px}
+.pill b{color:var(--text);font-weight:600}
+.big{border-radius:16px;padding:20px;border:1px solid color-mix(in srgb,var(--c) 22%,transparent);background:linear-gradient(160deg,color-mix(in srgb,var(--c) 9%,var(--bg-card)),var(--bg-card))}
+.big-l{font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--text-muted)}
+.big-v{font-family:'Sora',sans-serif;font-size:38px;font-weight:800;letter-spacing:-1.5px;color:var(--c);line-height:1;margin:10px 0 4px}
+.big-s{font-size:11px;color:var(--text-muted);margin-bottom:12px}
+.bar{height:5px;background:var(--overlay-3);border-radius:9px;overflow:hidden}
+.bar>div{height:100%;border-radius:9px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.brain{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+.brain::-webkit-scrollbar{height:4px}
+.bcard{position:relative;overflow:hidden;min-width:250px;max-width:250px;border-radius:14px;padding:16px;border:1px solid color-mix(in srgb,var(--c) 24%,transparent);background:color-mix(in srgb,var(--c) 6%,var(--bg-card))}
+.bcard::after{content:'';position:absolute;right:-24px;top:-24px;width:90px;height:90px;border-radius:50%;background:var(--c);filter:blur(28px);opacity:.16}
+.bcard-b{font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--c);margin-bottom:8px;display:flex;gap:6px;align-items:center}
+.bcard-t{font-size:13px;font-weight:600;line-height:1.35;margin-bottom:6px}
+.bcard-d{font-size:11px;color:var(--text-muted);line-height:1.45}
+.rainbow{height:7px;border-radius:9px;background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--green),var(--yellow),var(--orange),var(--red));margin-bottom:14px}
+.row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none;padding-bottom:0}
+.sev{width:5px;align-self:stretch;border-radius:9px;background:var(--c);flex-shrink:0}
+.days{font-family:'Sora',sans-serif;font-size:20px;font-weight:800;color:var(--c);text-align:right;line-height:1}
+.days small{display:block;font-family:'Poppins';font-size:9px;font-weight:600;letter-spacing:.7px;color:var(--text-muted);text-transform:uppercase;margin-top:2px}
+.prods{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+.prods::-webkit-scrollbar{height:4px}
+.prod{min-width:190px;max-width:190px;border:1px solid var(--border);border-radius:14px;padding:14px;background:var(--bg-card2);position:relative}
+.rank{position:absolute;right:12px;top:10px;font-family:'Sora',sans-serif;font-weight:800;font-size:26px;color:var(--overlay-5);letter-spacing:-1px}
+.prod-t{font-size:12.5px;font-weight:600;line-height:1.35;margin:26px 0 8px;min-height:34px}
+.states{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.st{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--bg-card2)}
+.heat{display:grid;grid-template-columns:34px repeat(24,1fr);gap:3px;align-items:center}
+.hc{aspect-ratio:1;border-radius:4px;background:var(--indigo);min-height:10px}
+.hl{font-size:9.5px;color:var(--text-muted);text-align:right;padding-right:6px}
+.hx{font-size:8.5px;color:var(--text-dim);text-align:center}
+.feed-i{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.feed-i:last-child{border-bottom:none}
+.av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.skel{background:linear-gradient(90deg,var(--overlay-2) 25%,var(--overlay-4) 50%,var(--overlay-2) 75%);background-size:200% 100%;animation:shim 1.3s infinite;border-radius:14px}
+@keyframes shim{to{background-position:-200% 0}}
+.fade{animation:fadeup .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.g21,.g2,.g3{grid-template-columns:1fr}}
+@media(max-width:900px){.sb{width:68px}.sb-name,.sb-sub,.sb-label,.ni span.t,.sb-card{display:none}.ni{justify-content:center;padding:11px}.sb-brand{justify-content:center;padding:18px 0}.page{padding:18px 14px 50px}.topbar{padding:0 14px}}
+@media(max-width:520px){.kpis{grid-template-columns:1fr 1fr;gap:10px}.kpi-v{font-size:21px}.d-hello{font-size:21px}}
 </style>
-<script>(function(){var t=localStorage.getItem('fc_theme')||'dark';if(t)document.documentElement.setAttribute('data-theme-init',t);})()</script>
+<script>(function(){var t=localStorage.getItem('fc_theme')||'light';if(t)document.documentElement.setAttribute('data-theme-init',t);})()</script>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─── Theme & Icon preset ────────────────────────────────────── */
 const SIDEBAR_ICONS_EMOJI = {
@@ -140,8 +278,8 @@ function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
   localStorage.setItem('fc_theme', theme);
 }
-function getStoredTheme() { return localStorage.getItem('fc_theme') || 'dark'; }
-function getStoredIcons() { return localStorage.getItem('fc_icons') || 'emoji'; }
+function getStoredTheme() { return localStorage.getItem('fc_theme') || 'light'; }
+function getStoredIcons() { return localStorage.getItem('fc_icons') || 'minimal'; }
 const API = '';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
@@ -311,11 +449,11 @@ function Login({ onLogin }) {
     setLoading(false);
   };
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20,background:'#0a0a0a'}}>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20,background:'var(--bg)'}}>
       <div style={{width:'100%',maxWidth:360}}>
         <div style={{textAlign:'center',marginBottom:32}}>
-          <div style={{display:'inline-flex',width:56,height:56,background:'#fff',borderRadius:16,alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:900,color:'#000',marginBottom:16,boxShadow:'0 0 0 1px #333'}}>✓</div>
-          <h1 style={{fontSize:24,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>{brand()}</h1>
+          <div style={{display:'inline-flex',width:56,height:56,background:'linear-gradient(135deg,#0c0c0d,#3b3b46)',borderRadius:16,alignItems:'center',justifyContent:'center',fontSize:20,fontFamily:'Sora',fontWeight:800,color:'#fff',marginBottom:16,boxShadow:'0 8px 24px rgba(12,12,13,.25)'}}>FC</div>
+          <h1 style={{fontSize:24,fontWeight:800,color:'var(--text)',fontFamily:'Sora',letterSpacing:'-0.5px'}}>{brand()}</h1>
           <p style={{color:'#666',fontSize:13,marginTop:4}}>Admin Panel · Powered by Antortiq</p>
         </div>
         <div className="card" style={{padding:24}}>
@@ -337,70 +475,204 @@ function Login({ onLogin }) {
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────── */
+const NAV_GROUPS = [
+  ['Operations', [['dashboard','Dashboard'],['orders','Orders'],['returns','Returns']]],
+  ['Growth',     [['finance','Finance'],['emails','Emails']]],
+  ['System',     [['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings']]],
+];
+const PAGE_TITLES = {dashboard:'Command Center',orders:'Orders',returns:'Returns & Exchange',emails:'Email Studio',finance:'Finance & P&L',shipping:'Shipping',synclogs:'Sync Logs',settings:'Settings'};
+
 function Sidebar({ tab, setTab, onLogout, iconPreset }) {
-  const items = [
-    ['dashboard','Dashboard'],['orders','Orders'],['returns','Returns'],
-    ['emails','Emails'],['finance','Finance'],['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings'],
-  ];
-  const icons = iconPreset === 'minimal' ? SIDEBAR_ICONS_MINIMAL : SIDEBAR_ICONS_EMOJI;
+  const icons = iconPreset === 'emoji' ? SIDEBAR_ICONS_EMOJI : SIDEBAR_ICONS_MINIMAL;
   return (
-    <div style={{width:220,minHeight:'100vh',background:'var(--sb-bg)',borderRight:'1px solid var(--sb-border)',display:'flex',flexDirection:'column',flexShrink:0,position:'sticky',top:0,height:'100vh'}}>
-      <div style={{padding:'20px 16px 14px',borderBottom:'1px solid var(--sb-border)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:34,height:34,background:'#fff',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:900,color:'#000',flexShrink:0}}>✓</div>
-          <div>
-            <div style={{fontWeight:800,fontSize:14,color:'var(--sb-text-active)',letterSpacing:'-0.3px'}}>{brand()}</div>
-            <div style={{fontSize:10,color:'var(--sb-text)'}}>by Antortiq</div>
-          </div>
-        </div>
+    <aside className="sb">
+      <div className="sb-brand">
+        <div className="sb-mark">FC</div>
+        <div><div className="sb-name">{brand()}</div><div className="sb-sub">Command Center</div></div>
       </div>
-      <nav style={{flex:1,padding:'8px 8px'}}>
-        {items.map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{
-            width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,
-            background:tab===id?'var(--sb-active)':'transparent',color:tab===id?'var(--sb-text-active)':'var(--sb-text)',
-            border:tab===id?'1px solid var(--sb-active-border)':'1px solid transparent',
-            cursor:'pointer',fontSize:13,fontWeight:tab===id?600:400,marginBottom:2,transition:'all .12s',textAlign:'left'
-          }}>
-            <span style={{fontSize:14,opacity:tab===id?1:.6,display:'flex',alignItems:'center'}}>{icons[id]}</span>{label}
-          </button>
+      <nav>
+        {NAV_GROUPS.map(([label, items]) => (
+          <div key={label}>
+            <div className="sb-label">{label}</div>
+            {items.map(([id, name]) => (
+              <button key={id} className={`ni ${tab===id?'on':''}`} onClick={()=>setTab(id)} title={name}>
+                <span className="ico">{icons[id]}</span><span className="t">{name}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
-      <div style={{padding:'10px 8px',borderTop:'1px solid #1a1a1a'}}>
-        <button onClick={onLogout} className="btn-ghost" style={{width:'100%',fontSize:12}}>Sign Out</button>
+      <div className="sb-foot">
+        <div className="sb-card"><b>Store is live</b>Orders sync automatically from Shopify.</div>
+        <button className="btn-ghost" onClick={onLogout} style={{width:'100%',fontSize:12}}>Sign out</button>
       </div>
+    </aside>
+  );
+}
+
+/* ─── Dashboard helpers ─────────────────────────────────────── */
+const pad2 = n => String(n).padStart(2,'0');
+const localKey = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const compact = n => { n = +n||0; if (n>=1e7) return (n/1e7).toFixed(1)+'Cr'; if (n>=1e5) return (n/1e5).toFixed(1)+'L'; if (n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1)+'k'; return Math.round(n)+''; };
+function timeAgo(d) {
+  const m = Math.max(0, (Date.now()-new Date(d))/60000);
+  if (m < 60) return Math.max(1,Math.round(m))+'m ago';
+  if (m < 1440) return Math.round(m/60)+'h ago';
+  return Math.round(m/1440)+'d ago';
+}
+const custName = o => `${o.customer?.firstName||o.customer?.first_name||o.shipping_address?.first_name||''} ${o.customer?.lastName||o.customer?.last_name||o.shipping_address?.last_name||''}`.trim() || 'Customer';
+const AV_COLORS = ['#5b5bf0','#f76b15','#12a150','#e5484d','#0891b2','#7c5cfc','#d98e04','#2f6fed'];
+const avColor = s => AV_COLORS[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0) % AV_COLORS.length];
+
+function useCountUp(target, dur=900) {
+  const [v,setV] = useState(0);
+  useEffect(()=>{
+    let raf, start;
+    const step = t => { if(!start) start=t; const p=Math.min(1,(t-start)/dur); setV(target*(1-Math.pow(1-p,3))); if(p<1) raf=requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+    return ()=>cancelAnimationFrame(raf);
+  },[target]);
+  return v;
+}
+function CountUp({ value, format }) { const v = useCountUp(value); return <>{format(v)}</>; }
+
+function Spark({ data, color, w=110, h=38 }) {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data,1), min = Math.min(...data,0);
+  const x = i => (i/(data.length-1))*w, y = v => h-4-((v-min)/(max-min||1))*(h-10);
+  const d = data.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const id = 'sp'+color.replace(/[^a-z0-9]/gi,'');
+  return (
+    <svg className="spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".28"/><stop offset="1" stopColor={color} stopOpacity="0"/></linearGradient></defs>
+      <path d={`${d} L${w},${h} L0,${h} Z`} fill={`url(#${id})`}/>
+      <path d={d} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function Kpi({ label, value, format, color, icon, sub, delta, spark }) {
+  return (
+    <div className="kpi fade" style={{'--c':color}}>
+      <div className="kpi-l"><span>{label}</span><span className="kpi-ico">{icon}</span></div>
+      <div className="kpi-v" style={{color}}><CountUp value={value} format={format}/></div>
+      <div className="kpi-s">
+        {delta!=null && isFinite(delta) && <span className={`delta ${delta>=0?'up':'down'}`}>{delta>=0?'▲':'▼'} {Math.abs(delta).toFixed(0)}%</span>}
+        <span>{sub}</span>
+      </div>
+      <Spark data={spark} color={color}/>
     </div>
   );
 }
 
-/* ─── Dashboard ──────────────────────────────────────────────── */
+function buildSeries(orders, from, to) {
+  const start = new Date(from+'T00:00:00'), end = new Date(to+'T00:00:00');
+  const days = Math.round((end-start)/86400000)+1;
+  const monthly = days > 120;
+  const map = new Map();
+  for (const o of orders) {
+    const d = new Date(o.created_at);
+    const k = monthly ? `${d.getFullYear()}-${pad2(d.getMonth()+1)}` : localKey(d);
+    const e = map.get(k) || { revenue:0, orders:0 };
+    e.revenue += o.total_price||0; e.orders++;
+    map.set(k,e);
+  }
+  const out = [];
+  if (monthly) {
+    const keys = [...map.keys()].sort();
+    if (!keys.length) return out;
+    let [y,m] = keys[0].split('-').map(Number);
+    const [ey,em] = keys[keys.length-1].split('-').map(Number);
+    while (y<ey || (y===ey && m<=em)) {
+      const k = `${y}-${pad2(m)}`, e = map.get(k)||{revenue:0,orders:0};
+      out.push({ ...e, label:new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'}) });
+      m++; if (m>12) { m=1; y++; }
+    }
+  } else {
+    for (let i=0;i<days;i++) {
+      const d = new Date(start.getTime()+i*86400000), e = map.get(localKey(d))||{revenue:0,orders:0};
+      out.push({ ...e, label:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) });
+    }
+  }
+  return out;
+}
+
+function AreaChart({ series, metric, color }) {
+  const W=880, H=260, pl=46, pr=12, pt=16, pb=28;
+  const [hi,setHi] = useState(null);
+  if (!series.length) return <div style={{padding:50,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No orders in this period</div>;
+  const vals = series.map(d=>d[metric]);
+  const max = Math.max(1,...vals)*1.15;
+  const n = series.length;
+  const x = i => pl + (n===1 ? (W-pl-pr)/2 : i*(W-pl-pr)/(n-1));
+  const y = v => pt + (H-pt-pb)*(1-v/max);
+  const pts = vals.map((v,i)=>[x(i),y(v)]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i=1;i<pts.length;i++) { const [x0,y0]=pts[i-1],[x1,y1]=pts[i],cx=(x0+x1)/2; d += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`; }
+  const area = `${d} L${x(n-1)},${H-pb} L${x(0)},${H-pb} Z`;
+  const ticks = [0,.25,.5,.75,1];
+  const step = Math.max(1, Math.ceil(n/7));
+  const onMove = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const rel = (e.clientX-r.left)/r.width*W;
+    setHi(Math.max(0,Math.min(n-1, Math.round((rel-pl)/((W-pl-pr)/Math.max(1,n-1))))));
+  };
+  const cur = hi!=null ? series[hi] : null;
+  const fmtV = v => metric==='revenue' ? fmtMoney(v) : `${v} orders`;
+  return (
+    <div className="chart">
+      <svg viewBox={`0 0 ${W} ${H}`} onMouseMove={onMove} onMouseLeave={()=>setHi(null)} style={{cursor:'crosshair'}}>
+        <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".32"/><stop offset="1" stopColor={color} stopOpacity="0"/></linearGradient></defs>
+        {ticks.map(t=>(<g key={t}>
+          <line x1={pl} x2={W-pr} y1={y(max*t)} y2={y(max*t)} stroke="var(--border)" strokeDasharray={t?'3 5':''}/>
+          <text x={pl-8} y={y(max*t)+3.5} textAnchor="end" fontSize="10" fill="var(--text-dim)">{metric==='revenue'?'₹'+compact(max*t):Math.round(max*t)}</text>
+        </g>))}
+        <path d={area} fill="url(#ag)"/>
+        <path d={d} fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round"/>
+        {series.map((s,i)=> i%step===0 && <text key={i} x={x(i)} y={H-8} textAnchor="middle" fontSize="10" fill="var(--text-dim)">{s.label}</text>)}
+        {hi!=null && <g>
+          <line x1={x(hi)} x2={x(hi)} y1={pt} y2={H-pb} stroke={color} strokeOpacity=".35" strokeDasharray="4 4"/>
+          <circle cx={x(hi)} cy={y(vals[hi])} r="6" fill="var(--bg-card)" stroke={color} strokeWidth="3"/>
+        </g>}
+      </svg>
+      {cur && <div className="tip" style={{left:`${x(hi)/W*100}%`,top:`${y(vals[hi])/H*100}%`}}>{cur.label}<b>{fmtV(vals[hi])}</b></div>}
+    </div>
+  );
+}
+
+function Heatmap({ orders }) {
+  const grid = Array.from({length:7},()=>Array(24).fill(0));
+  for (const o of orders) { const d = new Date(o.created_at); grid[(d.getDay()+6)%7][d.getHours()]++; }
+  const max = Math.max(1,...grid.flat());
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  return (
+    <div className="heat">
+      <div/>{Array.from({length:24},(_,h)=><div key={h} className="hx">{h%3===0?h:''}</div>)}
+      {grid.map((row,di)=>(<React.Fragment key={di}>
+        <div className="hl">{days[di]}</div>
+        {row.map((c,h)=><div key={h} className="hc" title={`${days[di]} ${h}:00 — ${c} orders`} style={{opacity:c?0.12+0.88*c/max:0.06}}/>)}
+      </React.Fragment>))}
+    </div>
+  );
+}
+
 function StatBar({ items }) {
   const total = items.reduce((s,i)=>s+(i.value||0),0);
   if (!total) return null;
   return (
-    <div style={{display:'flex',height:8,borderRadius:4,overflow:'hidden',gap:1}}>
-      {items.map(i=>i.value>0&&(
-        <div key={i.label} title={`${i.label}: ${i.value}`} style={{flex:i.value,background:i.color,transition:'flex .5s'}}/>
-      ))}
-    </div>
-  );
-}
-
-function MiniStat({ label, value, sub, color }) {
-  return (
-    <div style={{display:'flex',flexDirection:'column',gap:2}}>
-      <div style={{fontSize:11,color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:.6}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:800,color:color||'var(--text)'}}>{value}</div>
-      {sub && <div style={{fontSize:11,color:'var(--text-muted)'}}>{sub}</div>}
+    <div style={{display:'flex',height:8,borderRadius:6,overflow:'hidden',gap:2}}>
+      {items.map(i=>i.value>0&&(<div key={i.label} title={`${i.label}: ${i.value}`} style={{flex:i.value,background:i.color,transition:'flex .6s'}}/>))}
     </div>
   );
 }
 
 function Dashboard() {
   const [stats,setStats] = useState(null);
+  const [prev,setPrev] = useState(null);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(true);
   const [audience,setAudience] = useState(null);
+  const [metric,setMetric] = useState('revenue');
   const now = new Date();
   const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
   const [to,setTo]     = useState(()=>now.toISOString().slice(0,10));
@@ -408,255 +680,293 @@ function Dashboard() {
   const load = useCallback(async (f,t) => {
     setLoading(true);
     try {
+      const len = Math.round((new Date(t)-new Date(f))/86400000)+1;
+      const pf = new Date(new Date(f)-len*86400000).toISOString().slice(0,10);
+      const pt = new Date(new Date(f)-86400000).toISOString().slice(0,10);
       const [s,o] = await Promise.all([
         apiFetch(`/orders/stats?from=${f}&to=${t}`),
         apiFetch(`/orders?from=${f}&to=${t}`),
       ]);
-      setStats(s); setOrders((o.orders||[]).slice(0,10));
+      setStats(s); setOrders(o.orders||[]);
+      apiFetch(`/orders/stats?from=${pf}&to=${pt}`).then(setPrev).catch(()=>setPrev(null));
       apiFetch(`/orders/audience?from=${f}&to=${t}`).then(setAudience).catch(()=>{});
     } finally { setLoading(false); }
   }, []);
-
   useEffect(()=>{ load(from,to); },[from,to]);
 
   const s = stats || {};
   const T = s.total || 1;
-  const pct = (n) => ((n||0)/T*100).toFixed(1);
-  const dispatchedOrders = (s.ready||0)+(s.pickup||0)+(s.transit||0)+(s.ofd||0)+(s.delivered||0)+(s.rto||0);
-  const dispatchRate = (dispatchedOrders/T*100).toFixed(1);
-  const deliveryRate = ((s.delivered||0)/T*100).toFixed(1);
-  const rtoRate = ((s.rto||0)/T*100).toFixed(1);
-  const cancelRate = ((s.cancelled||0)/T*100).toFixed(1);
+  const pct = n => ((n||0)/T*100).toFixed(1);
+  const dispatched = (s.ready||0)+(s.pickup||0)+(s.transit||0)+(s.ofd||0)+(s.delivered||0)+(s.rto||0)+(s.ndr||0);
+  const dispatchRate = dispatched/T*100, deliveryRate = (s.delivered||0)/T*100, rtoRate = (s.rto||0)/T*100, cancelRate = (s.cancelled||0)/T*100;
+  const dl = (a,b) => (b ? (a-b)/b*100 : null);
+
+  const series = useMemo(()=>buildSeries(orders,from,to),[orders,from,to]);
+  const sortedOrders = useMemo(()=>[...orders].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)),[orders]);
+
+  const derived = useMemo(()=>{
+    const products = new Map(), cities = new Map(), custCount = new Map();
+    const payRto = { cod:[0,0], prepaid:[0,0] };
+    const stuck = [];
+    const nowMs = Date.now();
+    for (const o of orders) {
+      for (const li of (o.line_items||[])) {
+        const e = products.get(li.title) || { title:li.title, qty:0, revenue:0 };
+        e.qty += li.quantity||1; e.revenue += (li.price||0)*(li.quantity||1); products.set(li.title,e);
+      }
+      const geo = o.shipping_address?.province || o.shipping_address?.city;
+      if (geo) { const e = cities.get(geo)||{name:geo,total:0,delivered:0,rto:0}; e.total++; if(o._stage==='delivered')e.delivered++; if(o._stage==='rto')e.rto++; cities.set(geo,e); }
+      const em = o.email || o.customer?.email; if (em) custCount.set(em,(custCount.get(em)||0)+1);
+      const isPre = (o.financial_status||'').toLowerCase()==='paid'; const bucket = isPre?payRto.prepaid:payRto.cod;
+      bucket[0]++; if (o._stage==='rto') bucket[1]++;
+      const days = (nowMs-new Date(o.created_at))/86400000;
+      const st = o._stage;
+      let issue=null;
+      if (['new','confirmed','partial_collected','hold'].includes(st) && days>=2) issue='Awaiting dispatch';
+      else if (st==='ready' && days>=3) issue='Ready, not picked up';
+      else if (['pickup','transit'].includes(st) && days>=8) issue='Slow in transit';
+      else if (st==='ndr') issue='Delivery attempt failed';
+      else if (st==='ofd' && days>=10) issue='Stuck out for delivery';
+      if (issue) stuck.push({ o, days:Math.floor(days), issue });
+    }
+    const repeat = [...custCount.values()].filter(v=>v>1).length;
+    return {
+      topProducts:[...products.values()].sort((a,b)=>b.qty-a.qty).slice(0,10),
+      topCities:[...cities.values()].sort((a,b)=>b.total-a.total).slice(0,8),
+      geoCovered:[...cities.values()].reduce((a,c)=>a+c.total,0),
+      repeatRate: custCount.size ? repeat/custCount.size*100 : 0,
+      payRto, stuck:stuck.sort((a,b)=>b.days-a.days),
+    };
+  },[orders]);
+
+  const bestDay = series.length ? [...series].sort((a,b)=>b.revenue-a.revenue)[0] : null;
+  const avgPerDay = series.length ? (s.revenue||0)/series.length : 0;
+  const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[new Date(o.created_at).getHours()]++);
+  const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
+  const hourLbl = h => `${h%12||12}${h<12?'am':'pm'}`;
+
+  const insights = [];
+  if (orders.length) {
+    const codR = derived.payRto.cod[0] ? derived.payRto.cod[1]/derived.payRto.cod[0]*100 : 0;
+    const preR = derived.payRto.prepaid[0] ? derived.payRto.prepaid[1]/derived.payRto.prepaid[0]*100 : 0;
+    if (derived.payRto.cod[0] && derived.payRto.prepaid[0]) insights.push({icon:'⚖️',tone:'var(--orange)',badge:'RTO Pattern',title:`COD orders return ${codR.toFixed(1)}% vs ${preR.toFixed(1)}% for prepaid`,detail: codR>preR ? `Nudging COD buyers to prepay could save ~${Math.round((codR-preR)/100*derived.payRto.cod[0])} returns.` : 'COD is performing on par with prepaid.'});
+    if (derived.stuck.length) insights.push({icon:'🚨',tone:'var(--red)',badge:'Needs Action',title:`${derived.stuck.length} orders are stuck or delayed`,detail:`Oldest is ${derived.stuck[0].o.name}, ${derived.stuck[0].days} days — ${derived.stuck[0].issue.toLowerCase()}.`});
+    if (derived.topProducts[0]) insights.push({icon:'🔥',tone:'var(--purple)',badge:'Bestseller',title:derived.topProducts[0].title,detail:`${derived.topProducts[0].qty} units sold · ${fmtMoney(derived.topProducts[0].revenue)} revenue this period.`});
+    if (Math.max(...hourCounts)>0) insights.push({icon:'⏰',tone:'var(--cyan)',badge:'Peak Hour',title:`Most orders land around ${hourLbl(peakHour)}`,detail:'Schedule drops, stories and WhatsApp pushes 30 minutes before this window.'});
+    if (derived.repeatRate>0) insights.push({icon:'💎',tone:'var(--green)',badge:'Loyalty',title:`${derived.repeatRate.toFixed(1)}% of customers ordered more than once`,detail:'Repeat buyers are your cheapest revenue — consider a thank-you code.'});
+    if (prev && prev.revenue) { const g = dl(s.revenue||0,prev.revenue); insights.push({icon:g>=0?'📈':'📉',tone:g>=0?'var(--green)':'var(--red)',badge:'Momentum',title:`Revenue ${g>=0?'up':'down'} ${Math.abs(g).toFixed(0)}% vs previous period`,detail:`${fmtMoney(s.revenue||0)} now vs ${fmtMoney(prev.revenue)} before.`}); }
+  }
+
+  const ticker = orders.length ? [
+    ...sortedOrders.slice(0,4).map(o=>({tag:'ORDER',c:'var(--indigo)',t:<><b>{o.name}</b> · {custName(o)} · {fmtMoney(o.total_price)} · {timeAgo(o.created_at)}</>})),
+    {tag:'REVENUE',c:'var(--green)',t:<><b>{fmtMoney(s.revenue||0)}</b> across {(s.total||0).toLocaleString()} orders</>},
+    ...(derived.stuck.length?[{tag:'URGENT',c:'var(--red)',t:<><b>{derived.stuck.length}</b> orders need attention</>}]:[]),
+    {tag:'DELIVERY',c:'var(--cyan)',t:<><b>{deliveryRate.toFixed(1)}%</b> delivered · <b>{rtoRate.toFixed(1)}%</b> RTO</>},
+    ...(derived.topProducts[0]?[{tag:'TRENDING',c:'var(--purple)',t:<><b>{derived.topProducts[0].title}</b> leading with {derived.topProducts[0].qty} units</>}]:[]),
+  ] : [];
+
+  const hr = now.getHours();
+  const greet = hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const revS = series.map(d=>d.revenue), ordS = series.map(d=>d.orders);
 
   return (
     <div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
+      <div className="d-head">
         <div>
-          <h2 style={{fontSize:20,fontWeight:800,color:'var(--text)'}}>Dashboard</h2>
-          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Store performance overview</p>
+          <div className="d-hello">{greet}, <span>{brand()}</span></div>
+          <div className="d-sub">Here’s how your store is performing — {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
         </div>
         <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}} />
       </div>
 
-      {loading ? <div style={{padding:60,color:'var(--text-muted)',textAlign:'center',fontSize:14}}>Loading…</div> : <>
+      {loading ? (
+        <div>
+          <div className="kpis">{Array.from({length:8}).map((_,i)=><div key={i} className="skel" style={{height:118}}/>)}</div>
+          <div className="skel" style={{height:340,marginBottom:14}}/>
+          <div className="grid g3">{[0,1,2].map(i=><div key={i} className="skel" style={{height:170}}/>)}</div>
+        </div>
+      ) : <>
+        {ticker.length>0 && (
+          <div className="ticker"><div className="ticker-in">
+            {[...ticker,...ticker].map((k,i)=>(<div className="tk" key={i}><i style={{background:`color-mix(in srgb,${k.c} 14%,transparent)`,color:k.c}}>{k.tag}</i><span>{k.t}</span></div>))}
+          </div></div>
+        )}
 
-        {/* Row 1 — Top KPIs */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12,marginBottom:16}}>
-          {[
-            {label:'Total Orders',value:(s.total||0).toLocaleString(),color:'var(--text)',icon:'📦'},
-            {label:'Revenue',value:fmtMoney(s.revenue||0),color:'var(--purple)',icon:'💰'},
-            {label:'Avg Order Value',value:fmtMoney(s.aov||0),color:'var(--cyan)',icon:'📊'},
-            {label:'Dispatched',value:dispatchedOrders.toLocaleString(),color:'var(--cyan)',icon:'🚀',sub:dispatchRate+'% of total'},
-            {label:'Delivered',value:(s.delivered||0).toLocaleString(),color:'var(--green)',icon:'✅',sub:deliveryRate+'% of total'},
-            {label:'Pending',value:(s.pending||0).toLocaleString(),color:'var(--yellow)',icon:'⏳',sub:pct(s.pending)+'% of total'},
-            {label:'RTO',value:(s.rto||0).toLocaleString(),color:'var(--red)',icon:'↩',sub:rtoRate+'% rate'},
-            {label:'Cancelled',value:(s.cancelled||0).toLocaleString(),color:'#ef4444',icon:'✕',sub:cancelRate+'% rate'},
-          ].map(({label,value,color,icon,sub})=>(
-            <div key={label} className="card" style={{padding:16}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                <span style={{fontSize:10,color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:.7}}>{label}</span>
-                <span style={{fontSize:15}}>{icon}</span>
+        <div className="kpis">
+          <Kpi label="Revenue" value={s.revenue||0} format={v=>fmtMoney(Math.round(v))} color="var(--indigo)" icon="💰" delta={prev?dl(s.revenue||0,prev.revenue):null} sub="vs previous period" spark={revS}/>
+          <Kpi label="Orders" value={s.total||0} format={v=>Math.round(v).toLocaleString()} color="var(--text)" icon="📦" delta={prev?dl(s.total||0,prev.total):null} sub="vs previous period" spark={ordS}/>
+          <Kpi label="Avg Order Value" value={s.aov||0} format={v=>fmtMoney(Math.round(v))} color="var(--cyan)" icon="🧾" delta={prev?dl(s.aov||0,prev.aov):null} sub="per order"/>
+          <Kpi label="Delivered" value={s.delivered||0} format={v=>Math.round(v).toLocaleString()} color="var(--green)" icon="✅" delta={prev?dl(s.delivered||0,prev.delivered):null} sub={`${deliveryRate.toFixed(1)}% of orders`}/>
+          <Kpi label="Dispatched" value={dispatched} format={v=>Math.round(v).toLocaleString()} color="var(--orange)" icon="🚀" sub={`${dispatchRate.toFixed(1)}% dispatch rate`}/>
+          <Kpi label="Pending" value={s.pending||0} format={v=>Math.round(v).toLocaleString()} color="var(--yellow)" icon="⏳" sub={`${fmtMoney(s.revenue_pending||0)} waiting`}/>
+          <Kpi label="RTO" value={s.rto||0} format={v=>Math.round(v).toLocaleString()} color="var(--red)" icon="↩️" sub={`${rtoRate.toFixed(1)}% · ${fmtMoney(s.revenue_rto||0)} lost`}/>
+          <Kpi label="Repeat Buyers" value={derived.repeatRate} format={v=>v.toFixed(1)+'%'} color="var(--purple)" icon="💎" sub="ordered again"/>
+        </div>
+
+        <div className="grid g21">
+          <div className="panel">
+            <div className="panel-h">
+              <div><div className="panel-t">Revenue Intelligence</div><div className="panel-m">{series.length>0 && (series.length>90?'Monthly':'Daily')} trend · hover for details</div></div>
+              <div className="chips">
+                <button className={`chip ${metric==='revenue'?'on':''}`} onClick={()=>setMetric('revenue')}>Revenue</button>
+                <button className={`chip ${metric==='orders'?'on':''}`} onClick={()=>setMetric('orders')}>Orders</button>
               </div>
-              <div style={{fontSize:22,fontWeight:800,color,lineHeight:1}}>{value}</div>
-              {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:4}}>{sub}</div>}
+            </div>
+            <AreaChart series={series} metric={metric} color={metric==='revenue'?'#5b5bf0':'#f76b15'}/>
+            <div className="pills">
+              {bestDay && bestDay.revenue>0 && <div className="pill">🏆 Best: <b>{bestDay.label}</b> · {fmtMoney(bestDay.revenue)}</div>}
+              <div className="pill">📊 Avg / {series.length>90?'month':'day'}: <b>{fmtMoney(Math.round(avgPerDay))}</b></div>
+              {orders.length>0 && <div className="pill">⏰ Peak hour: <b>{hourLbl(peakHour)}</b></div>}
+              <div className="pill">💳 COD share: <b>{pct(s.cod)}%</b></div>
+            </div>
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Payment Mix</div><div className="panel-m">How customers pay</div></div><span className="tag" style={{'--c':'var(--green)'}}>Live</span></div>
+            <StatBar items={[{label:'Prepaid',value:s.prepaid||0,color:'var(--green)'},{label:'COD',value:s.cod||0,color:'var(--yellow)'},{label:'Partial',value:s.partial||0,color:'var(--orange)'}]}/>
+            <div style={{marginTop:14}}>
+              {[['Prepaid','💳',s.prepaid,s.prepaid_revenue,'var(--green)'],['Cash on Delivery','💵',s.cod,s.cod_revenue,'var(--yellow)'],['Partial / Advance','⚡',s.partial,s.partial_revenue,'var(--orange)']].map(([l,ic,c,r,col])=>(
+                <div key={l} className="row">
+                  <div className="av" style={{background:`color-mix(in srgb,${col} 16%,transparent)`,fontSize:15}}>{ic}</div>
+                  <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{l}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{fmtMoney(r||0)}</div></div>
+                  <div style={{textAlign:'right'}}><div style={{fontFamily:'Sora',fontWeight:800,fontSize:18,color:col}}>{(c||0).toLocaleString()}</div><div style={{fontSize:10,color:'var(--text-muted)'}}>{pct(c)}%</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid g3">
+          {[
+            {l:'Dispatch Rate',v:dispatchRate,s:`${dispatched.toLocaleString()} of ${(s.total||0).toLocaleString()} orders shipped`,c:'var(--orange)'},
+            {l:'Delivery Rate',v:deliveryRate,s:`${(s.delivered||0).toLocaleString()} delivered · ${fmtMoney(s.revenue_delivered||0)}`,c:'var(--green)'},
+            {l:'RTO + Cancel',v:rtoRate+cancelRate,s:`${(s.rto||0)} RTO · ${(s.cancelled||0)} cancelled`,c:'var(--red)'},
+          ].map(b=>(
+            <div key={b.l} className="big" style={{'--c':b.c}}>
+              <div className="big-l">{b.l}</div>
+              <div className="big-v"><CountUp value={b.v} format={v=>v.toFixed(1)+'%'}/></div>
+              <div className="big-s">{b.s}</div>
+              <div className="bar"><div style={{width:`${Math.min(100,b.v)}%`,background:b.c}}/></div>
             </div>
           ))}
         </div>
 
-        {/* Row 2 — Dispatch Rate + Revenue Breakdown */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-
-          {/* Dispatch Rate card */}
-          <div className="card" style={{padding:20}}>
-            <div className="section-title">Dispatch Rate</div>
-            <div style={{display:'flex',alignItems:'flex-end',gap:8,marginBottom:14}}>
-              <div style={{fontSize:36,fontWeight:800,color:'var(--cyan)',lineHeight:1}}>{dispatchRate}%</div>
-              <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:4}}>{dispatchedOrders.toLocaleString()} of {(s.total||0).toLocaleString()} orders</div>
-            </div>
-            <StatBar items={[
-              {label:'Delivered',value:s.delivered||0,color:'#22c55e'},
-              {label:'In Transit',value:(s.transit||0)+(s.ofd||0),color:'#06b6d4'},
-              {label:'Ready/Pickup',value:(s.ready||0)+(s.pickup||0),color:'#60a5fa'},
-              {label:'RTO',value:s.rto||0,color:'#ef4444'},
-              {label:'Pending',value:s.pending||0,color:'#374151'},
-              {label:'Cancelled',value:s.cancelled||0,color:'#1f2937'},
-            ]}/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:14}}>
-              {[
-                {label:'Delivery Rate',value:deliveryRate+'%',color:'var(--green)'},
-                {label:'RTO Rate',value:rtoRate+'%',color:'var(--red)'},
-                {label:'In Transit',value:((s.transit||0)+(s.ofd||0)).toLocaleString(),color:'var(--cyan)'},
-                {label:'Ready',value:((s.ready||0)+(s.pickup||0)).toLocaleString(),color:'#60a5fa'},
-              ].map(({label,value,color})=>(
-                <div key={label} style={{background:'var(--bg-card2)',borderRadius:8,padding:'10px 12px'}}>
-                  <div style={{fontSize:10,color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:.6,marginBottom:4}}>{label}</div>
-                  <div style={{fontSize:18,fontWeight:800,color}}>{value}</div>
+        {insights.length>0 && (
+          <div className="panel" style={{marginBottom:14}}>
+            <div className="panel-h"><div><div className="panel-t">Pattern Intelligence</div><div className="panel-m">Auto-detected from your orders</div></div><span className="tag" style={{'--c':'var(--indigo)'}}>Live analysis</span></div>
+            <div className="brain">
+              {insights.map((i,k)=>(
+                <div key={k} className="bcard" style={{'--c':i.tone}}>
+                  <div className="bcard-b"><span style={{fontSize:14}}>{i.icon}</span>{i.badge}</div>
+                  <div className="bcard-t">{i.title}</div><div className="bcard-d">{i.detail}</div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Revenue Breakdown card */}
-          <div className="card" style={{padding:20}}>
-            <div className="section-title">Revenue Breakdown</div>
-            <div style={{fontSize:28,fontWeight:800,color:'var(--purple)',marginBottom:4}}>{fmtMoney(s.revenue||0)}</div>
-            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14}}>total revenue in period</div>
-            {[
-              {label:'Dispatched Value',value:s.revenue_dispatched||0,color:'#06b6d4',icon:'🚀'},
-              {label:'Delivered Value',value:s.revenue_delivered||0,color:'#22c55e',icon:'✅'},
-              {label:'Pending Value',value:s.revenue_pending||0,color:'#f59e0b',icon:'⏳'},
-              {label:'RTO Value',value:s.revenue_rto||0,color:'#ef4444',icon:'↩'},
-            ].map(({label,value,color,icon})=>{
-              const pctV = s.revenue ? (value/s.revenue*100).toFixed(0) : 0;
-              return (
-                <div key={label} style={{marginBottom:10}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-                    <span style={{fontSize:12,color:'var(--text-muted)'}}>{icon} {label}</span>
-                    <div style={{display:'flex',gap:10,alignItems:'center'}}>
-                      <span style={{fontSize:12,fontWeight:700,color}}>{fmtMoney(value)}</span>
-                      <span style={{fontSize:11,color:'var(--text-muted)',minWidth:30,textAlign:'right'}}>{pctV}%</span>
-                    </div>
-                  </div>
-                  <div style={{height:4,background:'var(--bg-card2)',borderRadius:2,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${pctV}%`,background:color,borderRadius:2,transition:'width .5s'}}/>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Row 3 — Order Flow + Payment Mix */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-
-          {/* Order Flow */}
-          <div className="card" style={{padding:20}}>
-            <div className="section-title">Order Flow</div>
-            {[
-              {label:'Pending',count:s.pending||0,color:'#f59e0b',icon:'⏳'},
-              {label:'Ready to Dispatch',count:(s.ready||0)+(s.pickup||0),color:'#60a5fa',icon:'📦'},
-              {label:'In Transit / OFD',count:(s.transit||0)+(s.ofd||0),color:'#06b6d4',icon:'🚚'},
-              {label:'Delivered',count:s.delivered||0,color:'#22c55e',icon:'✅'},
-              {label:'RTO',count:s.rto||0,color:'#ef4444',icon:'↩'},
-              {label:'Cancelled',count:s.cancelled||0,color:'#6b7280',icon:'✕'},
-            ].map(({label,count,color,icon})=>{
-              const w = pct(count);
-              return (
-                <div key={label} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                  <div style={{fontSize:13,width:14,textAlign:'center'}}>{icon}</div>
-                  <div style={{flex:1}}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                      <span style={{fontSize:12,color:'var(--text-muted)'}}>{label}</span>
-                      <div style={{display:'flex',gap:8}}>
-                        <span style={{fontSize:12,fontWeight:700,color}}>{count.toLocaleString()}</span>
-                        <span style={{fontSize:11,color:'var(--text-dim)',minWidth:34,textAlign:'right'}}>{w}%</span>
-                      </div>
-                    </div>
-                    <div style={{height:4,background:'var(--bg-card2)',borderRadius:2,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${w}%`,background:color,borderRadius:2,transition:'width .5s'}}/>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Payment Mix */}
-          <div className="card" style={{padding:20}}>
-            <div className="section-title">Payment Mix</div>
-            <div style={{marginBottom:14}}>
-              <StatBar items={[
-                {label:'Prepaid',value:s.prepaid||0,color:'#22c55e'},
-                {label:'COD',value:s.cod||0,color:'#f59e0b'},
-                {label:'Partial',value:s.partial||0,color:'#f97316'},
-              ]}/>
-              <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'var(--text-muted)'}}>
-                {[['Prepaid','#22c55e'],[' COD','#f59e0b'],['Partial','#f97316']].map(([l,c])=>(
-                  <div key={l} style={{display:'flex',alignItems:'center',gap:4}}>
-                    <div style={{width:7,height:7,borderRadius:'50%',background:c}}/>
-                    {l}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {[
-              {label:'Prepaid',count:s.prepaid||0,revenue:s.prepaid_revenue||0,color:'#22c55e',icon:'💳'},
-              {label:'COD',count:s.cod||0,revenue:s.cod_revenue||0,color:'#f59e0b',icon:'💵'},
-              {label:'Partial',count:s.partial||0,revenue:s.partial_revenue||0,color:'#f97316',icon:'⚡',
-               sub: null},
-            ].map(({label,count,revenue,color,icon,sub})=>(
-              <div key={label} style={{
-                display:'flex',alignItems:'center',justifyContent:'space-between',
-                padding:'10px 12px',background:'var(--bg-card2)',borderRadius:8,marginBottom:8,
-              }}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontSize:16}}>{icon}</span>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:13,color}}>{label}</div>
-                    {sub && <div style={{fontSize:11,color:'var(--red)'}}>{sub}</div>}
-                  </div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{count.toLocaleString()} orders</div>
-                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{fmtMoney(revenue)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Row 4 — Audience */}
-        {audience && audience.segments && audience.segments.length > 0 && (
-          <div className="card" style={{padding:20,marginBottom:16}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-              <div className="section-title" style={{marginBottom:0}}>Audience Breakdown</div>
-              <div style={{fontSize:12,color:'var(--text-muted)'}}>{(audience.total||0).toLocaleString()} orders in period</div>
-            </div>
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              {audience.segments.map(seg=>{
-                const p = audience.total ? (seg.count/audience.total*100).toFixed(1) : 0;
-                return (
-                  <div key={seg.id}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div style={{width:8,height:8,borderRadius:'50%',background:seg.color,flexShrink:0}}/>
-                        <span style={{fontSize:13,fontWeight:600}}>{seg.name}</span>
-                      </div>
-                      <div style={{display:'flex',alignItems:'center',gap:12,fontSize:12}}>
-                        <span style={{color:'var(--text-muted)'}}>{fmtMoney(seg.revenue)}</span>
-                        <span style={{fontWeight:700,minWidth:32,textAlign:'right'}}>{seg.count.toLocaleString()}</span>
-                        <span style={{color:'var(--text-muted)',minWidth:36,textAlign:'right'}}>{p}%</span>
-                      </div>
-                    </div>
-                    <div style={{height:5,background:'var(--bg-card2)',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${p}%`,background:seg.color,borderRadius:3,transition:'width .6s',opacity:.85}}/>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
 
-        {/* Row 5 — Recent Orders */}
-        <div className="card" style={{padding:0}}>
-          <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border)',fontWeight:700,fontSize:13}}>Recent Orders</div>
-          <table>
-            <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Stage</th></tr></thead>
-            <tbody>
-              {orders.map(o=>(
-                <tr key={o.id||o.shopify_id}>
-                  <td style={{fontWeight:700,fontFamily:'monospace'}}>{o.name}</td>
-                  <td style={{color:'var(--text-muted)'}}>{o.customer?.firstName} {o.customer?.lastName}</td>
-                  <td style={{color:'var(--text-muted)',fontSize:12}}>{fmt(o.created_at)}</td>
-                  <td style={{fontWeight:600}}>{fmtMoney(o.total_price)}</td>
-                  <td>{stageBadge(o._stage)}</td>
-                </tr>
-              ))}
-              {orders.length===0 && <tr><td colSpan={5} style={{textAlign:'center',color:'var(--text-muted)',padding:28}}>No orders in this period</td></tr>}
-            </tbody>
-          </table>
+        <div className="grid g2">
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Order Journey</div><div className="panel-m">Where every order sits right now</div></div></div>
+            <div className="rainbow"/>
+            {[['Pending',s.pending,'var(--yellow)','⏳'],['Ready / Pickup',(s.ready||0)+(s.pickup||0),'var(--blue)','📦'],['In Transit / OFD',(s.transit||0)+(s.ofd||0),'var(--cyan)','🚚'],['NDR',s.ndr,'var(--orange)','⚠️'],['Delivered',s.delivered,'var(--green)','✅'],['RTO',s.rto,'var(--red)','↩️'],['Cancelled',s.cancelled,'var(--text-dim)','✕']].map(([l,c,col,ic])=>(
+              <div key={l} style={{marginBottom:11}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12}}>
+                  <span style={{color:'var(--text-muted)'}}>{ic} {l}</span>
+                  <span><b style={{color:col==='var(--text-dim)'?'var(--text)':col}}>{(c||0).toLocaleString()}</b> <span style={{color:'var(--text-dim)',marginLeft:6}}>{pct(c)}%</span></span>
+                </div>
+                <div className="bar"><div style={{width:`${pct(c)}%`,background:col}}/></div>
+              </div>
+            ))}
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Needs Attention</div><div className="panel-m">Delayed or stuck orders</div></div><span className="tag" style={{'--c':derived.stuck.length?'var(--red)':'var(--green)'}}>{derived.stuck.length?`${derived.stuck.length} open`:'All clear'}</span></div>
+            {derived.stuck.length===0 && <div style={{padding:'34px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>🎉 Nothing is stuck. Nice work.</div>}
+            {derived.stuck.slice(0,6).map(({o,days,issue})=>{
+              const c = days>=7?'var(--red)':days>=4?'var(--orange)':'var(--yellow)';
+              return (
+                <div key={o.shopify_id||o.id} className="row" style={{'--c':c}}>
+                  <div className="sev"/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600}}>{o.name} <span style={{color:'var(--text-muted)',fontWeight:400}}>· {custName(o)}</span></div>
+                    <div style={{fontSize:11,color:'var(--text-muted)'}}>{issue} · {fmtMoney(o.total_price)}</div>
+                  </div>
+                  <div className="days">{days}<small>days</small></div>
+                </div>
+              );
+            })}
+          </div>
         </div>
+
+        {derived.topProducts.length>0 && (
+          <div className="panel" style={{marginBottom:14}}>
+            <div className="panel-h"><div><div className="panel-t">Top Selling Products</div><div className="panel-m">Ranked by units sold</div></div><span className="tag" style={{'--c':'var(--purple)'}}>Trending</span></div>
+            <div className="prods">
+              {derived.topProducts.map((p,i)=>(
+                <div key={p.title} className="prod">
+                  <div className="rank">{String(i+1).padStart(2,'0')}</div>
+                  <div className="prod-t">{p.title}</div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)',marginBottom:6}}><span><b style={{color:'var(--text)'}}>{p.qty}</b> sold</span><span>{fmtMoney(p.revenue)}</span></div>
+                  <div className="bar"><div style={{width:`${p.qty/derived.topProducts[0].qty*100}%`,background:AV_COLORS[i%AV_COLORS.length]}}/></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid g2">
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Order Rhythm</div><div className="panel-m">When customers buy · weekday × hour</div></div><span className="tag" style={{'--c':'var(--indigo)'}}>Heatmap</span></div>
+            <Heatmap orders={orders}/>
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Live Order Feed</div><div className="panel-m">Latest activity</div></div><span className="live"><span className="dot"/>Live</span></div>
+            {sortedOrders.slice(0,7).map(o=>(
+              <div key={o.shopify_id||o.id} className="feed-i">
+                <div className="av" style={{background:avColor(o.name)}}>{custName(o).slice(0,1).toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{custName(o)} <span style={{color:'var(--text-dim)',fontWeight:400,fontFamily:'monospace',fontSize:11}}>{o.name}</span></div>
+                  <div style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(o.line_items||[]).map(l=>l.title).join(', ')||'—'}</div>
+                </div>
+                <div style={{textAlign:'right'}}><div style={{fontWeight:700,fontSize:13}}>{fmtMoney(o.total_price)}</div><div style={{marginTop:3}}>{stageBadge(o._stage)}</div></div>
+              </div>
+            ))}
+            {sortedOrders.length===0 && <div style={{padding:30,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No orders in this period</div>}
+          </div>
+        </div>
+
+        {derived.geoCovered>=5 && (
+          <div className="panel" style={{marginBottom:14}}>
+            <div className="panel-h"><div><div className="panel-t">Top Regions</div><div className="panel-m">Delivered vs RTO by state</div></div><span className="tag" style={{'--c':'var(--cyan)'}}>Geo</span></div>
+            <div className="states">
+              {derived.topCities.map(c=>(
+                <div key={c.name} className="st">
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,fontWeight:600,marginBottom:8}}><span>{c.name}</span><span style={{color:'var(--text-muted)'}}>{c.total}</span></div>
+                  <div className="bar" style={{marginBottom:5}}><div style={{width:`${c.delivered/c.total*100}%`,background:'var(--green)'}}/></div>
+                  <div className="bar"><div style={{width:`${c.rto/c.total*100}%`,background:'var(--red)'}}/></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--text-muted)',marginTop:6}}><span>✓ {c.delivered} delivered</span><span>↩ {c.rto} RTO</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {audience && audience.segments && audience.segments.length > 0 && (
+          <div className="panel" style={{marginBottom:14}}>
+            <div className="panel-h"><div><div className="panel-t">Audience Breakdown</div><div className="panel-m">{(audience.total||0).toLocaleString()} orders in period</div></div></div>
+            {audience.segments.map(seg=>{
+              const p = audience.total ? (seg.count/audience.total*100).toFixed(1) : 0;
+              return (
+                <div key={seg.id} style={{marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12}}>
+                    <span style={{fontWeight:600,display:'flex',alignItems:'center',gap:8}}><span style={{width:8,height:8,borderRadius:'50%',background:seg.color}}/>{seg.name}</span>
+                    <span style={{color:'var(--text-muted)'}}>{fmtMoney(seg.revenue)} · <b style={{color:'var(--text)'}}>{seg.count.toLocaleString()}</b> · {p}%</span>
+                  </div>
+                  <div className="bar"><div style={{width:`${p}%`,background:seg.color}}/></div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </>}
     </div>
   );
@@ -2707,13 +3017,20 @@ function App() {
   };
 
   return (
-    <div style={{display:'flex',minHeight:'100vh'}}>
+    <div className="app">
       <Sidebar tab={tab} setTab={setTab} onLogout={logout} iconPreset={iconPreset}/>
-      <main style={{flex:1,overflow:'auto',minHeight:'100vh'}}>
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 28px'}}>
+      <div className="main">
+        <div className="topbar">
+          <div className="tb-title">{PAGE_TITLES[tab] || 'Dashboard'}</div>
+          <div className="tb-right">
+            <span className="live"><span className="dot"/>Synced live</span>
+            <button className="icon-btn" title="Toggle light / dark" onClick={()=>setTheme(theme==='light'?'dark':'light')}>{theme==='light'?'☾':'☀'}</button>
+          </div>
+        </div>
+        <div className="page">
           {views[tab] || <Dashboard/>}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
