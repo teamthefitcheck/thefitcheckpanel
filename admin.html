@@ -255,6 +255,27 @@ body[data-theme="dark"] .ni.on,body[data-theme="bw"] .ni.on{background:#fff;colo
 @media(max-width:520px){.kpis{grid-template-columns:1fr 1fr;gap:10px}.kpi-v{font-size:21px}.d-hello{font-size:21px}}
 
 button:disabled{opacity:.45;cursor:not-allowed}
+
+.bx{background:linear-gradient(170deg,color-mix(in srgb,var(--c) 7%,var(--bg-card)),var(--bg-card) 38%);border:1px solid color-mix(in srgb,var(--c) 22%,var(--border));border-radius:18px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.bx-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;flex-wrap:wrap}
+.bx-h em{font-style:normal;font-size:9.5px;letter-spacing:.4px;text-transform:none;font-weight:600;padding:3px 10px;border-radius:99px;color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.bx-big{font-family:'Sora',sans-serif;font-size:44px;font-weight:800;letter-spacing:-2px;color:var(--c);line-height:1;margin:4px 0 12px}
+.bx-note{font-size:11px;color:var(--text-muted);margin-top:8px}
+.minis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0 14px}
+.mini{border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--c) 9%,transparent);border:1px solid color-mix(in srgb,var(--c) 18%,transparent)}
+.mini-l{font-size:9.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--c);opacity:.85}
+.mini-v{font-family:'Sora',sans-serif;font-size:17px;font-weight:800;color:var(--c);margin-top:3px}
+.bx-sub{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-muted);margin:12px 0 6px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.fr{display:grid;grid-template-columns:minmax(96px,1.3fr) 1fr 34px 34px 46px;align-items:center;gap:8px;padding:5px 0;font-size:12px}
+.fr-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.fr-b{height:5px;background:var(--overlay-3);border-radius:9px;overflow:hidden;display:block}
+.fr-b i{display:block;height:100%;border-radius:9px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.fr-c{font-weight:700;text-align:right}.fr-p{font-size:10.5px;color:var(--text-dim);text-align:right}.fr-r{font-size:10.5px;color:var(--text-muted);text-align:right}
+.split{display:flex;align-items:center;gap:10px;font-size:12px;padding:5px 0}
+.split>span:first-child{min-width:74px}
+.risk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding:12px;border-radius:12px;background:var(--bg-card2);border:1px dashed var(--border2)}
+.risk div{display:flex;flex-direction:column;gap:2px}.risk span{font-size:9.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted)}.risk b{font-family:'Sora';font-size:16px}
+.bx-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);line-height:1.5}.bx-foot b{color:var(--text)}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -807,6 +828,125 @@ function AdsSection({ ads, err, shopRevenue, shopOrders }) {
   );
 }
 
+function FlowCards({ orders }) {
+  const st = {};
+  const pay = { prepaid:{d:0,n:0,rto:0,del:0}, cod:{d:0,n:0,rto:0,del:0} };
+  let total = 0;
+  const base = () => ({ c:0, r:0 });
+  for (const o of orders) {
+    const s = o._stage || 'new', p = o.total_price || 0;
+    const e = st[s] || (st[s] = base()); e.c++; e.r += p; total++;
+    const isPre = (o.financial_status||'').toLowerCase()==='paid';
+    const b = isPre ? pay.prepaid : pay.cod;
+    if (['ready','pickup','transit','ofd','ndr','delivered','rto'].includes(s)) b.d++;
+    if (s==='delivered') b.del++; if (s==='rto') b.rto++; b.n++;
+  }
+  const g = k => st[k] || {c:0,r:0};
+  const sum = ks => ks.reduce((a,k)=>({c:a.c+g(k).c,r:a.r+g(k).r}),{c:0,r:0});
+  const DISP = ['ready','pickup','transit','ofd','ndr','delivered','rto'];
+  const PEND = ['new','confirmed','partial_collected','hold','misc'];
+  const disp = sum(DISP), pend = sum(PEND), canc = g('cancelled');
+  const active = total - canc.c;
+  const del = g('delivered'), rto = g('rto');
+  const inflight = sum(['ready','pickup','transit','ofd','ndr']);
+  const pc = (n,d) => d ? n/d*100 : 0;
+  const dispRate = pc(disp.c,active), delRate = pc(del.c,disp.c), rtoRate = pc(rto.c,disp.c);
+  const settled = del.c + rto.c;
+  const rtoSettled = pc(rto.c,settled);
+  const Row = ({icon,label,c,r,of,color}) => (
+    <div className="fr">
+      <span className="fr-l">{icon} {label}</span>
+      <span className="fr-b"><i style={{width:`${Math.min(100,pc(c,of))}%`,background:color}}/></span>
+      <span className="fr-c" style={{color}}>{c.toLocaleString()}</span>
+      <span className="fr-p">{pc(c,of).toFixed(0)}%</span>
+      <span className="fr-r">{r>0?'₹'+compact(r):''}</span>
+    </div>
+  );
+  const Mini = ({l,v,c}) => <div className="mini" style={{'--c':c}}><div className="mini-l">{l}</div><div className="mini-v">{v}</div></div>;
+  const Head = ({icon,title,pill,pc:pcol}) => <div className="bx-h"><span>{icon} {title}</span>{pill && <em style={{'--c':pcol}}>{pill}</em>}</div>;
+  const riskProj = rtoSettled/100 * inflight.r;
+  const gap = (a,b) => (a-b);
+  return (
+    <div className="grid g3">
+      <div className="bx" style={{'--c':'var(--orange)'}}>
+        <Head icon="📦" title="Dispatch rate" pill={`${disp.c.toLocaleString()} of ${active.toLocaleString()} active`} pc="var(--orange)"/>
+        <div className="bx-big"><CountUp value={dispRate} format={v=>v.toFixed(1)+'%'}/></div>
+        <div className="bar"><div style={{width:`${dispRate}%`,background:'var(--orange)'}}/></div>
+        <div className="minis">
+          <Mini l="Dispatched value" v={'₹'+compact(disp.r)} c="var(--green)"/>
+          <Mini l="Pending value" v={'₹'+compact(pend.r)} c="var(--yellow)"/>
+        </div>
+        <div className="bx-sub">✅ Dispatched · {disp.c.toLocaleString()}</div>
+        <Row icon="📦" label="Ready to ship" c={g('ready').c} r={g('ready').r} of={disp.c} color="var(--blue)"/>
+        <Row icon="🛵" label="Picked up" c={g('pickup').c} r={g('pickup').r} of={disp.c} color="var(--purple)"/>
+        <Row icon="🚚" label="In transit" c={g('transit').c} r={g('transit').r} of={disp.c} color="var(--cyan)"/>
+        <Row icon="🏍️" label="Out for deliv." c={g('ofd').c} r={g('ofd').r} of={disp.c} color="var(--indigo)"/>
+        <Row icon="⚠️" label="NDR" c={g('ndr').c} r={g('ndr').r} of={disp.c} color="var(--orange)"/>
+        <div className="bx-sub" style={{marginTop:14}}>⏳ Waiting to ship · {pend.c.toLocaleString()}</div>
+        <Row icon="🆕" label="New" c={g('new').c} r={g('new').r} of={pend.c} color="var(--text-muted)"/>
+        <Row icon="✔️" label="Confirmed" c={g('confirmed').c} r={g('confirmed').r} of={pend.c} color="var(--indigo)"/>
+        <Row icon="₹" label="Partial paid" c={g('partial_collected').c} r={g('partial_collected').r} of={pend.c} color="var(--orange)"/>
+        <Row icon="⏸️" label="On hold" c={g('hold').c} r={g('hold').r} of={pend.c} color="var(--yellow)"/>
+        <div className="bx-foot">Overall fulfilment <b>{pc(disp.c,total).toFixed(1)}%</b> · {canc.c.toLocaleString()} cancelled ({'₹'+compact(canc.r)})</div>
+      </div>
+
+      <div className="bx" style={{'--c':'var(--green)'}}>
+        <Head icon="✅" title="Delivery rate" pill={`${del.c.toLocaleString()} of ${disp.c.toLocaleString()} dispatched`} pc="var(--green)"/>
+        <div className="bx-big"><CountUp value={delRate} format={v=>v.toFixed(1)+'%'}/></div>
+        <div className="bar"><div style={{width:`${delRate}%`,background:'var(--green)'}}/></div>
+        <div className="minis">
+          <Mini l="Delivered value" v={'₹'+compact(del.r)} c="var(--green)"/>
+          <Mini l="Still in motion" v={'₹'+compact(inflight.r)} c="var(--cyan)"/>
+        </div>
+        <div className="bx-sub">Outcome of {disp.c.toLocaleString()} dispatched</div>
+        <Row icon="✅" label="Delivered" c={del.c} r={del.r} of={disp.c} color="var(--green)"/>
+        <Row icon="🚚" label="On the way" c={g('pickup').c+g('transit').c+g('ofd').c} r={g('pickup').r+g('transit').r+g('ofd').r} of={disp.c} color="var(--cyan)"/>
+        <Row icon="📦" label="Not picked yet" c={g('ready').c} r={g('ready').r} of={disp.c} color="var(--blue)"/>
+        <Row icon="⚠️" label="NDR" c={g('ndr').c} r={g('ndr').r} of={disp.c} color="var(--orange)"/>
+        <Row icon="↩️" label="RTO" c={rto.c} r={rto.r} of={disp.c} color="var(--red)"/>
+        <div className="bx-sub" style={{marginTop:14}}>Delivery rate by payment</div>
+        {[['💳','Prepaid',pay.prepaid,'var(--green)'],['💵','COD',pay.cod,'var(--yellow)']].map(([ic,l,b,col])=>(
+          <div key={l} className="split">
+            <span>{ic} {l}</span>
+            <span className="fr-b" style={{flex:1}}><i style={{width:`${pc(b.del,b.d)}%`,background:col}}/></span>
+            <b style={{color:col}}>{pc(b.del,b.d).toFixed(0)}%</b>
+            <span className="fr-p">{b.del}/{b.d}</span>
+          </div>
+        ))}
+        <div className="bx-foot">Of <b>all {total.toLocaleString()}</b> orders · <b>{pc(del.c,total).toFixed(1)}%</b> delivered</div>
+      </div>
+
+      <div className="bx" style={{'--c':'var(--red)'}}>
+        <Head icon="↩️" title="RTO & risk" pill={rtoRate>15?'Above 15% target':rtoRate>10?'Watch closely':'Healthy'} pc={rtoRate>15?'var(--red)':rtoRate>10?'var(--yellow)':'var(--green)'}/>
+        <div className="bx-big" style={{color:rtoRate>15?'var(--red)':rtoRate>10?'var(--yellow)':'var(--green)'}}><CountUp value={rtoRate} format={v=>v.toFixed(1)+'%'}/></div>
+        <div className="bar"><div style={{width:`${Math.min(100,rtoRate*3.33)}%`,background:rtoRate>15?'var(--red)':rtoRate>10?'var(--yellow)':'var(--green)'}}/></div>
+        <div className="bx-note">{rto.c.toLocaleString()} RTO of {disp.c.toLocaleString()} dispatched · target under 15%</div>
+        <div className="minis">
+          <Mini l="Lost to RTO" v={'₹'+compact(rto.r)} c="var(--red)"/>
+          <Mini l="Cancelled value" v={'₹'+compact(canc.r)} c="var(--text-muted)"/>
+        </div>
+        <div className="bx-sub">RTO rate by payment</div>
+        {[['💵','COD',pay.cod,'var(--yellow)'],['💳','Prepaid',pay.prepaid,'var(--green)']].map(([ic,l,b,col])=>(
+          <div key={l} className="split">
+            <span>{ic} {l}</span>
+            <span className="fr-b" style={{flex:1}}><i style={{width:`${Math.min(100,pc(b.rto,b.d)*3.33)}%`,background:col}}/></span>
+            <b style={{color:pc(b.rto,b.d)>15?'var(--red)':col}}>{pc(b.rto,b.d).toFixed(1)}%</b>
+            <span className="fr-p">{b.rto}/{b.d}</span>
+          </div>
+        ))}
+        <div className="bx-sub" style={{marginTop:14}}>Open risk</div>
+        <Row icon="⚠️" label="NDR" c={g('ndr').c} r={g('ndr').r} of={Math.max(1,inflight.c)} color="var(--orange)"/>
+        <Row icon="🚚" label="In flight" c={inflight.c} r={inflight.r} of={Math.max(1,disp.c)} color="var(--cyan)"/>
+        <div className="risk">
+          <div><span>Likely to bounce</span><b style={{color:'var(--red)'}}>₹{compact(riskProj)}</b></div>
+          <div><span>Likely to convert</span><b style={{color:'var(--green)'}}>₹{compact(Math.max(0,inflight.r-riskProj))}</b></div>
+        </div>
+        <div className="bx-foot">Projection: in-flight value × your {rtoSettled.toFixed(0)}% RTO rate on settled orders (delivered + RTO)</div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({ active=true }) {
   const lastLoad = useRef(0);
   const [stats,setStats] = useState(null);
@@ -846,7 +986,7 @@ function Dashboard({ active=true }) {
   const T = s.total || 1;
   const pct = n => ((n||0)/T*100).toFixed(1);
   const dispatched = (s.ready||0)+(s.pickup||0)+(s.transit||0)+(s.ofd||0)+(s.delivered||0)+(s.rto||0)+(s.ndr||0);
-  const dispatchRate = dispatched/T*100, deliveryRate = (s.delivered||0)/T*100, rtoRate = (s.rto||0)/T*100, cancelRate = (s.cancelled||0)/T*100;
+  const dispatchRate = dispatched/Math.max(1,T-(s.cancelled||0))*100, deliveryRate = (s.delivered||0)/T*100, rtoRate = (s.rto||0)/T*100, cancelRate = (s.cancelled||0)/T*100;
   const dl = (a,b) => (b ? (a-b)/b*100 : null);
 
   const series = useMemo(()=>buildSeries(orders,from,to),[orders,from,to]);
@@ -989,20 +1129,7 @@ function Dashboard({ active=true }) {
 
         <AdsSection ads={ads} err={adsErr} shopRevenue={s.revenue||0} shopOrders={s.total||0}/>
 
-        <div className="grid g3">
-          {[
-            {l:'Dispatch Rate',v:dispatchRate,s:`${dispatched.toLocaleString()} of ${(s.total||0).toLocaleString()} orders shipped`,c:'var(--orange)'},
-            {l:'Delivery Rate',v:deliveryRate,s:`${(s.delivered||0).toLocaleString()} delivered · ${fmtMoney(s.revenue_delivered||0)}`,c:'var(--green)'},
-            {l:'RTO + Cancel',v:rtoRate+cancelRate,s:`${(s.rto||0)} RTO · ${(s.cancelled||0)} cancelled`,c:'var(--red)'},
-          ].map(b=>(
-            <div key={b.l} className="big" style={{'--c':b.c}}>
-              <div className="big-l">{b.l}</div>
-              <div className="big-v"><CountUp value={b.v} format={v=>v.toFixed(1)+'%'}/></div>
-              <div className="big-s">{b.s}</div>
-              <div className="bar"><div style={{width:`${Math.min(100,b.v)}%`,background:b.c}}/></div>
-            </div>
-          ))}
-        </div>
+        <FlowCards orders={orders}/>
 
         {insights.length>0 && (
           <div className="panel" style={{marginBottom:14}}>
