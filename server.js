@@ -2395,6 +2395,40 @@ async function getShipsagarSyncOrderIds() {
   return new Set(orders.map(o => o.shopify_id));
 }
 
+// Registers every not-yet-pushed AWB for orders placed on/after SHIPSAGAR_START_DATE. Runs in background.
+let _shipsagarBackfill = { running: false };
+app.post('/admin/shipsagar/register-backfill', adminAuth, async (req, res) => {
+  if (_shipsagarBackfill.running) return res.status(409).json({ error: 'Backfill already running', progress: _shipsagarBackfill });
+  const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+  if (!creds) return res.status(400).json({ error: 'ShipSagar not connected. Go to Settings → Shipping.' });
+  const orders = await mdb.collection('orders').find({ created_at: { $gte: SHIPSAGAR_START_DATE.toISOString() } }).toArray();
+  const byId = Object.fromEntries(orders.map(o => [o.shopify_id, o]));
+  const recs = await mdb.collection('order_stage').find({
+    shopify_id: { $in: Object.keys(byId) }, awb: { $exists: true, $ne: '' }, shipsagar_pushed: { $ne: true },
+    stage: { $nin: ['new', 'cancelled'] },
+  }).toArray();
+  _shipsagarBackfill = { running: true, total: recs.length, done: 0, failed: 0 };
+  res.json({ ok: true, total: recs.length });
+  (async () => {
+    for (const r of recs) {
+      const o = byId[r.shopify_id];
+      try {
+        await shipsagarPushShipment({
+          awb: r.awb, courierCode: toShipSagarCourierCode(r.courier), orderNo: o.name,
+          customerName: o.customer ? `${o.customer.first_name || ''} ${o.customer.last_name || ''}`.trim() : '',
+          email: o.email || o.contact_email || '', mobileNo: o.phone || o.customer?.phone || o.shipping_address?.phone || '',
+        });
+        await mdb.collection('order_stage').updateOne({ shopify_id: r.shopify_id }, { $set: { shipsagar_pushed: true } });
+        _shipsagarBackfill.done++;
+      } catch (e) { _shipsagarBackfill.failed++; console.error(`[shipsagar-backfill] ${o.name} AWB ${r.awb}: ${e.message}`); }
+      await sleep(300);
+    }
+    _shipsagarBackfill.running = false;
+    console.log('[shipsagar-backfill] finished', JSON.stringify(_shipsagarBackfill));
+  })();
+});
+app.get('/admin/shipsagar/register-backfill', adminAuth, (req, res) => res.json(_shipsagarBackfill));
+
 async function applyShipsagarTag(shopify_id, tag, prevTag) {
   const { order } = await shopifyREST(`/orders/${shopify_id}.json?fields=id,tags`);
   let tags = (order.tags || '').split(',').map(t => t.trim()).filter(Boolean);
