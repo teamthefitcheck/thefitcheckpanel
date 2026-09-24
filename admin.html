@@ -297,6 +297,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .ptag{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:99px;text-transform:uppercase;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 28%,transparent)}
 .open-btn{font-size:11px;font-weight:600;padding:6px 14px;border-radius:99px;background:var(--text);color:var(--bg-card);flex-shrink:0}
 .open-btn:hover{opacity:.85}
+
+.atn-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}
+.atn-chips::-webkit-scrollbar{height:0}
+.atn{flex-shrink:0;display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;background:transparent;border:1px solid var(--border2);color:var(--text-muted)}
+.atn span{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+.atn.on{background:color-mix(in srgb,var(--c) 10%,var(--bg-card));border-color:var(--c);color:var(--text)}
+.atn-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-bottom:6px}.atn-bar b{color:var(--text)}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -1141,13 +1148,13 @@ function Dashboard({ active=true }) {
       bucket[0]++; if (o._stage==='rto') bucket[1]++;
       const days = (nowMs-new Date(o.created_at))/86400000;
       const st = o._stage;
-      let issue=null;
-      if (['new','confirmed','partial_collected','hold'].includes(st) && days>=2) issue='Awaiting dispatch';
-      else if (st==='ready' && days>=3) issue='Ready, not picked up';
-      else if (['pickup','transit'].includes(st) && days>=8) issue='Slow in transit';
-      else if (st==='ndr') issue='Delivery attempt failed';
-      else if (st==='ofd' && days>=10) issue='Stuck out for delivery';
-      if (issue) stuck.push({ o, days:Math.floor(days), issue });
+      let issue=null, key=null;
+      if (['new','confirmed','partial_collected','hold'].includes(st) && days>=2) { issue='Awaiting dispatch'; key='dispatch'; }
+      else if (st==='ready' && days>=3) { issue='Ready, not picked up'; key='pickup'; }
+      else if (['pickup','transit'].includes(st) && days>=8) { issue='Slow in transit'; key='transit'; }
+      else if (st==='ndr') { issue='Delivery attempt failed'; key='ndr'; }
+      else if (st==='ofd' && days>=10) { issue='Stuck out for delivery'; key='ofd'; }
+      if (issue) stuck.push({ o, days:Math.floor(days), issue, key });
     }
     const repeat = [...custCount.values()].filter(v=>v>1).length;
     return {
@@ -1160,6 +1167,8 @@ function Dashboard({ active=true }) {
   },[orders]);
 
   const [openOrder,setOpenOrder] = useState(null);
+  const [attnKey,setAttnKey] = useState('all');
+  const [attnPay,setAttnPay] = useState('all');
   const [imgs,setImgs] = useState({});
   const topIds = derived.topProducts.map(p=>p.pid).filter(Boolean).join(',');
   useEffect(()=>{ if(topIds) apiFetch(`/admin/product-images?ids=${topIds}`).then(setImgs).catch(()=>{}); },[topIds]);
@@ -1176,6 +1185,14 @@ function Dashboard({ active=true }) {
     const l7 = sum(series.slice(-7)), p7 = sum(series.slice(-14,-7));
     return p7 ? (l7-p7)/p7*100 : null;
   },[series]);
+  const payKey = o => { const f=(o.financial_status||'').toLowerCase(); return f==='paid'?'prepaid':f==='partially_paid'?'pp':'cod'; };
+  const attnBase = derived.stuck.filter(x=>attnPay==='all'||payKey(x.o)===attnPay);
+  const attnCounts = { all:attnBase.length };
+  attnBase.forEach(x=>{ attnCounts[x.key]=(attnCounts[x.key]||0)+1; });
+  const attnList = attnBase.filter(x=>attnKey==='all'||x.key===attnKey);
+  const attnValue = attnList.reduce((s,x)=>s+(x.o.total_price||0),0);
+  const ATTN = [['all','All','var(--text)'],['dispatch','Not dispatched','var(--yellow)'],['pickup','Not picked up','var(--blue)'],['transit','Slow in transit','var(--cyan)'],['ndr','NDR','var(--orange)'],['ofd','Stuck OFD','var(--red)']];
+
   const bestDay = series.length ? [...series].sort((a,b)=>b.revenue-a.revenue)[0] : null;
   const avgPerDay = series.length ? (s.revenue||0)/series.length : 0;
   const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[new Date(o.created_at).getHours()]++);
@@ -1304,9 +1321,23 @@ function Dashboard({ active=true }) {
           </div>
           <div className="panel">
             <div className="panel-h"><div><div className="panel-t">Needs Attention</div><div className="panel-m">Delayed or stuck · orders in selected period</div></div><span className="tag" style={{'--c':derived.stuck.length?'var(--red)':'var(--green)'}}>{derived.stuck.length?`${derived.stuck.length} open`:'All clear'}</span></div>
+            {derived.stuck.length>0 && <>
+              <div className="atn-chips">
+                {ATTN.map(([k,l,c])=>(
+                  <button key={k} className={`atn ${attnKey===k?'on':''}`} style={{'--c':c}} onClick={()=>setAttnKey(k)}>{l}<span>{attnCounts[k]||0}</span></button>
+                ))}
+              </div>
+              <div className="atn-bar">
+                <div style={{display:'flex',gap:4}}>
+                  {[['all','All'],['cod','COD'],['prepaid','Prepaid'],['pp','PP COD']].map(([k,l])=><button key={k} className={`chip ${attnPay===k?'on':''}`} style={{padding:'3px 10px',fontSize:10.5}} onClick={()=>setAttnPay(k)}>{l}</button>)}
+                </div>
+                <span>{attnList.length} orders · <b>{fmtMoney(Math.round(attnValue))}</b> stuck</span>
+              </div>
+            </>}
             {derived.stuck.length===0 && <div style={{padding:'34px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>🎉 Nothing is stuck. Nice work.</div>}
             <div style={{maxHeight:420,overflowY:'auto',margin:'0 -6px',padding:'0 6px'}}>
-            {derived.stuck.map(({o,days,issue})=>{
+            {attnList.length===0 && derived.stuck.length>0 && <div style={{padding:'28px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>Nothing here for this filter.</div>}
+            {attnList.map(({o,days,issue})=>{
               const c = days>=7?'var(--red)':days>=4?'var(--orange)':'var(--yellow)';
               return (
                 <div key={o.shopify_id||o.id} className="row" style={{'--c':c}}>
