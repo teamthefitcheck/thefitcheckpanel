@@ -1287,8 +1287,6 @@ function Dashboard({ active=true }) {
           </div>
         </div>
 
-        <AdsSection ads={ads} err={adsErr} shop={shopBook}/>
-
         <FlowCards orders={orders}/>
 
         {insights.length>0 && (
@@ -1371,6 +1369,8 @@ function Dashboard({ active=true }) {
             </div>
           </div>
         )}
+
+        <AdsSection ads={ads} err={adsErr} shop={shopBook}/>
 
         <div className="grid g2">
           <div className="panel">
