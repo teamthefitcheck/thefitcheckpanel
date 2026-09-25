@@ -2066,29 +2066,61 @@ app.get('/admin/sync-orders/status', adminAuth, async (req, res) => {
 const HOLD_AFTER_DAYS = 7;
 let _holdCheckRunning = false;
 
+const HOLD_DEFAULTS = { enabled: false, after_days: 7, max_age_days: 30, auto_confirm_prepaid: true, notify_customer: true, notify_admin: true };
+async function getHoldSettings() {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { hold_settings: 1, _id: 0 } });
+  const h = { ...HOLD_DEFAULTS, ...(doc?.hold_settings || {}) };
+  h.enabled = doc?.hold_settings?.enabled === true;
+  h.after_days = Math.max(1, parseInt(h.after_days) || 7);
+  h.max_age_days = Math.max(0, parseInt(h.max_age_days) || 0);
+  return h;
+}
+// Orders that the hold rules would act on right now (unpaid/COD in 'new' stage, inside the age window)
+async function findHoldCandidates(h) {
+  const now = Date.now();
+  const cutoff = new Date(now - h.after_days * 86400000).toISOString();
+  const q = { created_at: h.max_age_days ? { $lte: cutoff, $gte: new Date(now - h.max_age_days * 86400000).toISOString() } : { $lte: cutoff } };
+  const candidates = await mdb.collection('orders').find(q, { projection: { shopify_id: 1, name: 1, created_at: 1, email: 1, phone: 1, customer: 1, shipping_address: 1, financial_status: 1, cancelled_at: 1, _id: 0 } }).toArray();
+  if (!candidates.length) return [];
+  const stages = await mdb.collection('order_stage').find({ shopify_id: { $in: candidates.map(o => o.shopify_id) } }, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray();
+  const stageMap = Object.fromEntries(stages.map(x => [x.shopify_id, x.stage]));
+  return candidates.filter(o => (stageMap[o.shopify_id] || 'new') === 'new' && !o.cancelled_at && !['voided', 'refunded'].includes((o.financial_status || '').toLowerCase()));
+}
+app.get('/admin/hold-settings', adminAuth, async (req, res) => {
+  try {
+    const h = await getHoldSettings();
+    const [preview, onHold] = await Promise.all([findHoldCandidates(h), mdb.collection('order_stage').countDocuments({ stage: 'hold' })]);
+    res.json({ ...h, would_hold: preview.filter(o => o.financial_status !== 'paid').length, would_confirm: preview.filter(o => o.financial_status === 'paid').length, on_hold_now: onHold });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/admin/hold-settings', adminAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const next = {
+      enabled: !!b.enabled,
+      after_days: Math.min(90, Math.max(1, parseInt(b.after_days) || 7)),
+      max_age_days: Math.min(365, Math.max(0, parseInt(b.max_age_days) || 0)),
+      auto_confirm_prepaid: b.auto_confirm_prepaid !== false,
+      notify_customer: b.notify_customer !== false,
+      notify_admin: b.notify_admin !== false,
+    };
+    await mdb.collection('settings').updateOne({}, { $set: { hold_settings: next, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true, settings: next });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 async function runHoldCheck() {
   if (_holdCheckRunning) return { skipped: true };
+  const hs = await getHoldSettings();
+  if (!hs.enabled) return { skipped: true, reason: 'Auto-hold is turned off in Settings' };
   _holdCheckRunning = true;
   let moved = 0;
   try {
-    const cutoff = new Date(Date.now() - HOLD_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const candidates = await mdb.collection('orders').find(
-      { created_at: { $lte: cutoff } },
-      { projection: { shopify_id: 1, name: 1, created_at: 1, email: 1, phone: 1, customer: 1, shipping_address: 1, financial_status: 1, _id: 0 } }
-    ).toArray();
-    if (!candidates.length) return { moved: 0 };
-
-    const ids = candidates.map(o => o.shopify_id);
-    const stages = await mdb.collection('order_stage').find(
-      { shopify_id: { $in: ids } }, { projection: { shopify_id: 1, stage: 1, _id: 0 } }
-    ).toArray();
-    const stageMap = Object.fromEntries(stages.map(s => [s.shopify_id, s.stage]));
-
-    const stillNew = candidates.filter(o => (stageMap[o.shopify_id] || 'new') === 'new');
+    const stillNew = await findHoldCandidates(hs);
     if (!stillNew.length) return { moved: 0 };
 
     // Prepaid orders should never sit on hold — auto-confirm them instead
-    const paidButNew = stillNew.filter(o => o.financial_status === 'paid');
+    const paidButNew = hs.auto_confirm_prepaid ? stillNew.filter(o => o.financial_status === 'paid') : [];
     if (paidButNew.length) {
       const ops = paidButNew.map(o => ({
         updateOne: {
@@ -2116,7 +2148,7 @@ async function runHoldCheck() {
       const waMessage = encodeURIComponent(`I confirm my order ${order.name}`);
       const whatsappUrl = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : `https://wa.me/?text=${waMessage}`;
 
-      if (email && await isStageEmailEnabled('hold')) {
+      if (email && hs.notify_customer && await isStageEmailEnabled('hold')) {
         try {
           await sendEmail({ to: email, subject: `Action needed — confirm your order ${order.name}`, html: templateOrderHold({ order, whatsappUrl }) });
         } catch (e) { console.error(`[hold-check] customer email failed for ${order.name}:`, e.message); }
@@ -2124,7 +2156,7 @@ async function runHoldCheck() {
         console.log(`[hold-check] hold email disabled in Settings — skipping ${order.name}`);
       }
 
-      if (cfg) {
+      if (cfg && hs.notify_admin) {
         try {
           await sendEmail({ to: cfg.from || cfg.user, subject: `Order ${order.name} moved to hold`, html: templateOrderHoldAdmin({ order }) });
         } catch (e) { console.error(`[hold-check] admin email failed for ${order.name}:`, e.message); }
@@ -2138,8 +2170,8 @@ async function runHoldCheck() {
 }
 
 app.post('/admin/run-hold-check', adminAuth, async (req, res) => {
-  res.json({ ok: true, message: 'Hold check started' });
-  runHoldCheck().then(r => console.log('[hold-check] complete:', r)).catch(e => console.error('[hold-check] error:', e.message));
+  try { const r = await runHoldCheck(); console.log('[hold-check] complete:', r); res.json({ ok: true, ...r }); }
+  catch (e) { console.error('[hold-check] error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // Manual trigger endpoint

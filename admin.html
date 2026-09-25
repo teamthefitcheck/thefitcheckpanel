@@ -2812,6 +2812,8 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
   const [syncScope,setSyncScope] = useState('100');
   const [eshipzEnabled,setEshipzEnabled] = useState(true);
   const [segments,setSegments]   = useState([]);
+  const [hold,setHold]       = useState(null);
+  const [holdRunning,setHoldRunning] = useState(false);
   const [msg,setMsg]         = useState(null);
   const [saving,setSaving]   = useState(false);
 
@@ -2821,6 +2823,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
     apiFetch('/admin/rr-settings').then(d=>setRrSettings(d));
     apiFetch('/admin/sync-settings').then(d=>{ setSyncScope(d?.tracking_sync_scope||'100'); setEshipzEnabled(d?.eshipz_cron_enabled!==false); });
     apiFetch('/admin/audience-segments').then(d=>setSegments(d||[]));
+    apiFetch('/admin/hold-settings').then(setHold).catch(()=>{});
     setTagsLoading(true);
     apiFetch('/admin/shopify-tags').then(d=>setShopifyTags(d||[])).finally(()=>setTagsLoading(false));
   },[]);
@@ -2861,6 +2864,25 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
     try { await apiFetch('/admin/tag-mappings',{method:'POST',body:JSON.stringify({tag_mappings:updated})}); setMsg({type:'success',text:'Mapping saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
   };
 
+  const saveHold = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await apiFetch('/admin/hold-settings',{method:'POST',body:JSON.stringify(hold)});
+      setMsg({type:'success',text:'Auto-hold settings saved.'});
+      apiFetch('/admin/hold-settings').then(setHold);
+    } catch(e){setMsg({type:'error',text:e.message});}
+    setSaving(false);
+  };
+  const runHoldNow = async () => {
+    if(!confirm(`Move ${hold.would_hold} unpaid/COD order(s) to Hold now?`)) return;
+    setHoldRunning(true); setMsg(null);
+    try {
+      const r = await apiFetch('/admin/run-hold-check',{method:'POST'});
+      setMsg({type:'success',text:r.skipped?(r.reason||'Skipped'):`Done — ${r.moved||0} order(s) moved to hold.`});
+      apiFetch('/admin/hold-settings').then(setHold);
+    } catch(e){setMsg({type:'error',text:e.message});}
+    setHoldRunning(false);
+  };
   const saveRRSettings = async () => {
     setSaving(true); setMsg(null);
     try { await apiFetch('/admin/rr-settings',{method:'POST',body:JSON.stringify(rrSettings)}); setMsg({type:'success',text:'Return settings saved!'}); } catch(e){setMsg({type:'error',text:e.message});}
@@ -2882,7 +2904,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
     <div>
       <div style={{marginBottom:20}}><h2 style={{fontSize:20,fontWeight:800}}>Settings</h2></div>
       <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
-        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['sync','Tracking Sync'],['security','Security'],['store','Store'],['appearance','Appearance']].map(([id,label])=>(
+        {[['staff','Staff'],['tags','Tag Mapping'],['audience','Audience'],['returns','Returns & Exchanges'],['hold','Auto Hold'],['sync','Tracking Sync'],['security','Security'],['store','Store'],['appearance','Appearance']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid '+(tab===id?'var(--pill-border-active)':'var(--border)'),background:tab===id?'var(--overlay-3)':'transparent',color:tab===id?'var(--text)':'var(--text-muted)',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>
         ))}
       </div>
@@ -2965,6 +2987,40 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
           }}
           saving={saving}
         />
+      )}
+
+      {tab==='hold' && hold && (
+        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}}>
+          <div className="card" style={{maxWidth:520,flex:'1 1 380px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <div style={{fontWeight:700}}>Auto-hold unconfirmed orders</div>
+              <label className="toggle"><input type="checkbox" checked={hold.enabled} onChange={e=>setHold({...hold,enabled:e.target.checked})}/><span className="toggle-slider"/></label>
+            </div>
+            <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:16,lineHeight:1.55}}>When on, orders still in <b>New</b> after the number of days below are moved to <b>On hold</b> and the customer is asked to confirm on WhatsApp. It is <b>off by default</b>.</p>
+            <div style={{opacity:hold.enabled?1:.5,pointerEvents:hold.enabled?'auto':'none'}}>
+              <div className="grid-2">
+                <div className="field"><label>Move to hold after (days)</label><input type="number" min="1" max="90" value={hold.after_days} onChange={e=>setHold({...hold,after_days:e.target.value})}/></div>
+                <div className="field"><label>Ignore orders older than (days, 0 = no limit)</label><input type="number" min="0" max="365" value={hold.max_age_days} onChange={e=>setHold({...hold,max_age_days:e.target.value})}/></div>
+              </div>
+              {[['auto_confirm_prepaid','Auto-confirm prepaid orders instead of holding them'],['notify_customer','Email the customer asking them to confirm (needs the Hold email on in Emails)'],['notify_admin','Email me when an order is moved to hold']].map(([k,l])=>(
+                <label key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',fontSize:13,color:'var(--text)',fontWeight:400,cursor:'pointer'}}>
+                  <input type="checkbox" style={{width:'auto'}} checked={hold[k]!==false} onChange={e=>setHold({...hold,[k]:e.target.checked})}/>{l}
+                </label>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:'var(--text-muted)',margin:'10px 0 14px'}}>Cancelled, voided and refunded orders are never put on hold. The check runs every 6 hours while auto-hold is on.</div>
+            <button className="btn-primary btn-sm" onClick={saveHold} disabled={saving}>{saving?'Saving…':'Save settings'}</button>
+          </div>
+          <div className="card" style={{maxWidth:340,flex:'1 1 260px'}}>
+            <div style={{fontWeight:700,marginBottom:12}}>Right now</div>
+            <div className="od-row"><span>Currently on hold</span><b>{(hold.on_hold_now||0).toLocaleString()}</b></div>
+            <div className="od-row"><span>Would be held by these rules</span><b style={{color:'var(--yellow)'}}>{(hold.would_hold||0).toLocaleString()}</b></div>
+            <div className="od-row"><span>Prepaid to auto-confirm</span><b style={{color:'var(--green)'}}>{(hold.would_confirm||0).toLocaleString()}</b></div>
+            <button className="btn-ghost btn-sm" style={{marginTop:14,width:'100%'}} onClick={runHoldNow} disabled={holdRunning||!hold.enabled||!hold.would_hold}>{holdRunning?'Running…':'Run hold check now'}</button>
+            {!hold.enabled && <div style={{fontSize:11,color:'var(--text-dim)',marginTop:8}}>Turn auto-hold on and save to run it.</div>}
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:12,lineHeight:1.5}}>Orders already on hold stay there. Change their stage from the order page.</div>
+          </div>
+        </div>
       )}
 
       {tab==='returns' && (
