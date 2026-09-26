@@ -1656,6 +1656,99 @@ app.get('/admin/product-images', adminAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── P&L ─────────────────────────────────────────────────────────────────────
+const PNL_GROUPS = {
+  delivered: ['delivered'], rto: ['rto'], cancelled: ['cancelled'],
+  inflight: ['ready', 'pickup', 'transit', 'ofd', 'ndr'],
+  pending: ['new', 'confirmed', 'partial_collected', 'hold', 'misc'],
+};
+const pnlGroupOf = (stage) => { for (const [g, arr] of Object.entries(PNL_GROUPS)) if (arr.includes(stage)) return g; return 'pending'; };
+const pnlPayOf = (fs) => { const f = (fs || '').toLowerCase(); return f === 'paid' ? 'prepaid' : f === 'partially_paid' ? 'pp' : 'cod'; };
+const emptyMatrix = () => Object.fromEntries(Object.keys(PNL_GROUPS).map(g => [g, { cod: { n: 0, v: 0, u: 0 }, prepaid: { n: 0, v: 0, u: 0 }, pp: { n: 0, v: 0, u: 0 } }]));
+async function pnlAggregate(fromIso, toIso, withProducts) {
+  const q = { created_at: { $gte: fromIso, $lte: toIso } };
+  const orders = await mdb.collection('orders').find(q, { projection: { shopify_id: 1, total_price: 1, financial_status: 1, line_items: 1, created_at: 1, cancelled_at: 1, _id: 0 } }).toArray();
+  const stages = await mdb.collection('order_stage').find({ shopify_id: { $in: orders.map(o => o.shopify_id) } }, { projection: { shopify_id: 1, stage: 1, _id: 0 } }).toArray();
+  const st = Object.fromEntries(stages.map(x => [x.shopify_id, x.stage]));
+  const matrix = emptyMatrix(), months = {}, products = new Map();
+  for (const o of orders) {
+    const stage = o.cancelled_at ? 'cancelled' : (st[o.shopify_id] || 'new');
+    const g = pnlGroupOf(stage), p = pnlPayOf(o.financial_status);
+    const units = (o.line_items || []).reduce((a, l) => a + (l.quantity || 1), 0);
+    const val = parseFloat(o.total_price || 0);
+    const add = (m) => { const c = m[g][p]; c.n++; c.v += val; c.u += units; };
+    add(matrix);
+    const mk = String(o.created_at).slice(0, 7);
+    if (!months[mk]) months[mk] = emptyMatrix();
+    add(months[mk]);
+    if (withProducts) for (const l of (o.line_items || [])) {
+      const e = products.get(l.title) || { title: l.title, pid: l.product_id, units: 0, revenue: 0, delivered_units: 0, delivered_revenue: 0 };
+      const u = l.quantity || 1, r = (l.price || 0) * u;
+      e.units += u; e.revenue += r;
+      if (g === 'delivered') { e.delivered_units += u; e.delivered_revenue += r; }
+      products.set(l.title, e);
+    }
+  }
+  return { matrix, months, products: [...products.values()].sort((a, b) => b.units - a.units), orderCount: orders.length };
+}
+app.get('/admin/pnl-data', adminAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+    const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+    const agg = await pnlAggregate(from + 'T00:00:00.000Z', to + 'T23:59:59.999Z', true);
+    // trailing 6 calendar months for the trend
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
+    const trend = await pnlAggregate(start.toISOString(), now.toISOString(), false);
+    let ads = null, adsErr = '';
+    try {
+      const time = (f, t) => ({ time_range: JSON.stringify({ since: f, until: t }) });
+      const [period, monthly] = await Promise.all([
+        metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: 'spend', ...time(from, to) }),
+        metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: 'spend', ...time(start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)), time_increment: 'monthly', limit: 12 }),
+      ]);
+      ads = { period: parseFloat(period.data?.[0]?.spend || 0), months: Object.fromEntries((monthly.data || []).map(d => [String(d.date_start).slice(0, 7), parseFloat(d.spend || 0)])) };
+    } catch (e) { adsErr = e.message; }
+    res.json({ from, to, days, matrix: agg.matrix, products: agg.products, orderCount: agg.orderCount, trend: trend.months, ads, adsErr });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+const PNL_DEFAULTS = { gst_pct: 5, default_cost: '', ship_fwd: '', ship_rto: '', cod_fee_pct: '', gateway_pct: 2, packaging: '', rto_damage_pct: 10, ads_mode: 'meta', manual_ads: '', product_costs: {}, overheads: [], basis: 'expected' };
+app.get('/admin/pnl-settings', adminAuth, async (req, res) => {
+  const doc = await mdb.collection('settings').findOne({}, { projection: { pnl_settings: 1, _id: 0 } });
+  res.json({ ...PNL_DEFAULTS, ...(doc?.pnl_settings || {}) });
+});
+app.post('/admin/pnl-settings', adminAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const num = (v) => (v === '' || v == null || isNaN(+v)) ? '' : +v;
+    const clean = {
+      gst_pct: num(b.gst_pct), default_cost: num(b.default_cost), ship_fwd: num(b.ship_fwd), ship_rto: num(b.ship_rto), cod_fee_pct: num(b.cod_fee_pct),
+      gateway_pct: num(b.gateway_pct), packaging: num(b.packaging), rto_damage_pct: num(b.rto_damage_pct), manual_ads: num(b.manual_ads),
+      ads_mode: b.ads_mode === 'manual' ? 'manual' : 'meta', basis: ['delivered', 'expected'].includes(b.basis) ? b.basis : 'expected',
+      product_costs: Object.fromEntries(Object.entries(b.product_costs || {}).filter(([, v]) => v !== '' && !isNaN(+v)).map(([k, v]) => [k, +v])),
+      overheads: (b.overheads || []).slice(0, 40).map(o => ({ name: String(o.name || '').slice(0, 60), amount: num(o.amount) })),
+    };
+    await mdb.collection('settings').updateOne({}, { $set: { pnl_settings: clean, updated_at: new Date() } }, { upsert: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/admin/pnl-snapshots', adminAuth, async (req, res) => {
+  res.json(await mdb.collection('pnl_snapshots').find({}).sort({ created_at: -1 }).limit(60).toArray());
+});
+app.post('/admin/pnl-snapshots', adminAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const doc = { label: String(b.label || '').slice(0, 80), from: b.from, to: b.to, basis: b.basis, summary: b.summary || {}, inputs: b.inputs || {}, created_at: new Date() };
+    const r = await mdb.collection('pnl_snapshots').insertOne(doc);
+    res.json({ ok: true, id: r.insertedId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete('/admin/pnl-snapshots/:id', adminAuth, async (req, res) => {
+  try { await mdb.collection('pnl_snapshots').deleteOne({ _id: new ObjectId(req.params.id) }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Meta Ads insights (system-user token with ads_read) ─────────────────────
 const META_API = 'https://graph.facebook.com/v21.0';
 const META_TOKEN = process.env.META_ACCESS_TOKEN || WA_CLOUD_TOKEN;

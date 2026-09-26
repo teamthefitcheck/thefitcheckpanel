@@ -304,6 +304,45 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .atn span{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
 .atn.on{background:color-mix(in srgb,var(--c) 10%,var(--bg-card));border-color:var(--c);color:var(--text)}
 .atn-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-bottom:6px}.atn-bar b{color:var(--text)}
+
+.pl-hero{display:flex;gap:26px;flex-wrap:wrap;background:linear-gradient(150deg,color-mix(in srgb,var(--indigo) 8%,var(--bg-card)),var(--bg-card) 55%);border:1px solid var(--border);border-radius:20px;padding:26px 28px;box-shadow:var(--shadow);margin-bottom:14px}
+.pl-hl{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted)}
+.pl-big{font-family:'Sora',sans-serif;font-size:54px;font-weight:800;letter-spacing:-2.5px;line-height:1.05;margin-top:6px}
+.pl-stats{flex:1 1 420px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start}
+.pl-s{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.pl-s span{font-size:9.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--text-muted)}
+.pl-s b{font-family:'Sora',sans-serif;font-size:18px;font-weight:800;letter-spacing:-.5px}
+.pl-s small{font-size:10.5px;color:var(--text-dim)}
+.pl-setup{border:1px dashed var(--border2);border-radius:14px;padding:14px 18px;margin-bottom:14px;background:var(--bg-card)}
+.pl-chip{font-size:11px;padding:4px 10px;border-radius:99px;background:var(--bg-card2);color:var(--text-muted)}
+.pl-chip.ok{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
+.pl-cols{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
+.pl-side{display:flex;flex-direction:column;gap:14px;position:sticky;top:74px}
+.pl-sec{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:16px 0 4px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.pl-line{display:grid;grid-template-columns:1fr auto 54px 108px;gap:10px;align-items:center;padding:7px 0;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent)}
+.pl-line.strong{font-weight:700;font-size:13px}
+.pl-line.sub{background:var(--bg-card2);margin:4px -10px;padding:9px 10px;border-radius:10px;border:none}
+.pl-l em{display:block;font-style:normal;font-weight:400;font-size:10.5px;color:var(--text-dim);margin-top:1px}
+.pl-p{font-size:10.5px;color:var(--text-dim);text-align:right}
+.pl-v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.pl-tag{font-size:8.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:2px 7px;border-radius:99px}
+.pl-tag.live{background:color-mix(in srgb,var(--green) 13%,transparent);color:var(--green)}
+.pl-tag.input{background:color-mix(in srgb,var(--blue) 13%,transparent);color:var(--blue)}
+.pl-tag.calc{background:var(--overlay-2);color:var(--text-muted)}
+.pl-tag.empty{background:color-mix(in srgb,var(--yellow) 16%,transparent);color:var(--yellow)}
+.pl-net{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;margin-top:16px;padding:16px 18px;border-radius:14px;background:color-mix(in srgb,var(--c) 10%,var(--bg-card));border:1px solid color-mix(in srgb,var(--c) 30%,transparent)}
+.pl-net span{font-family:'Sora';font-weight:800;letter-spacing:1px;font-size:12px}.pl-net b{font-family:'Sora';font-size:26px;font-weight:800;color:var(--c);letter-spacing:-1px}.pl-net em{font-style:normal;font-size:12px;color:var(--text-muted)}
+.pl-g2{display:flex;gap:10px}
+.pl-in{display:flex;align-items:center;background:var(--bg-card2);border:1.5px solid var(--border2);border-radius:10px;padding:0 10px}
+.pl-in input{border:none;background:transparent;padding:9px 4px;min-width:0}.pl-in input:focus{border:none}
+.pl-in i{font-style:normal;color:var(--text-muted);font-size:12px}
+.pl-saved{font-size:11px;color:var(--green);min-width:70px;text-align:right}
+.pl-tbl th{font-size:9.5px}.pl-tbl td{font-size:12.5px;padding:8px 14px}
+.pl-months{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;align-items:end}
+.pl-m{display:flex;flex-direction:column;align-items:center;gap:4px}.pl-mb{height:130px;width:100%;display:flex;align-items:flex-end;justify-content:center}.pl-mb>div{width:56%;min-height:3px}
+.pl-m b{font-family:'Sora';font-size:13px}.pl-m span{font-size:11px;font-weight:600}.pl-m small{font-size:10px;color:var(--text-dim)}
+@media(max-width:1100px){.pl-cols{grid-template-columns:1fr}.pl-side{position:static}.pl-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.pl-big{font-size:38px}.pl-line{grid-template-columns:1fr auto 96px}.pl-p{display:none}.pl-months{grid-template-columns:repeat(3,1fr)}}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -370,7 +409,7 @@ const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─── Theme & Icon preset ────────────────────────────────────── */
 const SIDEBAR_ICONS_EMOJI = {
-  dashboard:'📊', orders:'📦', returns:'↩', emails:'📧', finance:'💰',
+  dashboard:'📊', orders:'📦', returns:'↩', emails:'📧', finance:'💰', pnl:'📈',
   shipping:'🚚', synclogs:'🔄', settings:'⚙',
 };
 const SIDEBAR_ICONS_MINIMAL = {
@@ -381,6 +420,7 @@ const SIDEBAR_ICONS_MINIMAL = {
   shipping:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   synclogs:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>,
   settings:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  pnl:       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>,
   finance:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
 };
 
@@ -587,10 +627,10 @@ function Login({ onLogin }) {
 /* ─── Sidebar ────────────────────────────────────────────────── */
 const NAV_GROUPS = [
   ['Operations', [['dashboard','Dashboard'],['orders','Orders'],['returns','Returns']]],
-  ['Growth',     [['finance','Finance'],['emails','Emails']]],
+  ['Growth',     [['pnl','P&L'],['finance','Finance Lab'],['emails','Emails']]],
   ['System',     [['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings']]],
 ];
-const PAGE_TITLES = {dashboard:'Command Center',orders:'Orders',returns:'Returns & Exchange',emails:'Email Studio',finance:'Finance & P&L',shipping:'Shipping',synclogs:'Sync Logs',settings:'Settings'};
+const PAGE_TITLES = {dashboard:'Command Center',orders:'Orders',returns:'Returns & Exchange',emails:'Email Studio',finance:'Finance Lab',pnl:'Profit & Loss',shipping:'Shipping',synclogs:'Sync Logs',settings:'Settings'};
 
 function Sidebar({ tab, setTab, onLogout, iconPreset }) {
   const icons = iconPreset === 'emoji' ? SIDEBAR_ICONS_EMOJI : SIDEBAR_ICONS_MINIMAL;
@@ -3521,6 +3561,344 @@ function SyncLogs() {
   );
 }
 
+/* ─── P&L ────────────────────────────────────────────────────── */
+const gsum = (m,g,k) => { const x=m[g]; return (x.cod[k]||0)+(x.prepaid[k]||0)+(x.pp[k]||0); };
+const PNL_EMPTY = () => Object.fromEntries(['delivered','rto','cancelled','inflight','pending'].map(g=>[g,{cod:{n:0,v:0,u:0},prepaid:{n:0,v:0,u:0},pp:{n:0,v:0,u:0}}]));
+
+function computePnl(m, inp, adSpend, days, avgCost) {
+  const n = v => (+v)||0;
+  const D = g => ({n:gsum(m,g,'n'),v:gsum(m,g,'v'),u:gsum(m,g,'u')});
+  const del=D('delivered'), rto=D('rto'), can=D('cancelled'), inf=D('inflight'), pen=D('pending');
+  const total = del.n+rto.n+can.n+inf.n+pen.n;
+  const booked = del.v+rto.v+can.v+inf.v+pen.v;
+  const settled = (del.n+rto.n) ? del.n/(del.n+rto.n) : 0.75;
+  const cancelRate = total ? can.n/total : 0;
+  const exp = inp.basis==='expected';
+  const fI = exp?settled:0, fQ = exp?settled*(1-cancelRate):0;
+  const realisedV = del.v + fI*inf.v + fQ*pen.v;
+  const realisedU = del.u + fI*inf.u + fQ*pen.u;
+  const realisedN = del.n + fI*inf.n + fQ*pen.n;
+  const haircut = (inf.v+pen.v) - (fI*inf.v+fQ*pen.v);
+  const gst = n(inp.gst_pct)/100;
+  const gstAmt = realisedV*gst/(1+gst);
+  const netRev = realisedV - gstAmt;
+  const dispN = del.n+rto.n+inf.n + (exp ? pen.n*(1-cancelRate) : 0);
+  const rtoN = rto.n + (exp ? (inf.n + pen.n*(1-cancelRate))*(1-settled) : 0);
+  const rtoU = rto.u + (exp ? (inf.u + pen.u*(1-cancelRate))*(1-settled) : 0);
+  const cogs = realisedU*avgCost;
+  const rtoDamage = rtoU*avgCost*n(inp.rto_damage_pct)/100;
+  const ship = dispN*n(inp.ship_fwd), rtoShip = rtoN*n(inp.ship_rto), packaging = dispN*n(inp.packaging);
+  const pv = (p) => m.delivered[p].v + fI*m.inflight[p].v + fQ*m.pending[p].v;
+  const prepaidBooked = ['delivered','rto','inflight','pending'].reduce((a,g)=>a+m[g].prepaid.v,0);
+  const gateway = prepaidBooked*n(inp.gateway_pct)/100;
+  const codFee = (pv('cod')+pv('pp'))*n(inp.cod_fee_pct)/100;
+  const overheads = (inp.overheads||[]).reduce((a,o)=>a+n(o.amount),0)*days/30.44;
+  const ads = adSpend||0;
+  const variable = cogs+rtoDamage+ship+rtoShip+packaging+gateway+codFee;
+  const contribution = netRev - variable;
+  const afterAds = contribution - ads;
+  const net = afterAds - overheads;
+  return { del,rto,can,inf,pen,total,booked,settled,cancelRate,realisedV,realisedU,realisedN,haircut,gstAmt,netRev,dispN,rtoN,cogs,rtoDamage,ship,rtoShip,packaging,gateway,codFee,overheads,ads,variable,contribution,afterAds,net,
+    margin: netRev>0 ? net/netRev*100 : 0,
+    beRoas: contribution>0 ? realisedV/contribution : null,
+    roas: ads>0 ? realisedV/ads : null,
+    perOrder: realisedN>0 ? net/realisedN : 0 };
+}
+
+const inr = (v) => { const a=Math.abs(v), s=v<0?'−':''; if(a>=1e7) return s+'₹'+(a/1e7).toFixed(2)+' Cr'; if(a>=1e5) return s+'₹'+(a/1e5).toFixed(2)+'L'; return s+'₹'+Math.round(a).toLocaleString('en-IN'); };
+const inrFull = (v) => (v<0?'−':'')+'₹'+Math.round(Math.abs(v)).toLocaleString('en-IN');
+
+const PlTag = ({t}) => <span className={`pl-tag ${t}`}>{t==='live'?'Live':t==='input'?'Input':t==='empty'?'Fill me':'Calc'}</span>;
+const PlLine = ({P,l,v,t,neg,strong,sub,hint}) => (
+  <div className={`pl-line ${strong?'strong':''} ${sub?'sub':''}`}>
+    <span className="pl-l">{l}{hint && <em>{hint}</em>}</span>
+    {t ? <PlTag t={t}/> : <span/>}
+    <span className="pl-p">{P.netRev? (Math.abs(v)/P.netRev*100).toFixed(1)+'%':''}</span>
+    <span className="pl-v" style={{color:neg&&v>0?'var(--red)':strong&&v<0?'var(--red)':undefined}}>{neg&&v>0?'−':''}{inrFull(neg?Math.abs(v):v)}</span>
+  </div>
+);
+const PlNum = ({inp,set,k,label,suffix,prefix,ph}) => (
+  <div className="field" style={{marginBottom:10,flex:1}}>
+    <label>{label}</label>
+    <div className="pl-in">{prefix && <i>{prefix}</i>}<input type="number" min="0" step="any" value={inp[k]} placeholder={ph||'—'} onChange={e=>set(k,e.target.value)}/>{suffix && <i>{suffix}</i>}</div>
+  </div>
+);
+
+function Waterfall({ p }) {
+  const steps = [
+    ['Booked',p.booked,'total'],['Cancelled',-p.can.v,'d'],['RTO',-p.rto.v,'d'],['Unrealised',-p.haircut,'d'],['GST',-p.gstAmt,'d'],['Net revenue',p.netRev,'sub'],
+    ['COGS',-(p.cogs+p.rtoDamage),'d'],['Shipping',-(p.ship+p.rtoShip),'d'],['Fees',-(p.gateway+p.codFee),'d'],['Packing',-p.packaging,'d'],['Ads',-p.ads,'d'],['Overheads',-p.overheads,'d'],['Net profit',p.net,'end'],
+  ];
+  const W=920,H=290,pl=10,pr=10,pt=30,pb=34;
+  let run=0; const bars=[];
+  steps.forEach(([l,v,t],i)=>{
+    if(t==='total'){ bars.push({l,a:0,b:v,t,v}); run=v; }
+    else if(t==='sub'||t==='end'){ bars.push({l,a:0,b:v,t,v}); run=v; }
+    else { const nxt=run+v; bars.push({l,a:run,b:nxt,t,v}); run=nxt; }
+  });
+  const hi=Math.max(...bars.flatMap(b=>[b.a,b.b]),1), lo=Math.min(...bars.flatMap(b=>[b.a,b.b]),0);
+  const y=v=>pt+(H-pt-pb)*(1-(v-lo)/(hi-lo||1));
+  const slot=(W-pl-pr)/bars.length, bw=slot*0.62;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
+      <line x1={pl} x2={W-pr} y1={y(0)} y2={y(0)} stroke="var(--border2)"/>
+      {bars.map((b,i)=>{
+        const x=pl+slot*i+(slot-bw)/2, top=y(Math.max(b.a,b.b)), h=Math.max(2,Math.abs(y(b.a)-y(b.b)));
+        const col = b.t==='total'?'#5b5bf0' : b.t==='sub'?'#0891b2' : b.t==='end'?(b.v>=0?'#12a150':'#e5484d') : '#f76b15';
+        const op = b.t==='d' ? .9 : 1;
+        return (<g key={i}>
+          {i>0 && <line x1={x-(slot-bw)} x2={x} y1={y(bars[i-1].b)} y2={y(bars[i-1].b)} stroke="var(--border2)" strokeDasharray="2 3"/>}
+          <rect x={x} y={top} width={bw} height={h} rx="5" fill={col} opacity={op}/>
+          <text x={x+bw/2} y={top-7} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={b.t==='d'?'var(--text-muted)':col}>{b.t==='d'&&b.v<0?'−':''}{inr(Math.abs(b.v)).replace('−','')}</text>
+          <text x={x+bw/2} y={H-12} textAnchor="middle" fontSize="10" fill="var(--text-muted)" fontWeight={b.t==='end'?700:400}>{b.l}</text>
+        </g>);
+      })}
+    </svg>
+  );
+}
+
+function PnL({ active=true }) {
+  const now = new Date();
+  const [from,setFrom] = useState(()=>`${now.getFullYear()}-${pad2(now.getMonth()+1)}-01`);
+  const [to,setTo]     = useState(()=>localKey(now));
+  const [data,setData] = useState(null);
+  const [loading,setLoading] = useState(true);
+  const [inp,setInp]   = useState(null);
+  const [saved,setSaved] = useState('');
+  const [snaps,setSnaps] = useState([]);
+  const [showAll,setShowAll] = useState(false);
+  const loaded = useRef(false), saveT = useRef(), last = useRef(0);
+
+  const load = useCallback(async (f,t,silent)=>{
+    if(!silent) setLoading(true);
+    try { setData(await apiFetch(`/admin/pnl-data?from=${f}&to=${t}`)); } catch(e){ console.error(e); }
+    finally { setLoading(false); last.current=Date.now(); }
+  },[]);
+  useEffect(()=>{ load(from,to); },[from,to]);
+  useEffect(()=>{ if(active && last.current && Date.now()-last.current>120000) load(from,to,true); },[active]);
+  useEffect(()=>{
+    apiFetch('/admin/pnl-settings').then(d=>{ setInp(d); setTimeout(()=>{loaded.current=true;},50); });
+    apiFetch('/admin/pnl-snapshots').then(setSnaps).catch(()=>{});
+  },[]);
+  // autosave inputs
+  useEffect(()=>{
+    if(!inp || !loaded.current) return;
+    setSaved('saving');
+    clearTimeout(saveT.current);
+    saveT.current = setTimeout(async()=>{
+      try { await apiFetch('/admin/pnl-settings',{method:'POST',body:JSON.stringify(inp)}); setSaved('saved'); setTimeout(()=>setSaved(''),1800); }
+      catch{ setSaved('error'); }
+    },800);
+  },[inp]);
+
+  const set = (k,v) => setInp(p=>({...p,[k]:v}));
+  const products = data?.products || [];
+  const totalUnits = products.reduce((a,p)=>a+p.units,0);
+  const costOf = t => { const pc=inp?.product_costs?.[t]; return (pc!==undefined && pc!=='') ? +pc : (+inp?.default_cost||0); };
+  const avgCost = totalUnits ? products.reduce((a,p)=>a+p.units*costOf(p.title),0)/totalUnits : (+inp?.default_cost||0);
+  const costedUnits = products.reduce((a,p)=>a+((inp?.product_costs?.[p.title]!==undefined||+inp?.default_cost>0)?p.units:0),0);
+  const adSpend = inp?.ads_mode==='manual' ? (+inp.manual_ads||0) : (data?.ads?.period||0);
+
+  const P = useMemo(()=> (data&&inp) ? computePnl(data.matrix, inp, adSpend, data.days, avgCost) : null, [data,inp,adSpend,avgCost]);
+
+  const months = useMemo(()=>{
+    if(!data||!inp) return [];
+    const nowD = new Date(); const out=[];
+    for(let i=5;i>=0;i--){
+      const d = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth()-i, 1));
+      const k = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}`;
+      const m = data.trend?.[k] || PNL_EMPTY();
+      const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth()+1, 0)).getUTCDate();
+      const days = i===0 ? nowD.getUTCDate() : dim;
+      const ads = inp.ads_mode==='manual' ? 0 : (data.ads?.months?.[k]||0);
+      out.push({ k, label:d.toLocaleDateString('en-IN',{month:'short',year:'2-digit',timeZone:'UTC'}), p:computePnl(m,inp,ads,days,avgCost) });
+    }
+    return out;
+  },[data,inp,avgCost]);
+
+  if(!inp) return <div className="skel" style={{height:400}}/>;
+
+  const filled = [
+    ['Product cost', costedUnits>0 && costedUnits/(totalUnits||1)>0.5],
+    ['Forward shipping', +inp.ship_fwd>0],
+    ['RTO shipping', +inp.ship_rto>0],
+    ['COD fee', inp.cod_fee_pct!==''],
+    ['Packaging', inp.packaging!==''],
+    ['Overheads', (inp.overheads||[]).some(o=>+o.amount>0)],
+  ];
+  const doneN = filled.filter(x=>x[1]).length;
+  const verdict = !P ? '' : doneN<6 ? ['Provisional · costs incomplete','var(--yellow)'] : P.net<0 ? ['Loss-making','var(--red)'] : P.margin<8 ? ['Thin margin','var(--yellow)'] : P.margin<18 ? ['Healthy','var(--green)'] : ['Excellent','var(--green)'];
+
+  const saveSnap = async () => {
+    const label = prompt('Name this snapshot', `${from} → ${to}`); if(!label) return;
+    await apiFetch('/admin/pnl-snapshots',{method:'POST',body:JSON.stringify({label,from,to,basis:inp.basis,inputs:inp,summary:{booked:P.booked,netRev:P.netRev,contribution:P.contribution,ads:P.ads,net:P.net,margin:P.margin,roas:P.roas}})});
+    apiFetch('/admin/pnl-snapshots').then(setSnaps);
+  };
+  const delSnap = async id => { if(!confirm('Delete this snapshot?')) return; await apiFetch(`/admin/pnl-snapshots/${id}`,{method:'DELETE'}); apiFetch('/admin/pnl-snapshots').then(setSnaps); };
+
+  const shown = showAll ? products : products.slice(0,12);
+
+  return (
+    <div>
+      <div className="d-head">
+        <div>
+          <div className="d-hello">Profit &amp; <span>Loss</span></div>
+          <div className="d-sub">Your real numbers, live from orders, courier outcomes and Meta spend. Fill the blue inputs to sharpen it.</div>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <span className="pl-saved">{saved==='saving'?'Saving…':saved==='saved'?'✓ Saved':saved==='error'?'Save failed':''}</span>
+          <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}}/>
+        </div>
+      </div>
+
+      {loading || !P ? <div><div className="skel" style={{height:200,marginBottom:14}}/><div className="skel" style={{height:320}}/></div> : <>
+        <div className="pl-hero fade">
+          <div style={{flex:'1 1 340px'}}>
+            <div className="pl-hl">Net profit · {data.days} day{data.days>1?'s':''}</div>
+            <div className="pl-big" style={{color:P.net<0?'var(--red)':'var(--green)'}}><CountUp value={P.net} format={v=>inrFull(v)}/></div>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:10}}>
+              <span className="tag" style={{'--c':verdict[1]}}>{verdict[0]}</span>
+              <span style={{fontSize:13,color:'var(--text-muted)'}}><b style={{color:'var(--text)'}}>{P.margin.toFixed(1)}%</b> margin on {inr(P.netRev)} net revenue</span>
+            </div>
+            <div className="chips" style={{marginTop:16}}>
+              <button className={`chip ${inp.basis==='expected'?'on':''}`} onClick={()=>set('basis','expected')} title="Delivered + in-flight orders at your real delivery rate">Expected</button>
+              <button className={`chip ${inp.basis==='delivered'?'on':''}`} onClick={()=>set('basis','delivered')} title="Only orders already delivered">Delivered only</button>
+              <button className="chip" onClick={saveSnap}>＋ Save snapshot</button>
+            </div>
+          </div>
+          <div className="pl-stats">
+            {[['Booked sales',inr(P.booked),`${(P.total).toLocaleString()} orders`],['Net revenue',inr(P.netRev),'after RTO, cancel, GST'],['Contribution',inr(P.contribution),`${P.netRev?(P.contribution/P.netRev*100).toFixed(0):0}% of net revenue`],['Ad spend',inr(P.ads),P.roas?`${P.roas.toFixed(2)}x on realised sales`:'—'],['Profit / order',inrFull(P.perOrder),'per realised order'],['Break-even ROAS',P.beRoas?P.beRoas.toFixed(2)+'x':'—',P.roas&&P.beRoas?(P.roas>=P.beRoas?'you are above it':'below break-even'):'']].map(([l,v,s])=>(
+              <div key={l} className="pl-s"><span>{l}</span><b>{v}</b><small>{s}</small></div>
+            ))}
+          </div>
+        </div>
+
+        {doneN<6 && (
+          <div className="pl-setup">
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:8}}><b>Complete your P&amp;L — {doneN}/6 inputs filled</b><span style={{color:'var(--text-muted)'}}>Until then costs are understated and profit looks better than it is.</span></div>
+            <div className="bar"><div style={{width:`${doneN/6*100}%`,background:'var(--indigo)'}}/></div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>{filled.map(([l,ok])=><span key={l} className={`pl-chip ${ok?'ok':''}`}>{ok?'✓':'○'} {l}</span>)}</div>
+          </div>
+        )}
+
+        <div className="panel" style={{marginBottom:14}}>
+          <div className="panel-h"><div><div className="panel-t">Where the money goes</div><div className="panel-m">From booked sales to net profit</div></div><span className="tag" style={{'--c':'var(--indigo)'}}>Waterfall</span></div>
+          <Waterfall p={P}/>
+        </div>
+
+        <div className="pl-cols">
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Profit &amp; loss statement</div><div className="panel-m">% is of net revenue · {inp.basis==='expected'?'expected basis':'delivered only'}</div></div></div>
+            <div className="pl-sec">Revenue</div>
+            <PlLine P={P} l="Booked sales" v={P.booked} t="live" hint="all orders placed"/>
+            <PlLine P={P} l="Cancelled orders" v={P.can.v} t="live" neg/>
+            <PlLine P={P} l="RTO / returned" v={P.rto.v} t="live" neg/>
+            <PlLine P={P} l={inp.basis==='expected'?'Expected shortfall on in-flight':'Not yet delivered'} v={P.haircut} t="calc" neg hint={inp.basis==='expected'?`at ${(P.settled*100).toFixed(0)}% delivery rate`:'excluded'}/>
+            <PlLine P={P} l="Realised sales (incl. GST)" v={P.realisedV} strong/>
+            <PlLine P={P} l={`GST @ ${inp.gst_pct||0}%`} v={P.gstAmt} t={inp.gst_pct===''?'empty':'input'} neg/>
+            <PlLine P={P} l="Net revenue" v={P.netRev} strong sub/>
+            <div className="pl-sec">Cost of goods</div>
+            <PlLine P={P} l="Product cost" v={P.cogs} t={costedUnits?'input':'empty'} neg hint={`${Math.round(P.realisedU).toLocaleString()} units × ${inrFull(avgCost)}`}/>
+            <PlLine P={P} l="RTO write-off (damaged stock)" v={P.rtoDamage} t="input" neg hint={`${inp.rto_damage_pct||0}% of returned units`}/>
+            <div className="pl-sec">Fulfilment</div>
+            <PlLine P={P} l="Forward shipping" v={P.ship} t={+inp.ship_fwd?'input':'empty'} neg hint={`${Math.round(P.dispN).toLocaleString()} shipments`}/>
+            <PlLine P={P} l="RTO return shipping" v={P.rtoShip} t={+inp.ship_rto?'input':'empty'} neg hint={`${Math.round(P.rtoN).toLocaleString()} returns`}/>
+            <PlLine P={P} l="Packaging" v={P.packaging} t={inp.packaging!==''?'input':'empty'} neg/>
+            <div className="pl-sec">Payment fees</div>
+            <PlLine P={P} l="Payment gateway (prepaid)" v={P.gateway} t="input" neg/>
+            <PlLine P={P} l="COD handling" v={P.codFee} t={inp.cod_fee_pct!==''?'input':'empty'} neg/>
+            <PlLine P={P} l="Contribution margin" v={P.contribution} strong sub/>
+            <div className="pl-sec">Marketing</div>
+            <PlLine P={P} l={inp.ads_mode==='manual'?'Ad spend (manual)':'Meta ad spend'} v={P.ads} t={inp.ads_mode==='manual'?'input':'live'} neg/>
+            <PlLine P={P} l="Profit after marketing" v={P.afterAds} strong sub/>
+            <div className="pl-sec">Overheads <em style={{textTransform:'none',letterSpacing:0}}>· monthly amount × {data.days}/30 days</em></div>
+            {(inp.overheads||[]).length===0 && <div className="pl-line"><span className="pl-l" style={{color:'var(--text-dim)'}}>None added — add salaries, rent, tools on the right</span><PlTag t="empty"/><span/><span className="pl-v">₹0</span></div>}
+            {(inp.overheads||[]).map((o,i)=>(<PlLine P={P} key={i} l={o.name||'Unnamed'} v={(+o.amount||0)*data.days/30.44} t="input" neg/>))}
+            <div className="pl-net" style={{'--c':P.net<0?'var(--red)':'var(--green)'}}><span>NET PROFIT</span><b>{inrFull(P.net)}</b><em>{P.margin.toFixed(1)}%</em></div>
+          </div>
+
+          <div className="pl-side">
+            <div className="panel">
+              <div className="panel-h"><div><div className="panel-t">Your costs</div><div className="panel-m">Autosaves · blank = not counted</div></div></div>
+              <div className="pl-g2"><PlNum inp={inp} set={set} k="ship_fwd" label="Shipping / order" prefix="₹" ph="e.g. 75"/><PlNum inp={inp} set={set} k="ship_rto" label="RTO shipping / return" prefix="₹" ph="e.g. 75"/></div>
+              <div className="pl-g2"><PlNum inp={inp} set={set} k="packaging" label="Packaging / order" prefix="₹" ph="e.g. 20"/><PlNum inp={inp} set={set} k="cod_fee_pct" label="COD fee" suffix="%" ph="e.g. 2"/></div>
+              <div className="pl-g2"><PlNum inp={inp} set={set} k="gateway_pct" label="Gateway fee (prepaid)" suffix="%"/><PlNum inp={inp} set={set} k="gst_pct" label="GST in prices" suffix="%"/></div>
+              <div className="pl-g2"><PlNum inp={inp} set={set} k="rto_damage_pct" label="RTO stock written off" suffix="%"/><PlNum inp={inp} set={set} k="default_cost" label="Default cost / unit" prefix="₹" ph="fallback"/></div>
+              <div className="field" style={{marginBottom:0}}>
+                <label>Ad spend source</label>
+                <div className="chips">
+                  <button className={`chip ${inp.ads_mode!=='manual'?'on':''}`} onClick={()=>set('ads_mode','meta')}>Meta live · {inr(data.ads?.period||0)}</button>
+                  <button className={`chip ${inp.ads_mode==='manual'?'on':''}`} onClick={()=>set('ads_mode','manual')}>Manual</button>
+                </div>
+                {inp.ads_mode==='manual' && <div className="pl-in" style={{marginTop:8}}><i>₹</i><input type="number" value={inp.manual_ads} placeholder="Total spend for this period" onChange={e=>set('manual_ads',e.target.value)}/></div>}
+                {data.adsErr && inp.ads_mode!=='manual' && <div style={{fontSize:11,color:'var(--red)',marginTop:6}}>Meta unavailable: {data.adsErr}</div>}
+              </div>
+            </div>
+            <div className="panel">
+              <div className="panel-h"><div><div className="panel-t">Monthly overheads</div><div className="panel-m">Salaries, rent, software, agency…</div></div><button className="chip" onClick={()=>set('overheads',[...(inp.overheads||[]),{name:'',amount:''}])}>＋ Add</button></div>
+              {(inp.overheads||[]).map((o,i)=>(
+                <div key={i} style={{display:'flex',gap:6,marginBottom:8}}>
+                  <input value={o.name} placeholder="e.g. Salaries" onChange={e=>set('overheads',inp.overheads.map((x,j)=>j===i?{...x,name:e.target.value}:x))}/>
+                  <div className="pl-in" style={{flex:'0 0 120px'}}><i>₹</i><input type="number" value={o.amount} placeholder="/ month" onChange={e=>set('overheads',inp.overheads.map((x,j)=>j===i?{...x,amount:e.target.value}:x))}/></div>
+                  <button className="btn-ghost btn-sm" onClick={()=>set('overheads',inp.overheads.filter((_,j)=>j!==i))} style={{padding:'0 10px'}}>×</button>
+                </div>
+              ))}
+              {(inp.overheads||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)'}}>No overheads yet. Add your fixed monthly costs so profit is real.</div>}
+              {(inp.overheads||[]).length>0 && <div className="od-row" style={{borderTop:'1px solid var(--border)',marginTop:6,paddingTop:8}}><span>Total / month</span><b>{inrFull((inp.overheads||[]).reduce((a,o)=>a+(+o.amount||0),0))}</b></div>}
+            </div>
+          </div>
+        </div>
+
+        <div className="panel" style={{marginBottom:14}}>
+          <div className="panel-h"><div><div className="panel-t">Product profitability</div><div className="panel-m">Set the cost per unit — margin uses this period’s average selling price</div></div><span className="tag" style={{'--c':'var(--purple)'}}>{products.length} products</span></div>
+          <div style={{overflowX:'auto'}}>
+          <table className="pl-tbl">
+            <thead><tr><th>Product</th><th>Units</th><th>Avg price</th><th>Cost / unit</th><th>Margin</th><th>Gross profit</th></tr></thead>
+            <tbody>
+              {shown.map(p=>{
+                const price = p.units? p.revenue/p.units : 0, c = costOf(p.title), set_ = inp.product_costs?.[p.title]!==undefined && inp.product_costs?.[p.title]!=='';
+                const mg = price? (price/(1+(+inp.gst_pct||0)/100)-c)/(price/(1+(+inp.gst_pct||0)/100))*100 : 0;
+                return (<tr key={p.title}>
+                  <td style={{fontWeight:600,maxWidth:260}}>{p.title}</td><td>{p.units.toLocaleString()}</td><td>{inrFull(price)}</td>
+                  <td><div className="pl-in" style={{width:110}}><i>₹</i><input type="number" min="0" value={set_?inp.product_costs[p.title]:''} placeholder={inp.default_cost!==''?String(inp.default_cost):'cost'} onChange={e=>set('product_costs',{...inp.product_costs,[p.title]:e.target.value})}/></div></td>
+                  <td style={{color:c?(mg<25?'var(--red)':mg<45?'var(--yellow)':'var(--green)'):'var(--text-dim)',fontWeight:700}}>{c?mg.toFixed(0)+'%':'—'}</td>
+                  <td style={{fontWeight:600}}>{c?inrFull((price/(1+(+inp.gst_pct||0)/100)-c)*p.units):'—'}</td>
+                </tr>);
+              })}
+            </tbody>
+          </table></div>
+          {products.length>12 && <button className="chip" style={{marginTop:12}} onClick={()=>setShowAll(s=>!s)}>{showAll?'Show top 12':`Show all ${products.length}`}</button>}
+        </div>
+
+        <div className="panel" style={{marginBottom:14}}>
+          <div className="panel-h"><div><div className="panel-t">Last 6 months</div><div className="panel-m">Net profit using your current cost inputs and Meta spend per month</div></div><span className="tag" style={{'--c':'var(--green)'}}>Trend</span></div>
+          {(()=>{ const mx=Math.max(1,...months.map(x=>Math.abs(x.p.net))); return (
+            <div className="pl-months">
+              {months.map(({k,label,p})=>(
+                <div key={k} className="pl-m">
+                  <div className="pl-mb"><div style={{height:`${Math.abs(p.net)/mx*100}%`,background:p.net<0?'var(--red)':'var(--green)',borderRadius:6}}/></div>
+                  <b style={{color:p.net<0?'var(--red)':'var(--green)'}}>{inr(p.net)}</b><span>{label}</span><small>{p.margin.toFixed(0)}% · {inr(p.netRev)}</small>
+                </div>
+              ))}
+            </div>); })()}
+        </div>
+
+        <div className="panel">
+          <div className="panel-h"><div><div className="panel-t">Snapshot log</div><div className="panel-m">Frozen copies of this P&amp;L with the inputs you used</div></div><button className="chip on" onClick={saveSnap}>＋ Save current</button></div>
+          {snaps.length===0 && <div style={{fontSize:12,color:'var(--text-dim)',padding:'8px 0'}}>No snapshots yet. Save one at month-end to keep a permanent record.</div>}
+          {snaps.map(sn=>(
+            <div key={sn._id} className="row" style={{gap:14}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{sn.label}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{sn.from} → {sn.to} · {sn.basis} · saved {new Date(sn.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div></div>
+              <div style={{textAlign:'right'}}><div style={{fontFamily:'Sora',fontWeight:800,color:(sn.summary?.net||0)<0?'var(--red)':'var(--green)'}}>{inrFull(sn.summary?.net||0)}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{(sn.summary?.margin||0).toFixed(1)}% margin</div></div>
+              <button className="btn-ghost btn-sm" onClick={()=>delSnap(sn._id)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      </>}
+    </div>
+  );
+}
+
 /* ─── App Shell ───────────────────────────────────────────────── */
 function App() {
   const [authed,setAuthed]   = useState(!!token());
@@ -3544,7 +3922,7 @@ function App() {
 
   const views = {
     dashboard: <Dashboard active={tab==='dashboard'}/>, orders: <Orders active={tab==='orders'}/>, returns: <Returns/>,
-    emails: <Emails/>, finance: <Finance/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
+    emails: <Emails/>, finance: <Finance/>, pnl: <PnL active={tab==='pnl'}/>, shipping: <Shipping/>, synclogs: <SyncLogs/>,
     settings: <Settings theme={theme} setTheme={setTheme} iconPreset={iconPreset} setIconPreset={setIconPreset}/>,
   };
 
