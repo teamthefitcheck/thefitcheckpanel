@@ -2532,9 +2532,11 @@ function shipsagarStatusToStage(description, courierStatus) {
   // 1. Anything on the return leg is RTO — the courier status says so even when the latest scan reads "Out For Delivery"/"Delivered"
   if (/\brto\b|return(ed)?\s*to\s*(origin|shipper)|delivered\s*back\s*to\s*shipper|^returned$|\breturned\b|shipper'?s\s*request|return\s*(initiated|in\s*transit)/.test(both)) return 'rto';
   // 2. Failed delivery / customer-side problems
-  if (/undelivered|not\s*delivered|refus(ed|al)|cancell?ed\s*by\s*(consignee|customer)|otp\s*not\s*shared|contact\s*customer\s*service|consignee\s*(not\s*available|has\s*given|unavailable)|not\s*available|no\s*such\s*consignee|premises\s*closed|address\s*(incorrect|incomplete)|incomplete\/incorrect|held\s*at|charges\s*pending|prohibited\s*area|\bndr\b/.test(both)) return 'ndr';
-  if (/out\s*for\s*delivery|out_delivery|\bofd\b/.test(both)) return 'ofd';
+  if (/undelivered|not\s*delivered|refus(ed|al)|cancell?ed\s*by\s*(consignee|customer)|otp\s*not\s*shared|contact\s*customer\s*service|consignee\s*(not\s*available|has\s*given|unavailable)|not\s*available|no\s*such\s*consignee|premises\s*closed|address\s*(incorrect|incomplete)|incomplete\/incorrect|held\s*at|charges\s*pending|prohibited\s*area|need\s*department|educational\s*institution|wrong\s*pincode|\bndr\b/.test(both)) return 'ndr';
+  if (/out\s*for\s*delivery|out_delivery|\bofd\b|on\s*their\s*way\s*to\s*deliver/.test(both)) return 'ofd';
   if (/\bdelivered\b/.test(both)) return 'delivered';
+  // Courier tried/registered a pickup but has not actually collected the parcel — keep it in 'ready' so it shows as not picked up
+  if (/pickup\s*employee\s*is\s*out|out\s*to\s*p\/u|pickup\s*(has\s*been\s*)?registered|pickup\s*closed/.test(d)) return 'ready';
   if (/picked\s*up|pickup\s*(done|completed|generated)|(pickup|p\/u)\s*(employee|scheduled|assigned|requested|registered)|out\s*to\s*p\/u/.test(both)) return 'pickup';
   return 'transit';
 }
