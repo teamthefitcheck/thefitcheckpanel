@@ -3592,13 +3592,15 @@ function computePnl(m, inp, adSpend, days, avgCost) {
   const prepaidBooked = ['delivered','rto','inflight','pending'].reduce((a,g)=>a+m[g].prepaid.v,0);
   const gateway = prepaidBooked*n(inp.gateway_pct)/100;
   const codFee = (pv('cod')+pv('pp'))*n(inp.cod_fee_pct)/100;
-  const overheads = (inp.overheads||[]).reduce((a,o)=>a+n(o.amount),0)*days/30.44;
+  const ohMonthly = (inp.overheads||[]).reduce((a,o)=>a+n(o.amount),0);
+  const ohFactor = inp.prorate_overheads===false ? Math.max(1,Math.round(days/30.44)) : days/30.44;
+  const overheads = ohMonthly*ohFactor;
   const ads = adSpend||0;
   const variable = cogs+rtoDamage+ship+rtoShip+packaging+gateway+codFee;
   const contribution = netRev - variable;
   const afterAds = contribution - ads;
   const net = afterAds - overheads;
-  return { del,rto,can,inf,pen,total,booked,settled,cancelRate,realisedV,realisedU,realisedN,haircut,gstAmt,netRev,dispN,rtoN,cogs,rtoDamage,ship,rtoShip,packaging,gateway,codFee,overheads,ads,variable,contribution,afterAds,net,
+  return { ohFactor,del,rto,can,inf,pen,total,booked,settled,cancelRate,realisedV,realisedU,realisedN,haircut,gstAmt,netRev,dispN,rtoN,cogs,rtoDamage,ship,rtoShip,packaging,gateway,codFee,overheads,ads,variable,contribution,afterAds,net,
     margin: netRev>0 ? net/netRev*100 : 0,
     beRoas: contribution>0 ? realisedV/contribution : null,
     roas: ads>0 ? realisedV/ads : null,
@@ -3694,9 +3696,11 @@ function PnL({ active=true }) {
   const set = (k,v) => setInp(p=>({...p,[k]:v}));
   const products = data?.products || [];
   const totalUnits = products.reduce((a,p)=>a+p.units,0);
-  const costOf = t => { const pc=inp?.product_costs?.[t]; return (pc!==undefined && pc!=='') ? +pc : (+inp?.default_cost||0); };
-  const avgCost = totalUnits ? products.reduce((a,p)=>a+p.units*costOf(p.title),0)/totalUnits : (+inp?.default_cost||0);
-  const costedUnits = products.reduce((a,p)=>a+((inp?.product_costs?.[p.title]!==undefined||+inp?.default_cost>0)?p.units:0),0);
+  const explicitCost = t => { const pc=inp?.product_costs?.[t]; if(pc!==undefined && pc!=='') return +pc; return (+inp?.default_cost>0) ? +inp.default_cost : null; };
+  const costOf = t => explicitCost(t) ?? 0;
+  const costedUnits = products.reduce((a,p)=>a+(explicitCost(p.title)!=null?p.units:0),0);
+  const estCost = costedUnits ? products.reduce((a,p)=>a+(explicitCost(p.title)!=null?p.units*explicitCost(p.title):0),0)/costedUnits : 0;
+  const avgCost = totalUnits ? products.reduce((a,p)=>a+p.units*(explicitCost(p.title) ?? estCost),0)/totalUnits : 0;
   const adSpend = inp?.ads_mode==='manual' ? (+inp.manual_ads||0) : (data?.ads?.period||0);
 
   const P = useMemo(()=> (data&&inp) ? computePnl(data.matrix, inp, adSpend, data.days, avgCost) : null, [data,inp,adSpend,avgCost]);
@@ -3798,7 +3802,7 @@ function PnL({ active=true }) {
             <PlLine P={P} l={`GST @ ${inp.gst_pct||0}%`} v={P.gstAmt} t={inp.gst_pct===''?'empty':'input'} neg/>
             <PlLine P={P} l="Net revenue" v={P.netRev} strong sub/>
             <div className="pl-sec">Cost of goods</div>
-            <PlLine P={P} l="Product cost" v={P.cogs} t={costedUnits?'input':'empty'} neg hint={`${Math.round(P.realisedU).toLocaleString()} units × ${inrFull(avgCost)}`}/>
+            <PlLine P={P} l="Product cost" v={P.cogs} t={costedUnits?'input':'empty'} neg hint={`${Math.round(P.realisedU).toLocaleString()} units × ${inrFull(avgCost)} avg${costedUnits<totalUnits&&costedUnits>0?` · ${Math.round(costedUnits/totalUnits*100)}% of units costed, rest estimated at ${inrFull(estCost)}`:''}${costedUnits===0?' · no cost entered':''}`}/>
             <PlLine P={P} l="RTO write-off (damaged stock)" v={P.rtoDamage} t="input" neg hint={`${inp.rto_damage_pct||0}% of returned units`}/>
             <div className="pl-sec">Fulfilment</div>
             <PlLine P={P} l="Forward shipping" v={P.ship} t={+inp.ship_fwd?'input':'empty'} neg hint={`${Math.round(P.dispN).toLocaleString()} shipments`}/>
@@ -3811,9 +3815,9 @@ function PnL({ active=true }) {
             <div className="pl-sec">Marketing</div>
             <PlLine P={P} l={inp.ads_mode==='manual'?'Ad spend (manual)':'Meta ad spend'} v={P.ads} t={inp.ads_mode==='manual'?'input':'live'} neg/>
             <PlLine P={P} l="Profit after marketing" v={P.afterAds} strong sub/>
-            <div className="pl-sec">Overheads <em style={{textTransform:'none',letterSpacing:0}}>· monthly amount × {data.days}/30 days</em></div>
+            <div className="pl-sec">Overheads <em style={{textTransform:'none',letterSpacing:0}}>· {inp.prorate_overheads===false?`full monthly amount × ${P.ohFactor} month${P.ohFactor>1?'s':''}`:`monthly amount × ${data.days} of 30.4 days`}</em></div>
             {(inp.overheads||[]).length===0 && <div className="pl-line"><span className="pl-l" style={{color:'var(--text-dim)'}}>None added — add salaries, rent, tools on the right</span><PlTag t="empty"/><span/><span className="pl-v">₹0</span></div>}
-            {(inp.overheads||[]).map((o,i)=>(<PlLine P={P} key={i} l={o.name||'Unnamed'} v={(+o.amount||0)*data.days/30.44} t="input" neg/>))}
+            {(inp.overheads||[]).map((o,i)=>(<PlLine P={P} key={i} l={o.name||'Unnamed'} v={(+o.amount||0)*P.ohFactor} t="input" neg hint={`₹${(+o.amount||0).toLocaleString('en-IN')}/month${inp.prorate_overheads===false?'':' · prorated'}`}/>))}
             <div className="pl-net" style={{'--c':P.net<0?'var(--red)':'var(--green)'}}><span>NET PROFIT</span><b>{inrFull(P.net)}</b><em>{P.margin.toFixed(1)}%</em></div>
           </div>
 
@@ -3843,6 +3847,10 @@ function PnL({ active=true }) {
                   <button className="btn-ghost btn-sm" onClick={()=>set('overheads',inp.overheads.filter((_,j)=>j!==i))} style={{padding:'0 10px'}}>×</button>
                 </div>
               ))}
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11.5,color:'var(--text-muted)',fontWeight:400,margin:'4px 0 10px',cursor:'pointer'}}>
+                <input type="checkbox" style={{width:'auto'}} checked={inp.prorate_overheads!==false} onChange={e=>set('prorate_overheads',e.target.checked)}/>
+                Prorate to the selected days <span style={{color:'var(--text-dim)'}}>(off = count the full monthly amount)</span>
+              </label>
               {(inp.overheads||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)'}}>No overheads yet. Add your fixed monthly costs so profit is real.</div>}
               {(inp.overheads||[]).length>0 && <div className="od-row" style={{borderTop:'1px solid var(--border)',marginTop:6,paddingTop:8}}><span>Total / month</span><b>{inrFull((inp.overheads||[]).reduce((a,o)=>a+(+o.amount||0),0))}</b></div>}
             </div>

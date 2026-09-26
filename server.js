@@ -1713,7 +1713,7 @@ app.get('/admin/pnl-data', adminAuth, async (req, res) => {
     res.json({ from, to, days, matrix: agg.matrix, products: agg.products, orderCount: agg.orderCount, trend: trend.months, ads, adsErr });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-const PNL_DEFAULTS = { gst_pct: 5, default_cost: '', ship_fwd: '', ship_rto: '', cod_fee_pct: '', gateway_pct: 2, packaging: '', rto_damage_pct: 10, ads_mode: 'meta', manual_ads: '', product_costs: {}, overheads: [], basis: 'expected' };
+const PNL_DEFAULTS = { gst_pct: 5, default_cost: '', ship_fwd: '', ship_rto: '', cod_fee_pct: '', gateway_pct: 2, packaging: '', rto_damage_pct: 10, ads_mode: 'meta', manual_ads: '', product_costs: {}, overheads: [], basis: 'expected', prorate_overheads: true };
 app.get('/admin/pnl-settings', adminAuth, async (req, res) => {
   const doc = await mdb.collection('settings').findOne({}, { projection: { pnl_settings: 1, _id: 0 } });
   res.json({ ...PNL_DEFAULTS, ...(doc?.pnl_settings || {}) });
@@ -1725,7 +1725,7 @@ app.post('/admin/pnl-settings', adminAuth, async (req, res) => {
     const clean = {
       gst_pct: num(b.gst_pct), default_cost: num(b.default_cost), ship_fwd: num(b.ship_fwd), ship_rto: num(b.ship_rto), cod_fee_pct: num(b.cod_fee_pct),
       gateway_pct: num(b.gateway_pct), packaging: num(b.packaging), rto_damage_pct: num(b.rto_damage_pct), manual_ads: num(b.manual_ads),
-      ads_mode: b.ads_mode === 'manual' ? 'manual' : 'meta', basis: ['delivered', 'expected'].includes(b.basis) ? b.basis : 'expected',
+      ads_mode: b.ads_mode === 'manual' ? 'manual' : 'meta', prorate_overheads: b.prorate_overheads !== false, basis: ['delivered', 'expected'].includes(b.basis) ? b.basis : 'expected',
       product_costs: Object.fromEntries(Object.entries(b.product_costs || {}).filter(([, v]) => v !== '' && !isNaN(+v)).map(([k, v]) => [k, +v])),
       overheads: (b.overheads || []).slice(0, 40).map(o => ({ name: String(o.name || '').slice(0, 60), amount: num(o.amount) })),
     };
