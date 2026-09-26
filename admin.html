@@ -3659,6 +3659,70 @@ function Waterfall({ p }) {
   );
 }
 
+
+function payBreakdown(m, inp, P, avgCost) {
+  const n = v => (+v)||0, exp = inp.basis==='expected';
+  const gst = n(inp.gst_pct)/100;
+  const fI = exp?P.settled:0, fQ = exp?P.settled*(1-P.cancelRate):0;
+  const out = [];
+  for (const [key,label,icon] of [['prepaid','Prepaid','💳'],['cod','COD','💵'],['pp','PP COD','⚡']]) {
+    const g = k => m[k][key];
+    const del=g('delivered'), rto=g('rto'), can=g('cancelled'), inf=g('inflight'), pen=g('pending');
+    const total = del.n+rto.n+can.n+inf.n+pen.n;
+    if (!total) continue;
+    const realV = del.v+fI*inf.v+fQ*pen.v, realU = del.u+fI*inf.u+fQ*pen.u, realN = del.n+fI*inf.n+fQ*pen.n;
+    const settled = (del.n+rto.n) ? del.n/(del.n+rto.n) : 0;
+    const dispN = del.n+rto.n+inf.n+(exp?pen.n*(1-P.cancelRate):0);
+    const rtoN = rto.n+(exp?(inf.n+pen.n*(1-P.cancelRate))*(1-P.settled):0);
+    const net = realV/(1+gst);
+    const cost = realU*avgCost + dispN*(n(inp.ship_fwd)+n(inp.packaging)) + rtoN*n(inp.ship_rto)
+      + (key==='prepaid' ? (del.v+rto.v+inf.v+pen.v)*n(inp.gateway_pct)/100 : realV*n(inp.cod_fee_pct)/100);
+    const adsShare = P.total ? P.ads*total/P.total : 0;
+    const profit = net - cost - adsShare;
+    out.push({ key,label,icon,total,realN,rtoRate:(del.n+rto.n)?rto.n/(del.n+rto.n)*100:0,delRate:settled*100,net,cost,adsShare,profit,perOrder:realN?profit/realN:0,aov:total?(del.v+rto.v+can.v+inf.v+pen.v)/total:0, value:del.v+rto.v+can.v+inf.v+pen.v });
+  }
+  return out;
+}
+
+function pnlInsights(P, ctx) {
+  const { data, inp, pay, products, avgCost, months, doneN } = ctx;
+  const out = [];
+  const days = data.days, ohMonthly = (inp.overheads||[]).reduce((s,o)=>s+(+o.amount||0),0);
+  const drains = [['Product cost',P.cogs+P.rtoDamage],['Shipping',P.ship+P.rtoShip],['Ads',P.ads],['Overheads',P.overheads],['Payment fees',P.gateway+P.codFee]].sort((a,b)=>b[1]-a[1]);
+  if (P.netRev>0) {
+    out.push({icon:P.net<0?'🩸':'💰',tone:P.net<0?'var(--red)':'var(--green)',badge:'Bottom line',title:P.net<0?`Losing ${inr(Math.abs(P.net))} this period`:`Earning ${inr(P.net/days)} a day`,detail:`${P.margin.toFixed(1)}% net margin. ${P.net<0?'Cut the biggest drain below or lift AOV.':'Every 100 orders adds about '+inr(P.perOrder*100)+'.'}`});
+    out.push({icon:'🕳️',tone:'var(--orange)',badge:'Biggest drain',title:`${drains[0][0]} takes ${(drains[0][1]/P.netRev*100).toFixed(0)}% of revenue`,detail:`${inr(drains[0][1])} out of ${inr(P.netRev)} net revenue. Next: ${drains[1][0]} at ${(drains[1][1]/P.netRev*100).toFixed(0)}%.`});
+  }
+  const perRto = (+inp.ship_fwd||0)+(+inp.ship_rto||0)+(+inp.packaging||0)+avgCost*(+inp.rto_damage_pct||0)/100;
+  if (P.rtoN>0) {
+    const cut5 = P.dispN*0.05*perRto;
+    out.push({icon:'↩️',tone:'var(--red)',badge:'RTO leak',title:`Every RTO costs you about ${inrFull(perRto)}`,detail:`${Math.round(P.rtoN).toLocaleString()} returns burned ${inr(P.rtoN*perRto)}. Cutting RTO by 5 points would save roughly ${inr(cut5)}.`});
+  }
+  const pre = pay.find(x=>x.key==='prepaid'), cod = pay.find(x=>x.key==='cod');
+  if (pre && cod && pre.realN>0 && cod.realN>0) {
+    const better = pre.perOrder>cod.perOrder;
+    out.push({icon:'⚖️',tone:'var(--indigo)',badge:'Prepaid vs COD',title:`${better?'Prepaid':'COD'} earns ${inrFull(Math.abs(pre.perOrder-cod.perOrder))} more per order`,detail:`Prepaid ${inrFull(pre.perOrder)} · COD ${inrFull(cod.perOrder)} per order. COD returns ${cod.rtoRate.toFixed(0)}% vs ${pre.rtoRate.toFixed(0)}% prepaid. ${better?'A small prepaid discount can pay for itself.':'COD carries a higher order value, so it still wins — push prepaid only where it lifts conversion.'}`});
+  }
+  if (P.ads>0 && P.roas) {
+    const ok = P.beRoas && P.roas>=P.beRoas;
+    out.push({icon:'🎯',tone:ok?'var(--green)':'var(--red)',badge:'Ads',title:ok?`ROAS ${P.roas.toFixed(2)}x beats break-even ${P.beRoas.toFixed(2)}x`:`ROAS ${P.roas.toFixed(2)}x is below break-even ${P.beRoas?P.beRoas.toFixed(2)+'x':'(no contribution)'}`,detail:ok?`Each ₹1 of ads returns ₹${(P.contribution/P.ads).toFixed(2)} of contribution. There is room to scale while ROAS holds.`:`You are paying more for orders than they earn. Pause campaigns under ${P.beRoas?P.beRoas.toFixed(1)+'x':'break-even'} or lower your costs.`});
+  }
+  const top = products.slice(0,5).map(p=>{ const price=p.units?p.revenue/p.units:0; const net=price/(1+(+inp.gst_pct||0)/100); const c=(inp.product_costs?.[p.title]!==undefined&&inp.product_costs?.[p.title]!==''?+inp.product_costs[p.title]:(+inp.default_cost>0?+inp.default_cost:avgCost)); return {...p,price,mg:net?(net-c)/net*100:0,c}; });
+  if (top[0]) out.push({icon:'🔥',tone:'var(--purple)',badge:'Top seller',title:top[0].title,detail:`${top[0].units.toLocaleString()} units, ${inr(top[0].revenue)} revenue, ~${top[0].mg.toFixed(0)}% gross margin${(+inp.default_cost>0||inp.product_costs?.[top[0].title]!==undefined)?'':' (set its cost for a real number)'}.`});
+  const weak = top.find(p=>p.mg<35 && p.c>0);
+  if (weak) out.push({icon:'🪫',tone:'var(--yellow)',badge:'Margin watch',title:`${weak.title} sells well but earns ~${weak.mg.toFixed(0)}%`,detail:`A ₹${Math.round(weak.price*0.05)} price rise or a ₹${Math.round(weak.c*0.08)} cost cut lifts its margin by about 4 points across ${weak.units.toLocaleString()} units.`});
+  const cpo = P.realisedN ? (P.contribution-P.ads)/P.realisedN : 0;
+  if (ohMonthly>0 && cpo>0) {
+    const needed = ohMonthly/30.44/cpo, cur = P.total/days;
+    out.push({icon:'📅',tone:cur>=needed?'var(--green)':'var(--red)',badge:'Break-even',title:`You need ${needed.toFixed(1)} orders/day to cover overheads`,detail:`Currently ${cur.toFixed(1)}/day at ${inrFull(cpo)} contribution per order after ads.`});
+  }
+  const stuck = P.inf.v+P.pen.v;
+  if (stuck>0) out.push({icon:'⏳',tone:'var(--cyan)',badge:'Cash',title:`${inr(stuck)} still in flight`,detail:`${inr(P.inf.v)} is shipped but undelivered and ${inr(P.pen.v)} is waiting to ship. Clearing NDRs and stuck pickups releases it faster.`});
+  if (months.length>=2) { const c=months[months.length-1].p, p=months[months.length-2].p; if (p.net) out.push({icon:c.net>=p.net?'📈':'📉',tone:c.net>=p.net?'var(--green)':'var(--red)',badge:'Trend',title:`This month ${c.net>=p.net?'is ahead of':'is behind'} last month`,detail:`${inr(c.net)} so far vs ${inr(p.net)} last month (${months[months.length-2].label}).`}); }
+  if (doneN<6) out.push({icon:'🧩',tone:'var(--yellow)',badge:'Accuracy',title:`${6-doneN} cost inputs still empty`,detail:'Until shipping, packaging, COD fee, product cost and overheads are filled, profit is overstated.'});
+  return out;
+}
+
 function PnL({ active=true }) {
   const now = new Date();
   const [from,setFrom] = useState(()=>`${now.getFullYear()}-${pad2(now.getMonth()+1)}-01`);
@@ -3720,6 +3784,11 @@ function PnL({ active=true }) {
     return out;
   },[data,inp,avgCost]);
 
+  const pay = useMemo(()=> (P&&data&&inp) ? payBreakdown(data.matrix, inp, P, avgCost) : [], [P,data,inp,avgCost]);
+  const [pimgs,setPimgs] = useState({});
+  const topIds = products.slice(0,8).map(p=>p.pid).filter(Boolean).join(',');
+  useEffect(()=>{ if(topIds) apiFetch(`/admin/product-images?ids=${topIds}`).then(setPimgs).catch(()=>{}); },[topIds]);
+
   if(!inp) return <div className="skel" style={{height:400}}/>;
 
   const filled = [
@@ -3732,6 +3801,8 @@ function PnL({ active=true }) {
   ];
   const doneN = filled.filter(x=>x[1]).length;
   const verdict = !P ? '' : doneN<6 ? ['Provisional · costs incomplete','var(--yellow)'] : P.net<0 ? ['Loss-making','var(--red)'] : P.margin<8 ? ['Thin margin','var(--yellow)'] : P.margin<18 ? ['Healthy','var(--green)'] : ['Excellent','var(--green)'];
+
+  const tips = P ? pnlInsights(P,{data,inp,pay,products,avgCost,months,doneN}) : [];
 
   const saveSnap = async () => {
     const label = prompt('Name this snapshot', `${from} → ${to}`); if(!label) return;
@@ -3785,9 +3856,50 @@ function PnL({ active=true }) {
           </div>
         )}
 
+        {tips.length>0 && (
+          <div className="panel" style={{marginBottom:14}}>
+            <div className="panel-h"><div><div className="panel-t">Founder brief</div><div className="panel-m">What the numbers are telling you · auto-generated from this period</div></div><span className="tag" style={{'--c':'var(--indigo)'}}>{tips.length} insights</span></div>
+            <div className="brain">
+              {tips.map((i,k)=>(<div key={k} className="bcard" style={{'--c':i.tone}}><div className="bcard-b"><span style={{fontSize:14}}>{i.icon}</span>{i.badge}</div><div className="bcard-t">{i.title}</div><div className="bcard-d">{i.detail}</div></div>))}
+            </div>
+          </div>
+        )}
+
         <div className="panel" style={{marginBottom:14}}>
           <div className="panel-h"><div><div className="panel-t">Where the money goes</div><div className="panel-m">From booked sales to net profit</div></div><span className="tag" style={{'--c':'var(--indigo)'}}>Waterfall</span></div>
           <Waterfall p={P}/>
+        </div>
+
+        <div className="grid g2">
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Every ₹100 of net revenue</div><div className="panel-m">Where each rupee ends up</div></div></div>
+            {(()=>{ const R=P.netRev||1; const parts=[['Product cost',P.cogs+P.rtoDamage,'#f76b15'],['Shipping',P.ship+P.rtoShip,'#0891b2'],['Fees & packing',P.gateway+P.codFee+P.packaging,'#7c5cfc'],['Ads',P.ads,'#5b5bf0'],['Overheads',P.overheads,'#d98e04'],[P.net>=0?'Profit':'Loss',Math.abs(P.net),P.net>=0?'#12a150':'#e5484d']]; const tot=parts.reduce((s,x)=>s+x[1],0)||1; return (<>
+              <div style={{display:'flex',height:26,borderRadius:10,overflow:'hidden',gap:2}}>{parts.map(([l,v,c])=>v>0&&<div key={l} title={`${l}: ${inr(v)}`} style={{flex:v/tot,background:c,minWidth:3}}/>)}</div>
+              <div style={{marginTop:14}}>{parts.map(([l,v,c])=>(<div key={l} className="split"><span style={{minWidth:104,display:'flex',alignItems:'center',gap:8}}><i style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span><span className="fr-b" style={{flex:1}}><i style={{width:`${Math.min(100,v/R*100)}%`,background:c}}/></span><b style={{minWidth:52,textAlign:'right'}}>₹{(v/R*100).toFixed(1)}</b><span className="fr-p" style={{minWidth:64}}>{inr(v)}</span></div>))}</div>
+            </>); })()}
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Unit economics</div><div className="panel-m">One average realised order, start to finish</div></div></div>
+            {(()=>{ const N=P.realisedN||1; const aov=P.realisedV/N; const rows=[['Average order (incl. GST)',aov,'#5b5bf0',1],['GST',-P.gstAmt/N,'#94a3b8'],['Product cost',-(P.cogs+P.rtoDamage)/N,'#f76b15'],['Shipping (incl. RTO)',-(P.ship+P.rtoShip)/N,'#0891b2'],['Fees & packaging',-(P.gateway+P.codFee+P.packaging)/N,'#7c5cfc'],['Ads (CAC)',-P.ads/N,'#5b5bf0'],['Overheads',-P.overheads/N,'#d98e04'],['Profit per order',P.net/N,P.net>=0?'#12a150':'#e5484d',1]]; const mx=Math.max(...rows.map(r=>Math.abs(r[1])),1); return rows.map(([l,v,c,strong])=>(
+              <div key={l} className="split" style={{fontWeight:strong?700:400}}><span style={{minWidth:150}}>{l}</span><span className="fr-b" style={{flex:1}}><i style={{width:`${Math.abs(v)/mx*100}%`,background:c}}/></span><b style={{minWidth:70,textAlign:'right',color:strong&&v<0?'var(--red)':undefined}}>{v<0&&!strong?'−':''}{inrFull(Math.abs(v)*(strong&&v<0?-1:1))}</b></div>)); })()}
+          </div>
+        </div>
+
+        <div className="grid g2">
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Cash position</div><div className="panel-m">Booked sales by where the money is right now</div></div></div>
+            {(()=>{ const segs=[['Delivered · collected',P.del.v,'#12a150'],['Shipped · in flight',P.inf.v,'#0891b2'],['Waiting to ship',P.pen.v,'#d98e04'],['RTO · lost',P.rto.v,'#e5484d'],['Cancelled',P.can.v,'#94a3b8']]; const tot=segs.reduce((s,x)=>s+x[1],0)||1; return (<>
+              <div style={{display:'flex',height:26,borderRadius:10,overflow:'hidden',gap:2,marginBottom:14}}>{segs.map(([l,v,c])=>v>0&&<div key={l} style={{flex:v/tot,background:c}} title={`${l}: ${inr(v)}`}/>)}</div>
+              {segs.map(([l,v,c])=>(<div key={l} className="split"><span style={{minWidth:150,display:'flex',alignItems:'center',gap:8}}><i style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span><b style={{flex:1}}>{inr(v)}</b><span className="fr-p">{(v/tot*100).toFixed(0)}%</span></div>))}
+            </>); })()}
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Prepaid vs COD vs PP COD</div><div className="panel-m">Which payment type actually makes money</div></div></div>
+            <div style={{overflowX:'auto'}}><table className="pl-tbl"><thead><tr><th>Type</th><th>Orders</th><th>RTO %</th><th>AOV</th><th>Profit / order</th></tr></thead><tbody>
+              {pay.map(x=>(<tr key={x.key}><td style={{fontWeight:600}}>{x.icon} {x.label}</td><td>{x.total.toLocaleString()}</td><td style={{color:x.rtoRate>25?'var(--red)':x.rtoRate>15?'var(--yellow)':'var(--green)',fontWeight:700}}>{x.rtoRate.toFixed(1)}%</td><td>{inrFull(x.aov)}</td><td style={{fontWeight:700,color:x.perOrder<0?'var(--red)':'var(--green)'}}>{inrFull(x.perOrder)}</td></tr>))}
+            </tbody></table></div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:10,lineHeight:1.5}}>Profit per order includes product cost, shipping, fees, packaging and an even share of ad spend.</div>
+          </div>
         </div>
 
         <div className="pl-cols">
@@ -3854,6 +3966,20 @@ function PnL({ active=true }) {
               {(inp.overheads||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)'}}>No overheads yet. Add your fixed monthly costs so profit is real.</div>}
               {(inp.overheads||[]).length>0 && <div className="od-row" style={{borderTop:'1px solid var(--border)',marginTop:6,paddingTop:8}}><span>Total / month</span><b>{inrFull((inp.overheads||[]).reduce((a,o)=>a+(+o.amount||0),0))}</b></div>}
             </div>
+          </div>
+        </div>
+
+        <div className="panel" style={{marginBottom:14}}>
+          <div className="panel-h"><div><div className="panel-t">Top sellers</div><div className="panel-m">Best products by units · with estimated gross profit</div></div><span className="tag" style={{'--c':'var(--purple)'}}>Trending</span></div>
+          <div className="prods">
+            {products.slice(0,8).map((p,i)=>{ const price=p.units?p.revenue/p.units:0; const g=1+(+inp.gst_pct||0)/100; const c=explicitCost(p.title) ?? estCost; const mg=price?((price/g)-c)/(price/g)*100:0; const gp=((price/g)-c)*p.units; return (
+              <div key={p.title} className="prod">
+                <div className="pimg">{pimgs[p.pid]?<img src={pimgs[p.pid]} alt="" loading="lazy"/>:<span>{p.title.slice(0,1)}</span>}</div>
+                <div className="rank">{String(i+1).padStart(2,'0')}</div>
+                <div className="prod-t">{p.title}</div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)',marginBottom:4}}><span><b style={{color:'var(--text)'}}>{p.units}</b> sold</span><span>{inr(p.revenue)}</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11.5,fontWeight:700}}><span style={{color:mg<25?'var(--red)':mg<45?'var(--yellow)':'var(--green)'}}>{c?mg.toFixed(0)+'% margin':'set cost'}</span><span>{c?inr(gp):''}</span></div>
+              </div>); })}
           </div>
         </div>
 
