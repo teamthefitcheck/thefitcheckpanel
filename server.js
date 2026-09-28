@@ -751,19 +751,21 @@ async function isGlobalEmailEnabled() {
 }
 
 async function sendEmail({ to, subject, html, replyTo }) {
-  if (!(await isGlobalEmailEnabled())) { console.log(`[sendEmail] skipped (emails globally off) — ${subject}`); return; }
+  if (!(await isGlobalEmailEnabled())) { console.log(`[sendEmail] skipped (emails globally off) — ${subject}`); return { skipped: true, reason: 'Emails are switched off — turn on Emails → Stage Email Toggles → global switch.' }; }
   const cfg = await getSmtpConfig();
   if (!cfg) throw new Error('Email not configured. Go to Settings → Email.');
   const transporter = getSmtpTransporter(cfg);
-  const mail = { from: `"${BRAND_NAME}" <${cfg.from || cfg.user}>`, to, subject, html, replyTo: replyTo || cfg.from || cfg.user };
+  // Plain-text alternative: HTML-only mail is far more likely to be filtered as spam
+  const text = String(html || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<br\s*\/?>|<\/(p|div|tr|h[1-6]|li)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
+  const mail = { from: `"${BRAND_NAME}" <${cfg.from || cfg.user}>`, to, subject, html, text, replyTo: replyTo || cfg.from || cfg.user };
 
   const MAX_ATTEMPTS = 4;
   let lastErr;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      await transporter.sendMail(mail);
-      await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date(), attempts: attempt });
-      return;
+      const info = await transporter.sendMail(mail);
+      await mdb.collection('email_log').insertOne({ to, subject, sent_at: new Date(), attempts: attempt, message_id: info.messageId, accepted: info.accepted, rejected: info.rejected, smtp_response: String(info.response || '').slice(0, 200) });
+      return { ok: true, messageId: info.messageId, accepted: info.accepted, rejected: info.rejected, response: info.response };
     } catch (e) {
       lastErr = e;
       console.warn(`[sendEmail] attempt ${attempt}/${MAX_ATTEMPTS} failed for ${to} (${subject}): ${e.message}`);
@@ -1208,8 +1210,10 @@ app.post('/admin/email/test', adminAuth, async (req, res) => {
     else if (template === 'ndr')      { html = templateNDR({ order, message: 'CONSIGNEE REFUSED TO ACCEPT' }); subject = `[TEST] Delivery attempt failed for ${order.name}`; }
     else if (template === 'ndr_admin'){ html = templateNDRAdmin({ order: { ...order, email: 'test@example.com' }, message: 'CONSIGNEE REFUSED TO ACCEPT', city: 'Pehowa, Kurukshetra, Haryana' }); subject = `[TEST] Order ${order.name} flagged NDR`; }
     else                              { html = templateDelivered({ order }); subject = `[TEST] ${BRAND_NAME} Email Preview`; }
-    await sendEmail({ to, subject, html });
-    res.json({ ok: true });
+    const r = await sendEmail({ to, subject, html });
+    if (r?.skipped) return res.status(400).json({ error: r.reason });
+    if (r?.rejected?.length) return res.status(502).json({ error: `Mail server rejected: ${r.rejected.join(', ')}` });
+    res.json({ ok: true, messageId: r?.messageId, accepted: r?.accepted, response: r?.response });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

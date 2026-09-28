@@ -2207,7 +2207,7 @@ function Emails() {
   const sendTest = async () => {
     if(!testTo) return;
     setTesting(true); setMsg(null);
-    try { await apiFetch('/admin/email/test',{method:'POST',body:JSON.stringify({to:testTo,template:testTemplate})}); setMsg({type:'success',text:`Test email sent to ${testTo}`}); } catch(e){setMsg({type:'error',text:e.message});}
+    try { const r = await apiFetch('/admin/email/test',{method:'POST',body:JSON.stringify({to:testTo,template:testTemplate})}); setMsg({type:'success',text:`Accepted by the mail server for ${testTo}${r.response?` (${String(r.response).slice(0,40)})`:''}. If it does not show up, check Spam and Promotions.`}); } catch(e){setMsg({type:'error',text:e.message});}
     setTesting(false);
   };
 
