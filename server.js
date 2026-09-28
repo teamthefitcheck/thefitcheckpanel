@@ -2468,8 +2468,8 @@ app.post('/track/verify-return-code', async (req, res) => {
 });
 
 // ─── ShipSagar Tracking ─────────────────────────────────────────────────────
-// Only orders placed on/after this date are pushed to or tracked via ShipSagar (unresolved shipments before it stay untouched).
-const SHIPSAGAR_START_DATE = new Date('2026-08-01T00:00:00+05:30');
+// Only orders placed on/after this date are pushed to or tracked via ShipSagar.
+const SHIPSAGAR_START_DATE = new Date('2026-09-01T00:00:00+05:30');
 const shipsagarEligible = (createdAt) => !!createdAt && new Date(createdAt) >= SHIPSAGAR_START_DATE;
 // One tracking API across couriers — pushes AWBs on fulfillment, polls status
 // on a cron, and reflects status as a Shopify order tag (tag → stage mapping
