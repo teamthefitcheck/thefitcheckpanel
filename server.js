@@ -288,6 +288,7 @@ function auditLog(actor, action, target, meta = {}) {
 }
 
 // ─── Admin Auth ──────────────────────────────────────────────────────────────
+const ADMIN_SESSION_MS = 14 * 24 * 3600 * 1000; // sliding: stays signed in while used at least once every 14 days
 async function adminAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -297,7 +298,7 @@ async function adminAuth(req, res, next) {
     await mdb.collection('admin_sessions').deleteOne({ token });
     return res.status(401).json({ error: 'Session expired' });
   }
-  await mdb.collection('admin_sessions').updateOne({ token }, { $set: { expiresAt: Date.now() + 24 * 3600 * 1000 } });
+  await mdb.collection('admin_sessions').updateOne({ token }, { $set: { expiresAt: Date.now() + ADMIN_SESSION_MS } });
   next();
 }
 
@@ -305,7 +306,7 @@ app.post('/admin/login', async (req, res) => {
   const { password } = req.body || {};
   if (password !== ADMIN_PASS) return res.status(401).json({ error: 'Invalid password' });
   const token = crypto.randomBytes(32).toString('hex');
-  await mdb.collection('admin_sessions').insertOne({ token, expiresAt: Date.now() + 24 * 3600 * 1000, created_at: new Date() });
+  await mdb.collection('admin_sessions').insertOne({ token, expiresAt: Date.now() + ADMIN_SESSION_MS, created_at: new Date() });
   res.json({ token, brand: BRAND_NAME });
 });
 
@@ -325,7 +326,7 @@ async function staffAuth(req, res, next) {
     await mdb.collection('staff_sessions').deleteOne({ token });
     return res.status(401).json({ error: 'Session expired' });
   }
-  await mdb.collection('staff_sessions').updateOne({ token }, { $set: { expiresAt: Date.now() + 24 * 3600 * 1000 } });
+  await mdb.collection('staff_sessions').updateOne({ token }, { $set: { expiresAt: Date.now() + ADMIN_SESSION_MS } });
   req.staffUsername = s.username;
   next();
 }
@@ -339,7 +340,7 @@ app.post('/staff/login', async (req, res) => {
     const hash = crypto.createHash('sha256').update(password).digest('hex');
     if (hash !== profile.password_hash) return res.status(401).json({ error: 'Invalid credentials' });
     const token = crypto.randomBytes(32).toString('hex');
-    await mdb.collection('staff_sessions').updateOne({ username }, { $set: { token, username, expiresAt: Date.now() + 24 * 3600 * 1000 } }, { upsert: true });
+    await mdb.collection('staff_sessions').updateOne({ username }, { $set: { token, username, expiresAt: Date.now() + ADMIN_SESSION_MS } }, { upsert: true });
     res.json({ token, username, name: profile.name, brand: BRAND_NAME });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

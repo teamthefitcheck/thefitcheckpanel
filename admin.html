@@ -444,6 +444,7 @@ async function apiFetch(url, opts = {}) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}`, ...(opts.headers||{}) },
   });
   const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && !String(url).startsWith('/admin/login')) { clearToken(); window.dispatchEvent(new Event('fc-unauth')); }
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
   return d;
 }
@@ -4042,6 +4043,13 @@ function App() {
   const [iconPreset,setIconPresetState] = useState(getStoredIcons);
 
   useEffect(() => { applyTheme(theme); }, [theme]);
+  useEffect(() => {
+    const out = () => setAuthed(false);
+    const wake = () => { if (document.visibilityState === 'visible' && token()) apiFetch('/admin/global-email-enabled').catch(()=>{}); };
+    window.addEventListener('fc-unauth', out);
+    document.addEventListener('visibilitychange', wake);
+    return () => { window.removeEventListener('fc-unauth', out); document.removeEventListener('visibilitychange', wake); };
+  }, []);
   useEffect(() => { setVisited(v => v[tab] ? v : { ...v, [tab]: true }); }, [tab]);
 
   const setTheme = (t) => { setThemeState(t); applyTheme(t); };
