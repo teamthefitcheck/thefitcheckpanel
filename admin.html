@@ -343,6 +343,16 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .pl-m b{font-family:'Sora';font-size:13px}.pl-m span{font-size:11px;font-weight:600}.pl-m small{font-size:10px;color:var(--text-dim)}
 @media(max-width:1100px){.pl-cols{grid-template-columns:1fr}.pl-side{position:static}.pl-stats{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.pl-big{font-size:38px}.pl-line{grid-template-columns:1fr auto 96px}.pl-p{display:none}.pl-months{grid-template-columns:repeat(3,1fr)}}
+
+.ss-strip{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.ss-st{flex:1 1 240px;display:flex;align-items:center;gap:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;box-shadow:var(--shadow)}
+.ss-st b{display:block;font-size:13px}.ss-st small{display:block;font-size:11px;color:var(--text-muted);margin-top:2px}
+.ss-run{display:flex;align-items:center;gap:14px;padding:14px 18px;cursor:pointer}.ss-run:hover{background:var(--overlay-1)}
+.ss-log{background:var(--bg-card2);border-radius:10px;padding:12px 14px;max-height:260px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.7;color:var(--text-muted);white-space:pre-wrap}
+.ss-tl{display:flex;flex-direction:column;max-height:560px;overflow-y:auto}
+.ss-tl-i{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.ss-tl-i>i{width:9px;height:9px;border-radius:50%;margin-top:5px;flex-shrink:0}
+@media(max-width:900px){.ss-strip .ss-st{flex:1 1 100%}}
 /* order drawer */
 .od-overlay{position:fixed;inset:0;z-index:1000;background:rgba(12,12,16,.42);backdrop-filter:blur(3px);display:flex;justify-content:flex-end;animation:odfade .2s both}
 @keyframes odfade{from{opacity:0}to{opacity:1}}
@@ -631,9 +641,9 @@ function Login({ onLogin }) {
 const NAV_GROUPS = [
   ['Operations', [['dashboard','Dashboard'],['orders','Orders'],['returns','Returns']]],
   ['Growth',     [['pnl','P&L'],['finance','Finance Lab'],['emails','Emails']]],
-  ['System',     [['shipping','Shipping'],['synclogs','Sync Logs'],['settings','Settings']]],
+  ['System',     [['shipping','Shipping'],['synclogs','ShipSagar Sync'],['settings','Settings']]],
 ];
-const PAGE_TITLES = {dashboard:'Command Center',orders:'Orders',returns:'Returns & Exchange',emails:'Email Studio',finance:'Finance Lab',pnl:'Profit & Loss',shipping:'Shipping',synclogs:'Sync Logs',settings:'Settings'};
+const PAGE_TITLES = {dashboard:'Command Center',orders:'Orders',returns:'Returns & Exchange',emails:'Email Studio',finance:'Finance Lab',pnl:'Profit & Loss',shipping:'Shipping',synclogs:'ShipSagar Sync',settings:'Settings'};
 
 function Sidebar({ tab, setTab, onLogout, iconPreset }) {
   const icons = iconPreset === 'emoji' ? SIDEBAR_ICONS_EMOJI : SIDEBAR_ICONS_MINIMAL;
@@ -3477,89 +3487,265 @@ function Finance() {
 }
 
 function SyncLogs() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(null);
-  const [syncing, setSyncing] = useState(false);
+  const [tab,setTab] = useState('runs');
+  const [ov,setOv] = useState(null);
+  const [starting,setStarting] = useState(false);
+  const [toast,setToast] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const loadOv = useCallback(async()=>{ try { setOv(await apiFetch('/admin/shipsagar/overview')); } catch(e){ console.error(e); } },[]);
+  useEffect(()=>{ loadOv(); const t=setInterval(loadOv,20000); return ()=>clearInterval(t); },[loadOv]);
+  const [tick,setTick] = useState(0);
+  const refreshAll = () => { loadOv(); setTick(x=>x+1); };
+
+  const runNow = async () => {
+    if(!confirm(`Check live tracking for all ${ov?.tracked?.toLocaleString()||''} shipments now?\n\nThis only looks up current courier status and updates order stages. It does NOT register or push any shipment to ShipSagar.`)) return;
+    setStarting(true); setToast(null);
     try {
-      const d = await apiFetch('/admin/sync-tracking/logs');
-      setLogs(Array.isArray(d) ? d : []);
-    } catch(e) { console.error('sync logs fetch error:', e); }
-    finally { setLoading(false); }
+      await apiFetch('/admin/shipsagar/run-now',{method:'POST'});
+      setToast({type:'success',text:'Sync started — this takes about 6 minutes. The page will update on its own.'});
+      const poll = setInterval(async()=>{ const d = await apiFetch('/admin/shipsagar/overview').catch(()=>null); if(d){ setOv(d); if(!d.running){ clearInterval(poll); setTick(x=>x+1); setToast({type:'success',text:'Sync finished.'}); } } },5000);
+    } catch(e){ setToast({type:'error',text:e.message}); }
+    setStarting(false);
   };
 
-  const triggerSync = async () => {
-    setSyncing(true);
-    try {
-      await apiFetch('/admin/sync-tracking', { method: 'POST' });
-      // Poll every 3s for up to 60s until a new log appears
-      const before = logs[0]?.started_at || null;
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        try {
-          const d = await apiFetch('/admin/sync-tracking/logs');
-          if (d.length > 0 && d[0].started_at !== before) {
-            setLogs(d);
-            setSyncing(false);
-            clearInterval(poll);
-          }
-        } catch {}
-        if (attempts >= 20) { setSyncing(false); clearInterval(poll); load(); }
-      }, 3000);
-    } catch(e) { alert('Error: ' + e.message); setSyncing(false); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const stageColor = s => s==='delivered'?'#22c55e':s==='transit'||s==='ofd'?'#f59e0b':s==='rto'?'#ef4444':s==='partial_collected'?'#f59e0b':'#888';
+  const last = ov?.last_run;
+  const mins = last ? Math.round((new Date(last.finished_at)-new Date(last.started_at))/6000)/10 : 0;
+  const nextIn = ov?.next_run_est ? Math.round((new Date(ov.next_run_est)-Date.now())/60000) : null;
+  const stageOrder = ['ready','pickup','transit','ofd','ndr','delivered','rto'];
+  const stageColor = {ready:'var(--blue)',pickup:'var(--purple)',transit:'var(--cyan)',ofd:'var(--indigo)',ndr:'var(--orange)',delivered:'var(--green)',rto:'var(--red)'};
+  const stageTotal = ov ? Object.values(ov.by_stage||{}).reduce((a,b)=>a+b,0)||1 : 1;
 
   return (
     <div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+      <div className="d-head">
         <div>
-          <h2 style={{fontSize:20,fontWeight:800}}>Tracking Sync Logs</h2>
-          <p style={{color:'var(--text-muted)',fontSize:13,marginTop:2}}>Auto-syncs every 2 hours from eShipz</p>
+          <div className="d-hello">ShipSagar <span>Sync</span></div>
+          <div className="d-sub">Courier scans → order stages · checks every {ov?.interval_min||30} min · all times IST</div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button className="btn-ghost btn-sm" onClick={load} disabled={loading}>{loading?<span className="spin">↻</span>:'↻ Refresh'}</button>
-          <button className="btn-primary btn-sm" onClick={triggerSync} disabled={syncing}>{syncing?<span className="spin">↻</span>+' Running…':'▶ Run Sync Now'}</button>
+          <button className="btn-ghost" onClick={refreshAll}>↻ Refresh</button>
+          <button className="btn-primary" onClick={runNow} disabled={starting||!!ov?.running||!ov?.connected}>{ov?.running?<><span className="spin">↻</span> Syncing…</>:'▶ Run sync now'}</button>
         </div>
       </div>
 
-      {logs.length === 0 && !loading && (
-        <div className="card" style={{textAlign:'center',color:'var(--text-muted)',padding:40}}>No sync runs yet. Click "Run Sync Now" to start.</div>
+      {toast && <div className={`alert alert-${toast.type}`} style={{marginBottom:14}}>{toast.text}</div>}
+      {ov && !ov.connected && <div className="alert alert-error" style={{marginBottom:14}}>ShipSagar isn’t connected — add credentials in Settings → Shipping.</div>}
+
+      <div className="ss-strip">
+        <div className="ss-st"><span className="dot" style={{background:ov?.cron_enabled?'var(--green)':'var(--red)',animation:ov?.cron_enabled?undefined:'none'}}/><div><b>{ov?.cron_enabled?'Auto-sync ON':'Auto-sync OFF'}</b><small>{ov?.running?`running since ${new Date(ov.running.since).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}${ov.running.manual?' (manual)':''}`:nextIn!=null?(nextIn>0?`next run in ~${nextIn} min`:'due now'):'—'}</small></div></div>
+        <div className="ss-st"><div><b>{last?new Date(last.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ}):'—'}</b><small>last run · {mins||0} min · {last?.triggered_by||''}</small></div></div>
+        <div className="ss-st"><div><b>{last?.checked??'—'} checked · <span style={{color:'var(--green)'}}>{last?.updated??0} updated</span> · <span style={{color:last?.errors?'var(--red)':'var(--text-muted)'}}>{last?.errors??0} errors</span></b><small>latest run result</small></div></div>
+      </div>
+
+      {ov && (
+        <div className="kpis" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+          <div className="kpi" style={{'--c':'var(--indigo)'}}><div className="kpi-l"><span>Shipments tracked</span></div><div className="kpi-v" style={{color:'var(--indigo)'}}>{(ov.tracked||0).toLocaleString()}</div><div className="kpi-s">with scan history saved</div></div>
+          <div className="kpi" style={{'--c':'var(--green)'}}><div className="kpi-l"><span>Stage changes today</span></div><div className="kpi-v" style={{color:'var(--green)'}}>{(ov.changes_today||0).toLocaleString()}</div><div className="kpi-s">{(ov.changes_7d||0).toLocaleString()} in 7 days</div></div>
+          <div className="kpi" style={{'--c':ov.errors_24h?'var(--red)':'var(--cyan)'}}><div className="kpi-l"><span>Errors · 24h</span></div><div className="kpi-v" style={{color:ov.errors_24h?'var(--red)':'var(--cyan)'}}>{ov.errors_24h||0}</div><div className="kpi-s">across {ov.runs_24h||0} runs</div></div>
+          <div className="kpi" style={{'--c':'var(--purple)'}}><div className="kpi-l"><span>Distinct statuses</span></div><div className="kpi-v" style={{color:'var(--purple)'}}>{ov.catalog_size||0}</div><div className="kpi-s">courier texts seen</div></div>
+        </div>
+      )}
+      {ov && (
+        <div className="panel" style={{marginBottom:14,padding:'14px 18px'}}>
+          <div style={{display:'flex',height:10,borderRadius:8,overflow:'hidden',gap:2}}>
+            {stageOrder.map(k=>(ov.by_stage?.[k]||0)>0&&<div key={k} title={`${k}: ${ov.by_stage[k]}`} style={{flex:ov.by_stage[k],background:stageColor[k]}}/>)}
+          </div>
+          <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:10,fontSize:11.5,color:'var(--text-muted)'}}>
+            {stageOrder.map(k=><span key={k} style={{display:'flex',alignItems:'center',gap:6}}><i style={{width:8,height:8,borderRadius:3,background:stageColor[k],display:'inline-block'}}/>{k==='ofd'?'Out for delivery':k.charAt(0).toUpperCase()+k.slice(1)} <b style={{color:'var(--text)'}}>{ov.by_stage?.[k]||0}</b></span>)}
+          </div>
+        </div>
       )}
 
-      {logs.map((run, i) => (
-        <div key={i} className="card" style={{marginBottom:12,padding:0,overflow:'hidden'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',cursor:'pointer',borderBottom: expanded===i ? '1px solid var(--border)' : 'none'}}
-            onClick={()=>setExpanded(expanded===i?null:i)}>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <span style={{fontSize:18}}>{run.errors>0?'⚠️':run.updated>0?'🔄':'✅'}</span>
-              <div>
-                <div style={{fontWeight:700,fontSize:13}}>{new Date(run.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</div>
-                <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>
-                  {run.checked} checked · <span style={{color:'#22c55e',fontWeight:600}}>{run.updated} updated</span> · {run.skipped} skipped · {run.errors>0?<span style={{color:'#ef4444'}}>{run.errors} errors</span>:<span>0 errors</span>} · {((new Date(run.finished_at)-new Date(run.started_at))/1000).toFixed(1)}s
-                </div>
-              </div>
-            </div>
-            <span style={{color:'var(--text-muted)',fontSize:12}}>{expanded===i?'▲ Hide':'▼ Show'} logs</span>
-          </div>
+      <div className="chips" style={{marginBottom:14}}>
+        {[['runs','Sync runs'],['changes','Stage changes'],['lookup','Shipment lookup'],['statuses','Courier statuses']].map(([k,l])=><button key={k} className={`chip ${tab===k?'on':''}`} style={{padding:'7px 16px'}} onClick={()=>setTab(k)}>{l}</button>)}
+      </div>
 
-          {expanded===i && (
-            <div style={{padding:'12px 18px',background:'var(--bg-card2)',fontFamily:'monospace',fontSize:12,maxHeight:400,overflowY:'auto'}}>
-              {(run.lines||[]).map((line, j) => {
-                const color = line.startsWith('🔄')?'#f59e0b':line.startsWith('📨')?'#22c55e':line.startsWith('❌')?'#ef4444':line.startsWith('✓')?'var(--text-muted)':line.startsWith('━')?'var(--text)':'var(--text)';
-                return <div key={j} style={{color,padding:'2px 0',borderBottom:'1px solid var(--border)',lineHeight:1.6}}>{line}</div>;
-              })}
+      {tab==='runs' && <SsRuns tick={tick}/>}
+      {tab==='changes' && <SsChanges tick={tick}/>}
+      {tab==='lookup' && <SsLookup/>}
+      {tab==='statuses' && <SsStatuses tick={tick}/>}
+    </div>
+  );
+}
+
+function SsRuns({ tick }) {
+  const [runs,setRuns] = useState([]);
+  const [open,setOpen] = useState(null);
+  const [detail,setDetail] = useState({});
+  useEffect(()=>{ apiFetch('/admin/shipsagar/logs').then(d=>setRuns(Array.isArray(d)?d:[])).catch(()=>{}); },[tick]);
+  const toggle = async (id) => {
+    if(open===id){ setOpen(null); return; }
+    setOpen(id);
+    if(!detail[id]) { try { const d = await apiFetch(`/admin/shipsagar/logs/${id}`); setDetail(x=>({...x,[id]:d})); } catch{} }
+  };
+  const when = d => new Date(d).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:IST_TZ});
+  return (
+    <div className="panel" style={{padding:0}}>
+      {runs.length===0 && <div style={{padding:30,textAlign:'center',color:'var(--text-muted)'}}>No runs yet.</div>}
+      {runs.map(r=>{
+        const d = detail[r._id];
+        const dur = ((new Date(r.finished_at)-new Date(r.started_at))/60000).toFixed(1);
+        return (
+          <div key={r._id} style={{borderBottom:'1px solid var(--border)'}}>
+            <div className="ss-run" onClick={()=>toggle(r._id)}>
+              <span style={{fontSize:18}}>{r.errors>0?'⚠️':r.updated>0?'🔄':'✅'}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:600,fontSize:13}}>{when(r.started_at)} <span className="ptag" style={{'--c':r.triggered_by==='manual'?'var(--indigo)':'var(--text-muted)',marginLeft:6}}>{r.triggered_by||'cron'}</span></div>
+                <div style={{fontSize:11.5,color:'var(--text-muted)'}}>{r.checked} checked · <b style={{color:r.updated?'var(--green)':'inherit'}}>{r.updated} updated</b> · <span style={{color:r.errors?'var(--red)':'inherit'}}>{r.errors} errors</span> · {dur} min</div>
+              </div>
+              <span style={{fontSize:12,color:'var(--text-muted)'}}>{open===r._id?'▲ Hide':'▼ Details'}</span>
             </div>
-          )}
+            {open===r._id && (
+              <div style={{padding:'0 18px 16px'}}>
+                {!d && <div style={{padding:12,color:'var(--text-muted)',fontSize:12}}>Loading…</div>}
+                {d && (<>
+                  <div className="bx-sub" style={{marginTop:4}}>Stage changes in this run ({(d.stage_changes||[]).length})</div>
+                  {(d.stage_changes||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)',padding:'6px 0'}}>No stage changed in this run.</div>}
+                  {(d.stage_changes||[]).length>0 && (
+                    <div style={{overflowX:'auto'}}><table className="pl-tbl"><thead><tr><th>Order</th><th>AWB</th><th>Change</th><th>Courier message</th><th>Time</th></tr></thead><tbody>
+                      {d.stage_changes.map((c,i)=>(<tr key={i}><td style={{fontWeight:700,fontFamily:'monospace'}}>{c.order_name}</td><td style={{fontFamily:'monospace',fontSize:11}}>{c.awb}</td><td><span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{stageBadge(c.from_stage)}<span style={{color:'var(--text-dim)'}}>→</span>{stageBadge(c.to_stage)}</span></td><td style={{fontSize:12,color:'var(--text-muted)'}}>{c.courier_message}</td><td style={{fontSize:11,color:'var(--text-dim)'}}>{c.timestamp?new Date(c.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:IST_TZ}):''}</td></tr>))}
+                    </tbody></table></div>
+                  )}
+                  <div className="bx-sub" style={{marginTop:14}}>Run log ({(d.lines||[]).length} lines · unchanged shipments not listed)</div>
+                  <div className="ss-log">{(d.lines||[]).length?d.lines.map((l,i)=><div key={i}>{l}</div>):<div style={{color:'var(--text-dim)'}}>No notable lines.</div>}</div>
+                </>)}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SsChanges({ tick }) {
+  const [rows,setRows] = useState([]);
+  const [total,setTotal] = useState(0);
+  const [q,setQ] = useState('');
+  const [to,setTo] = useState('');
+  const [source,setSource] = useState('');
+  const [loading,setLoading] = useState(false);
+  const load = useCallback(async(reset)=>{
+    setLoading(true);
+    try {
+      const skip = reset?0:rows.length;
+      const p = new URLSearchParams({limit:'60',skip:String(skip)}); if(q)p.set('q',q); if(to)p.set('to',to); if(source)p.set('source',source);
+      const d = await apiFetch(`/admin/shipsagar/changes?${p}`);
+      setRows(prev=>reset?d.rows:[...prev,...d.rows]); setTotal(d.total);
+    } catch(e){} setLoading(false);
+  },[q,to,source,rows.length]);
+  useEffect(()=>{ const t=setTimeout(()=>load(true),250); return ()=>clearTimeout(t); },[q,to,source,tick]);
+  const srcLabel = s => s==='shipsagar_cron'?'auto sync':s==='manual_repair_mapping_v3'||s==='backfill_aug'||String(s).includes('repair')?'repair':s;
+  return (
+    <div className="panel" style={{padding:0}}>
+      <div style={{display:'flex',gap:8,padding:'14px 18px',flexWrap:'wrap',borderBottom:'1px solid var(--border)'}}>
+        <input placeholder="Search order # or AWB" value={q} onChange={e=>setQ(e.target.value)} style={{flex:'1 1 200px',minWidth:160}}/>
+        <select value={to} onChange={e=>setTo(e.target.value)} style={{width:'auto'}}><option value="">Any new stage</option>{['ready','pickup','transit','ofd','ndr','delivered','rto'].map(s=><option key={s} value={s}>→ {s}</option>)}</select>
+        <select value={source} onChange={e=>setSource(e.target.value)} style={{width:'auto'}}><option value="">All sources</option><option value="shipsagar_cron">Auto sync</option><option value="manual_repair_mapping_v3">Repairs</option></select>
+        <span style={{alignSelf:'center',fontSize:12,color:'var(--text-muted)'}}>{total.toLocaleString()} changes</span>
+      </div>
+      {rows.length===0 && !loading && <div style={{padding:30,textAlign:'center',color:'var(--text-muted)'}}>No stage changes logged yet.</div>}
+      <div style={{overflowX:'auto'}}>
+      {rows.length>0 && <table className="pl-tbl"><thead><tr><th>When (IST)</th><th>Order</th><th>Stage change</th><th>Courier status</th><th>Latest scan</th><th>Source</th></tr></thead><tbody>
+        {rows.map((r,i)=>(<tr key={i}>
+          <td style={{fontSize:11.5,color:'var(--text-muted)',whiteSpace:'nowrap'}}>{new Date(r.at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</td>
+          <td><div style={{fontWeight:700,fontFamily:'monospace'}}>{r.order_name}</div><div style={{fontSize:10.5,color:'var(--text-dim)',fontFamily:'monospace'}}>{r.awb} · {r.courier}</div></td>
+          <td><span style={{display:'inline-flex',gap:6,alignItems:'center',whiteSpace:'nowrap'}}>{stageBadge(r.from_stage)}<span style={{color:'var(--text-dim)'}}>→</span>{stageBadge(r.to_stage)}</span></td>
+          <td style={{fontSize:12,fontWeight:600}}>{r.courier_status||'—'}</td>
+          <td style={{fontSize:12,color:'var(--text-muted)',maxWidth:260}}>{r.description}{r.event_at && <div style={{fontSize:10.5,color:'var(--text-dim)'}}>scan {new Date(r.event_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</div>}</td>
+          <td><span className="ptag" style={{'--c':srcLabel(r.source)==='auto sync'?'var(--green)':'var(--yellow)'}}>{srcLabel(r.source)}</span></td>
+        </tr>))}
+      </tbody></table>}
+      </div>
+      {rows.length<total && <div style={{padding:14,textAlign:'center'}}><button className="btn-ghost btn-sm" onClick={()=>load(false)} disabled={loading}>{loading?'Loading…':`Load more (${(total-rows.length).toLocaleString()} left)`}</button></div>}
+    </div>
+  );
+}
+
+function SsLookup() {
+  const [q,setQ] = useState('');
+  const [res,setRes] = useState(null);
+  const [err,setErr] = useState('');
+  const [loading,setLoading] = useState(false);
+  const search = async (e) => {
+    e && e.preventDefault(); if(!q.trim()) return;
+    setLoading(true); setErr(''); setRes(null);
+    try { setRes(await apiFetch(`/admin/shipsagar/track?q=${encodeURIComponent(q.trim())}`)); } catch(ex){ setErr(ex.message); }
+    setLoading(false);
+  };
+  const t = res?.track, st = res?.stage;
+  return (
+    <div>
+      <form onSubmit={search} className="panel" style={{display:'flex',gap:10,marginBottom:14,padding:'14px 18px'}}>
+        <input autoFocus placeholder="Order number (e.g. 18368) or AWB" value={q} onChange={e=>setQ(e.target.value)}/>
+        <button className="btn-primary" type="submit" style={{flexShrink:0}} disabled={loading}>{loading?'Searching…':'Look up'}</button>
+      </form>
+      <div style={{fontSize:11.5,color:'var(--text-muted)',margin:'-6px 4px 14px'}}>Shows the saved scan history for the shipment and every stage change we logged. It reads stored data and does not call ShipSagar.</div>
+      {err && <div className="alert alert-error">{err}</div>}
+      {res && (
+        <div className="grid g2" style={{gridTemplateColumns:'1fr 1.3fr'}}>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">{res.order?.name||'Shipment'}</div><div className="panel-m">{res.order?`Placed ${fmt(res.order.created_at)} · ${fmtMoney(res.order.total_price)}`:''}</div></div>{st && stageBadge(st.stage)}</div>
+            {st ? (<>
+              <div className="od-row"><span>AWB</span><b style={{fontFamily:'monospace'}}>{st.awb||'—'}</b></div>
+              <div className="od-row"><span>Courier</span><b>{st.courier||'—'}</b></div>
+              <div className="od-row"><span>Registered at ShipSagar</span><b style={{color:st.pushed?'var(--green)':'var(--red)'}}>{st.pushed?'Yes':'No'}</b></div>
+              <div className="od-row"><span>Courier status</span><b>{t?.courier_status||'—'}</b></div>
+              <div className="od-row"><span>Latest scan</span><b style={{maxWidth:200,textAlign:'right'}}>{t?.latest_desc||'—'}</b></div>
+              <div className="od-row"><span>Mapped to stage</span><span>{t?.mapped_stage?stageBadge(t.mapped_stage):'—'}</span></div>
+              <div className="od-row"><span>Last checked</span><b>{t?.checked_at?new Date(t.checked_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ}):'never'}</b></div>
+              <div className="od-row"><span>Times checked</span><b>{t?.polls||0}</b></div>
+              {!t && <div className="alert alert-error" style={{marginTop:12}}>No tracking data saved for this AWB yet — ShipSagar may not have it or it hasn’t been checked.</div>}
+            </>) : <div style={{fontSize:12,color:'var(--text-muted)'}}>This order has no shipment stage record.</div>}
+            <div className="bx-sub" style={{marginTop:16}}>Stage changes ({(res.changes||[]).length})</div>
+            {(res.changes||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)'}}>None logged since logging began.</div>}
+            {(res.changes||[]).map((c,i)=>(<div key={i} className="row" style={{padding:'8px 0'}}>
+              <div style={{flex:1}}><span style={{display:'inline-flex',gap:6,alignItems:'center'}}>{stageBadge(c.from_stage)}<span style={{color:'var(--text-dim)'}}>→</span>{stageBadge(c.to_stage)}</span><div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>{c.courier_status?`${c.courier_status} · `:''}{c.description}</div></div>
+              <div style={{fontSize:10.5,color:'var(--text-dim)',textAlign:'right'}}>{new Date(c.at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</div>
+            </div>))}
+          </div>
+          <div className="panel">
+            <div className="panel-h"><div><div className="panel-t">Scan timeline</div><div className="panel-m">{(res.scans||[]).length} courier scans · newest first · stage = what that scan alone would map to</div></div></div>
+            {(res.scans||[]).length===0 && <div style={{fontSize:12,color:'var(--text-dim)'}}>No scans saved.</div>}
+            <div className="ss-tl">
+              {[...(res.scans||[])].reverse().map((s,i)=>(
+                <div key={i} className="ss-tl-i">
+                  <i style={{background:i===0?'var(--text)':'var(--border2)'}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:i===0?700:500}}>{s.desc}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)'}}>{s.date} {s.time} · {s.loc||'—'}</div>
+                  </div>
+                  {stageBadge(s.stage)}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      ))}
+      )}
+    </div>
+  );
+}
+
+function SsStatuses({ tick }) {
+  const [rows,setRows] = useState([]);
+  const [q,setQ] = useState('');
+  useEffect(()=>{ apiFetch('/admin/shipsagar/catalog').then(d=>setRows(Array.isArray(d)?d:[])).catch(()=>{}); },[tick]);
+  const f = rows.filter(r=>!q || `${r.courier_status} ${r.description}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="panel" style={{padding:0}}>
+      <div style={{padding:'14px 18px',display:'flex',gap:10,alignItems:'center',borderBottom:'1px solid var(--border)'}}>
+        <input placeholder="Search a courier status or scan text" value={q} onChange={e=>setQ(e.target.value)}/>
+        <span style={{fontSize:12,color:'var(--text-muted)',whiteSpace:'nowrap'}}>{f.length} of {rows.length}</span>
+      </div>
+      <div style={{padding:'10px 18px',fontSize:11.5,color:'var(--text-muted)',background:'var(--bg-card2)'}}>Every courier status + latest-scan text ShipSagar has returned, and the stage we map it to. If a row looks wrong, that mapping needs tuning.</div>
+      <div style={{overflowX:'auto'}}><table className="pl-tbl"><thead><tr><th>Courier status</th><th>Latest scan text</th><th>Maps to</th><th>Seen</th><th>Last seen (IST)</th><th>Example AWB</th></tr></thead><tbody>
+        {f.map((r,i)=>(<tr key={i}>
+          <td style={{fontWeight:600,fontSize:12}}>{r.courier_status||'—'}</td><td style={{fontSize:12,color:'var(--text-muted)',maxWidth:280}}>{r.description}</td>
+          <td>{stageBadge(r.mapped_stage)}</td><td>{(r.seen||0).toLocaleString()}</td>
+          <td style={{fontSize:11,color:'var(--text-dim)'}}>{r.last_seen?new Date(r.last_seen).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ}):''}</td>
+          <td style={{fontFamily:'monospace',fontSize:11}}>{r.sample_awb}</td>
+        </tr>))}
+      </tbody></table></div>
     </div>
   );
 }

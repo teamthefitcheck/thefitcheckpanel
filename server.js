@@ -2711,7 +2711,14 @@ async function applyShipsagarTag(shopify_id, tag, prevTag) {
   await shopifyREST(`/orders/${shopify_id}.json`, { method: 'PUT', body: JSON.stringify({ order: { id: shopify_id, tags: tags.join(', ') } }) });
 }
 
-async function runShipsagarSync({ orderIds, manual } = {}) {
+let _ssRunning = null; // { since, manual } while a sync is in progress
+async function runShipsagarSync(opts = {}) {
+  if (_ssRunning) return { skipped: true, reason: 'A ShipSagar sync is already running' };
+  _ssRunning = { since: new Date(), manual: !!opts.manual };
+  try { return await _runShipsagarSyncInner(opts); }
+  finally { _ssRunning = null; }
+}
+async function _runShipsagarSyncInner({ orderIds, manual } = {}) {
   const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
   if (!creds) return { skipped: true, reason: 'ShipSagar not connected' };
 
@@ -2888,6 +2895,85 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
 
   return { checked, updated, errors, stage_changes: stageChanges };
 }
+
+// ─── ShipSagar sync monitor (read-only views over the sync logs) ────────────
+app.get('/admin/shipsagar/overview', adminAuth, async (req, res) => {
+  try {
+    const cfg = await mdb.collection('settings').findOne({}, { projection: { shipsagar_cron_enabled: 1, shipsagar_auto_enabled: 1, _id: 0 } });
+    const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' }, { projection: { _id: 0, partner: 1 } });
+    const last = await mdb.collection('shipsagar_cron_log').find({}, { projection: { lines: 0, stage_changes: 0 } }).sort({ started_at: -1 }).limit(1).toArray();
+    const dayStart = new Date(istDayStartUtc(istDateStr(new Date())));
+    const weekStart = new Date(Date.now() - 7 * 86400000);
+    const [tracks, byStage, today, week, errs, catalog] = await Promise.all([
+      mdb.collection('shipsagar_tracks').countDocuments(),
+      mdb.collection('shipsagar_tracks').aggregate([{ $group: { _id: '$mapped_stage', n: { $sum: 1 } } }]).toArray(),
+      mdb.collection('stage_history').countDocuments({ at: { $gte: dayStart } }),
+      mdb.collection('stage_history').countDocuments({ at: { $gte: weekStart } }),
+      mdb.collection('shipsagar_cron_log').aggregate([{ $match: { started_at: { $gte: new Date(Date.now() - 86400000) } } }, { $group: { _id: null, errors: { $sum: '$errors' }, runs: { $sum: 1 } } }]).toArray(),
+      mdb.collection('shipsagar_status_catalog').countDocuments(),
+    ]);
+    res.json({
+      connected: !!creds, cron_enabled: cfg?.shipsagar_cron_enabled !== false, interval_min: 30,
+      running: _ssRunning ? { since: _ssRunning.since, manual: _ssRunning.manual } : null,
+      last_run: last[0] || null,
+      next_run_est: last[0] ? new Date(new Date(last[0].started_at).getTime() + 30 * 60000) : null,
+      tracked: tracks, by_stage: Object.fromEntries(byStage.map(x => [x._id || 'unknown', x.n])),
+      changes_today: today, changes_7d: week, errors_24h: errs[0]?.errors || 0, runs_24h: errs[0]?.runs || 0, catalog_size: catalog,
+      log_window_until: SS_LOG_UNTIL,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/admin/shipsagar/run-now', adminAuth, async (req, res) => {
+  if (_ssRunning) return res.status(409).json({ error: 'A sync is already running', running: _ssRunning });
+  const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+  if (!creds) return res.status(400).json({ error: 'ShipSagar not connected. Go to Settings → Shipping.' });
+  runShipsagarSync({ manual: true }).then(r => console.log('[shipsagar-sync] manual run done', r?.checked, r?.updated)).catch(e => console.error('[shipsagar-sync] manual run failed:', e.message));
+  res.json({ ok: true, message: 'Sync started' });
+});
+app.get('/admin/shipsagar/changes', adminAuth, async (req, res) => {
+  try {
+    const { q = '', to = '', source = '' } = req.query;
+    const limit = Math.min(200, parseInt(req.query.limit) || 60), skip = parseInt(req.query.skip) || 0;
+    const f = {};
+    if (to) f.to_stage = to;
+    if (source) f.source = source;
+    if (q) { const rx = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\#]/g, '\\$&'), 'i'); f.$or = [{ order_name: rx }, { awb: rx }]; }
+    const [rows, total] = await Promise.all([
+      mdb.collection('stage_history').find(f).sort({ at: -1 }).skip(skip).limit(limit).toArray(),
+      mdb.collection('stage_history').countDocuments(f),
+    ]);
+    res.json({ rows, total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/admin/shipsagar/track', adminAuth, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().replace(/^#/, '');
+    if (!q) return res.status(400).json({ error: 'Enter an order number or AWB' });
+    let order = null, rec = null, awb = null;
+    if (/^\d{9,}$/.test(q)) { awb = q; rec = await mdb.collection('order_stage').findOne({ awb }); if (rec) order = await mdb.collection('orders').findOne({ shopify_id: rec.shopify_id }, { projection: { name: 1, created_at: 1, financial_status: 1, total_price: 1, shopify_id: 1, _id: 0 } }); }
+    else { order = await mdb.collection('orders').findOne({ name: `#${q}` }, { projection: { name: 1, created_at: 1, financial_status: 1, total_price: 1, shopify_id: 1, _id: 0 } }); if (order) { rec = await mdb.collection('order_stage').findOne({ shopify_id: order.shopify_id }); awb = rec?.awb; } }
+    if (!order && !rec) return res.status(404).json({ error: 'No order or AWB found for that search' });
+    const track = awb ? await mdb.collection('shipsagar_tracks').findOne({ awb }, { projection: { _id: 0 } }) : null;
+    const changes = rec ? await mdb.collection('stage_history').find({ shopify_id: rec.shopify_id }).sort({ at: -1 }).limit(100).toArray() : [];
+    const scans = (track?.history || []).map(h => ({ ...h, stage: shipsagarStatusToStage(h.desc, '') }));
+    res.json({ order, stage: rec ? { stage: rec.stage, awb: rec.awb, courier: rec.courier, delivery_status: rec.delivery_status, pushed: !!rec.shipsagar_pushed, updated_at: rec.updated_at } : null, track: track ? { ...track, history: undefined } : null, scans, changes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/admin/shipsagar/tracks', adminAuth, async (req, res) => {
+  try {
+    const { stage = '' } = req.query;
+    const limit = Math.min(200, parseInt(req.query.limit) || 60), skip = parseInt(req.query.skip) || 0;
+    const f = stage ? { mapped_stage: stage } : {};
+    const [rows, total] = await Promise.all([
+      mdb.collection('shipsagar_tracks').find(f, { projection: { history: 0, _id: 0, shopify_ids: 0 } }).sort({ latest_event_at: -1 }).skip(skip).limit(limit).toArray(),
+      mdb.collection('shipsagar_tracks').countDocuments(f),
+    ]);
+    res.json({ rows, total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/admin/shipsagar/catalog', adminAuth, async (req, res) => {
+  res.json(await mdb.collection('shipsagar_status_catalog').find({}, { projection: { _id: 0 } }).sort({ seen: -1 }).limit(300).toArray());
+});
 
 app.post('/admin/shipsagar/sync', adminAuth, async (req, res) => {
   try { res.json(await runShipsagarSync({ orderIds: req.body?.orderIds, manual: true })); }
