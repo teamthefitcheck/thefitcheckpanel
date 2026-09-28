@@ -16,6 +16,14 @@ const CLIENT_ID   = process.env.SHOPIFY_CLIENT_ID   || '';
 const CLIENT_SEC  = process.env.SHOPIFY_CLIENT_SECRET || '';
 const SERVER_URL  = (process.env.SERVER_URL || `http://localhost:${PORT}`).trim().replace(/\/+$/, '');
 const BRAND_NAME  = process.env.BRAND_NAME || 'Fit Check';
+// The whole panel runs on India Standard Time (Asia/Kolkata, UTC+5:30). Stored order timestamps are canonical UTC ('...Z').
+const IST_TZ = 'Asia/Kolkata';
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+const toUtcZ = (v) => { const d = new Date(v); return isNaN(d) ? v : d.toISOString().replace(/\.\d{3}Z$/, 'Z'); };
+const istDayStartUtc = (day) => toUtcZ(new Date(`${day}T00:00:00+05:30`));
+const istDayEndUtc = (day) => toUtcZ(new Date(`${day}T23:59:59+05:30`));
+const istDateStr = (v) => new Date(new Date(v).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+const istMonthStr = (v) => istDateStr(v).slice(0, 7);
 const MONGO_URI   = process.env.MONGO_URI  || '';
 const ADMIN_PASS  = process.env.ADMIN_PASSWORD || 'admin123';
 
@@ -210,7 +218,7 @@ function normaliseOrderREST(o) {
   return {
     shopify_id:          String(o.id),
     name:                o.name,
-    created_at:          o.created_at,
+    created_at:          toUtcZ(o.created_at),
     updated_at:          o.updated_at || o.created_at,
     total_price:         totalPrice,
     subtotal_price:      parseFloat(o.subtotal_price  || 0),
@@ -401,8 +409,8 @@ async function enrichOrderImages(order) {
 // ── helpers to read orders from MongoDB ──────────────────────────────────────
 function buildMongoDateFilter(from, to) {
   const f = {};
-  if (from) f.$gte = from + 'T00:00:00.000Z';
-  if (to)   f.$lte = to   + 'T23:59:59.999Z';
+  if (from) f.$gte = istDayStartUtc(from);
+  if (to)   f.$lte = istDayEndUtc(to);
   return Object.keys(f).length ? f : null;
 }
 
@@ -1057,7 +1065,7 @@ function templateOrderConfirmed(order, imageMap = {}) {
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Date</span>
-        <span style="font-size:13px;color:#555;">${new Date(order.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</span>
+        <span style="font-size:13px;color:#555;">${new Date(order.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric',timeZone:IST_TZ})}</span>
       </div>
       <div style="display:flex;justify-content:space-between;">
         <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Payment</span>
@@ -1683,7 +1691,7 @@ async function pnlAggregate(fromIso, toIso, withProducts) {
     const val = parseFloat(o.total_price || 0);
     const add = (m) => { const c = m[g][p]; c.n++; c.v += val; c.u += units; };
     add(matrix);
-    const mk = String(o.created_at).slice(0, 7);
+    const mk = istMonthStr(o.created_at);
     if (!months[mk]) months[mk] = emptyMatrix();
     add(months[mk]);
     if (withProducts) for (const l of (o.line_items || [])) {
@@ -1701,17 +1709,18 @@ app.get('/admin/pnl-data', adminAuth, async (req, res) => {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to required' });
     const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
-    const agg = await pnlAggregate(from + 'T00:00:00.000Z', to + 'T23:59:59.999Z', true);
+    const agg = await pnlAggregate(istDayStartUtc(from), istDayEndUtc(to), true);
     // trailing 6 calendar months for the trend
     const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
-    const trend = await pnlAggregate(start.toISOString(), now.toISOString(), false);
+    const [iy, im] = istMonthStr(now).split('-').map(Number);
+    const startDay = new Date(Date.UTC(iy, im - 1 - 5, 1)).toISOString().slice(0, 10);
+    const trend = await pnlAggregate(istDayStartUtc(startDay), toUtcZ(now), false);
     let ads = null, adsErr = '';
     try {
       const time = (f, t) => ({ time_range: JSON.stringify({ since: f, until: t }) });
       const [period, monthly] = await Promise.all([
         metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: 'spend', ...time(from, to) }),
-        metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: 'spend', ...time(start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)), time_increment: 'monthly', limit: 12 }),
+        metaGet(`/${META_AD_ACCOUNT}/insights`, { fields: 'spend', ...time(startDay, istDateStr(now)), time_increment: 'monthly', limit: 12 }),
       ]);
       ads = { period: parseFloat(period.data?.[0]?.spend || 0), months: Object.fromEntries((monthly.data || []).map(d => [String(d.date_start).slice(0, 7), parseFloat(d.spend || 0)])) };
     } catch (e) { adsErr = e.message; }
@@ -2872,7 +2881,7 @@ async function runShipsagarSync({ orderIds, manual } = {}) {
     <span style="color:#aaa;font-size:11px">Antortiq Admin Panel · ShipSagar Auto-Sync</span>
   </div>
 </div>`;
-        await sendEmail({ to: cfg.from || cfg.user, subject: `ShipSagar Sync — ${updated} updated, ${errors} errors (${new Date(startedAt).toLocaleDateString('en-IN')})`, html: adminHtml });
+        await sendEmail({ to: cfg.from || cfg.user, subject: `ShipSagar Sync — ${updated} updated, ${errors} errors (${new Date(startedAt).toLocaleDateString('en-IN',{timeZone:IST_TZ})})`, html: adminHtml });
       }
     } catch (e) { console.error('[shipsagar-sync] admin email error:', e.message); }
   }

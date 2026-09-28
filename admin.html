@@ -464,7 +464,18 @@ function stageBadge(s) {
   return <span className={`badge ${cls}`} style={style}>{label}</span>;
 }
 
-function fmt(d) { return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+/* All dates in the panel are India Standard Time (Asia/Kolkata, UTC+5:30) */
+const IST_TZ = 'Asia/Kolkata';
+const _fmtIstDay = new Intl.DateTimeFormat('en-CA',{timeZone:IST_TZ,year:'numeric',month:'2-digit',day:'2-digit'});
+const _fmtIstHour = new Intl.DateTimeFormat('en-GB',{timeZone:IST_TZ,hour:'2-digit',hourCycle:'h23'});
+const _fmtIstWd = new Intl.DateTimeFormat('en-US',{timeZone:IST_TZ,weekday:'short'});
+const istDay = d => _fmtIstDay.format(new Date(d));
+const istHour = d => parseInt(_fmtIstHour.format(new Date(d)),10);
+const istWeekdayMon0 = d => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(_fmtIstWd.format(new Date(d)));
+const todayIST = () => istDay(new Date());
+const addDays = (day,n) => { const [y,m,dd]=day.split('-').map(Number); return new Date(Date.UTC(y,m-1,dd+n)).toISOString().slice(0,10); };
+const IST_DT = {timeZone:IST_TZ};
+function fmt(d) { return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:IST_TZ}) : '—'; }
 function fmtMoney(n) { return '₹'+parseFloat(n||0).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2}); }
 function fmtPct(n,d) { return d ? ((n/d)*100).toFixed(1)+'%' : '0%'; }
 
@@ -481,28 +492,19 @@ function DateRangePicker({ from, to, onChange }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0,10);
-
-  function isoDate(d) { return d.toISOString().slice(0,10); }
-
+  const todayStr = todayIST();
+  const [ty,tm] = todayStr.split('-').map(Number);
+  const mStart = (y,m) => `${y}-${String(m).padStart(2,'0')}-01`;
   const PRESETS = [
-    { label: 'Today', get: () => { const d = todayStr; return [d, d]; } },
-    { label: 'Yesterday', get: () => { const d = isoDate(new Date(today-86400000)); return [d,d]; } },
-    { label: 'Last 7 days', get: () => [isoDate(new Date(today-6*86400000)), todayStr] },
-    { label: 'Last 30 days', get: () => [isoDate(new Date(today-29*86400000)), todayStr] },
-    { label: 'Last 90 days', get: () => [isoDate(new Date(today-89*86400000)), todayStr] },
-    { label: 'This month', get: () => [isoDate(new Date(today.getFullYear(), today.getMonth(), 1)), todayStr] },
-    { label: 'Last month', get: () => {
-      const f = new Date(today.getFullYear(), today.getMonth()-1, 1);
-      const t = new Date(today.getFullYear(), today.getMonth(), 0);
-      return [isoDate(f), isoDate(t)];
-    }},
-    { label: 'This year', get: () => [isoDate(new Date(today.getFullYear(),0,1)), todayStr] },
-    { label: 'Last year', get: () => {
-      const y = today.getFullYear()-1;
-      return [isoDate(new Date(y,0,1)), isoDate(new Date(y,11,31))];
-    }},
+    { label: 'Today', get: () => [todayStr, todayStr] },
+    { label: 'Yesterday', get: () => { const d = addDays(todayStr,-1); return [d,d]; } },
+    { label: 'Last 7 days', get: () => [addDays(todayStr,-6), todayStr] },
+    { label: 'Last 30 days', get: () => [addDays(todayStr,-29), todayStr] },
+    { label: 'Last 90 days', get: () => [addDays(todayStr,-89), todayStr] },
+    { label: 'This month', get: () => [mStart(ty,tm), todayStr] },
+    { label: 'Last month', get: () => { const py = tm===1?ty-1:ty, pm = tm===1?12:tm-1; return [mStart(py,pm), addDays(mStart(ty,tm),-1)]; }},
+    { label: 'This year', get: () => [`${ty}-01-01`, todayStr] },
+    { label: 'Last year', get: () => [`${ty-1}-01-01`, `${ty-1}-12-31`] },
     { label: 'All time', get: () => ['2020-01-01', todayStr] },
   ];
 
@@ -728,7 +730,7 @@ function buildSeries(orders, from, to) {
   const monthly = days > 120;
   const map = new Map();
   for (const o of orders) {
-    const day = String(o.created_at).slice(0,10);
+    const day = istDay(o.created_at);
     const k = monthly ? day.slice(0,7) : day;
     const e = map.get(k) || { revenue:0, orders:0 };
     e.revenue += o.total_price||0; e.orders++;
@@ -747,8 +749,8 @@ function buildSeries(orders, from, to) {
     }
   } else {
     for (let i=0;i<days;i++) {
-      const d = new Date(start.getTime()+i*86400000), e = map.get(localKey(d))||{revenue:0,orders:0};
-      out.push({ ...e, date:localKey(d), label:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) });
+      const dk = addDays(from,i), e = map.get(dk)||{revenue:0,orders:0};
+      out.push({ ...e, date:dk, label:new Date(dk+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',timeZone:'UTC'}) });
     }
   }
   return out;
@@ -770,7 +772,7 @@ function RevBarChart({ series }) {
   const line = (arr,y) => arr.map((v,i)=>`${i?'L':'M'}${cx(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const smooth = (arr,y) => { const p=arr.map((v,i)=>[cx(i),y(v)]); let d=`M${p[0][0]},${p[0][1]}`; for(let i=1;i<p.length;i++){const [x0,y0]=p[i-1],[x1,y1]=p[i],m=(x0+x1)/2;d+=` C${m},${y0} ${m},${y1} ${x1},${y1}`;} return d; };
   const step = Math.max(1,Math.ceil(n/16));
-  const isWe = s => !s.monthly && [0,6].includes(new Date(s.date+'T00:00:00').getDay());
+  const isWe = s => !s.monthly && [0,6].includes(new Date(s.date+'T00:00:00Z').getUTCDay());
   const onMove = e => { const r=e.currentTarget.getBoundingClientRect(); const rel=(e.clientX-r.left)/r.width*W; setHi(Math.max(0,Math.min(n-1,Math.floor((rel-pl)/slot)))); };
   const cur = hi!=null ? series[hi] : null;
   const vsAvg = cur && ma[hi] ? (cur.revenue-ma[hi])/ma[hi]*100 : null;
@@ -861,7 +863,7 @@ function AreaChart({ series, metric, color }) {
 
 function Heatmap({ orders }) {
   const grid = Array.from({length:7},()=>Array(24).fill(0));
-  for (const o of orders) { const d = new Date(o.created_at); grid[(d.getDay()+6)%7][d.getHours()]++; }
+  for (const o of orders) { grid[istWeekdayMon0(o.created_at)][istHour(o.created_at)]++; }
   const max = Math.max(1,...grid.flat());
   const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   return (
@@ -1138,15 +1140,15 @@ function Dashboard({ active=true }) {
   const [adsErr,setAdsErr] = useState('');
   const [metric,setMetric] = useState('revenue');
   const now = new Date();
-  const [from,setFrom] = useState(()=>new Date(now-29*86400000).toISOString().slice(0,10));
-  const [to,setTo]     = useState(()=>now.toISOString().slice(0,10));
+  const [from,setFrom] = useState(()=>addDays(todayIST(),-29));
+  const [to,setTo]     = useState(()=>todayIST());
 
   const load = useCallback(async (f,t,silent) => {
     if (!silent) setLoading(true);
     try {
       const len = Math.round((new Date(t)-new Date(f))/86400000)+1;
-      const pf = new Date(new Date(f)-len*86400000).toISOString().slice(0,10);
-      const pt = new Date(new Date(f)-86400000).toISOString().slice(0,10);
+      const pf = addDays(f,-len);
+      const pt = addDays(f,-1);
       const [s,o] = await Promise.all([
         apiFetch(`/orders/stats?from=${f}&to=${t}`),
         apiFetch(`/orders?from=${f}&to=${t}`),
@@ -1236,7 +1238,7 @@ function Dashboard({ active=true }) {
 
   const bestDay = series.length ? [...series].sort((a,b)=>b.revenue-a.revenue)[0] : null;
   const avgPerDay = series.length ? (s.revenue||0)/series.length : 0;
-  const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[new Date(o.created_at).getHours()]++);
+  const hourCounts = Array(24).fill(0); orders.forEach(o=>hourCounts[istHour(o.created_at)]++);
   const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
   const hourLbl = h => `${h%12||12}${h<12?'am':'pm'}`;
 
@@ -1260,7 +1262,7 @@ function Dashboard({ active=true }) {
     ...(derived.topProducts[0]?[{tag:'TRENDING',c:'var(--purple)',t:<><b>{derived.topProducts[0].title}</b> leading with {derived.topProducts[0].qty} units</>}]:[]),
   ] : [];
 
-  const hr = now.getHours();
+  const hr = istHour(now);
   const greet = hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const revS = series.map(d=>d.revenue), ordS = series.map(d=>d.orders);
 
@@ -1269,7 +1271,7 @@ function Dashboard({ active=true }) {
       <div className="d-head">
         <div>
           <div className="d-hello">{greet}, <span>{brand()}</span></div>
-          <div className="d-sub">Here’s how your store is performing — {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</div>
+          <div className="d-sub">Here’s how your store is performing — {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',timeZone:IST_TZ})}</div>
         </div>
         <DateRangePicker from={from} to={to} onChange={(f,t)=>{setFrom(f);setTo(t);}} />
       </div>
@@ -1592,7 +1594,7 @@ function OrderModal({ order: initOrder, token: adminToken, onClose, onUpdated })
               <div className="od-title">{order.name}</div>
               {stageBadge(stage)}{payBadge}
             </div>
-            <div className="od-meta">{new Date(order.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · {name} · {units} item{units!==1?'s':''} · <b>{fmtMoney(order.total_price)}</b></div>
+            <div className="od-meta">{new Date(order.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})} · {name} · {units} item{units!==1?'s':''} · <b>{fmtMoney(order.total_price)}</b></div>
           </div>
           <button className="od-x" onClick={onClose} aria-label="Close">✕</button>
         </header>
@@ -1761,8 +1763,8 @@ function Orders({ active=true }) {
   const [loading,setLoading]     = useState(false);
   const [q,setQ]                 = useState('');
   const [stage,setStage]         = useState('');
-  const [from,setFrom]           = useState(()=>new Date(Date.now()-30*86400000).toISOString().slice(0,10));
-  const [to,setTo]               = useState(()=>new Date().toISOString().slice(0,10));
+  const [from,setFrom]           = useState(()=>addDays(todayIST(),-30));
+  const [to,setTo]               = useState(()=>todayIST());
   const [page,setPage]           = useState(1);
   const [modal,setModal]         = useState(null);
   const [dbStatus,setDbStatus]   = useState(null);
@@ -2788,7 +2790,7 @@ function ShipsagarPanel() {
             <div key={lid} style={{border:'1px solid var(--border)',borderRadius:8,marginBottom:8,overflow:'hidden'}}>
               <div onClick={()=>loadLogDetail(lid)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',cursor:'pointer',background:'var(--bg-card2)'}}>
                 <div>
-                  <span style={{fontWeight:600,fontSize:13}}>{new Date(l.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+                  <span style={{fontWeight:600,fontSize:13}}>{new Date(l.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</span>
                   <span style={{marginLeft:10,fontSize:11,color:'var(--text-muted)',background:'var(--overlay-2)',padding:'2px 7px',borderRadius:4}}>{l.triggered_by||'cron'}</span>
                 </div>
                 <div style={{display:'flex',gap:12,alignItems:'center',fontSize:12}}>
@@ -3539,7 +3541,7 @@ function SyncLogs() {
             <div style={{display:'flex',alignItems:'center',gap:12}}>
               <span style={{fontSize:18}}>{run.errors>0?'⚠️':run.updated>0?'🔄':'✅'}</span>
               <div>
-                <div style={{fontWeight:700,fontSize:13}}>{new Date(run.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+                <div style={{fontWeight:700,fontSize:13}}>{new Date(run.started_at).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:IST_TZ})}</div>
                 <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>
                   {run.checked} checked · <span style={{color:'#22c55e',fontWeight:600}}>{run.updated} updated</span> · {run.skipped} skipped · {run.errors>0?<span style={{color:'#ef4444'}}>{run.errors} errors</span>:<span>0 errors</span>} · {((new Date(run.finished_at)-new Date(run.started_at))/1000).toFixed(1)}s
                 </div>
@@ -3726,8 +3728,8 @@ function pnlInsights(P, ctx) {
 
 function PnL({ active=true }) {
   const now = new Date();
-  const [from,setFrom] = useState(()=>`${now.getFullYear()}-${pad2(now.getMonth()+1)}-01`);
-  const [to,setTo]     = useState(()=>localKey(now));
+  const [from,setFrom] = useState(()=>`${todayIST().slice(0,7)}-01`);
+  const [to,setTo]     = useState(()=>todayIST());
   const [data,setData] = useState(null);
   const [loading,setLoading] = useState(true);
   const [inp,setInp]   = useState(null);
@@ -3772,13 +3774,13 @@ function PnL({ active=true }) {
 
   const months = useMemo(()=>{
     if(!data||!inp) return [];
-    const nowD = new Date(); const out=[];
+    const [iy,im,idd] = todayIST().split('-').map(Number); const out=[];
     for(let i=5;i>=0;i--){
-      const d = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth()-i, 1));
+      const d = new Date(Date.UTC(iy, im-1-i, 1));
       const k = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}`;
       const m = data.trend?.[k] || PNL_EMPTY();
       const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth()+1, 0)).getUTCDate();
-      const days = i===0 ? nowD.getUTCDate() : dim;
+      const days = i===0 ? idd : dim;
       const ads = inp.ads_mode==='manual' ? 0 : (data.ads?.months?.[k]||0);
       out.push({ k, label:d.toLocaleDateString('en-IN',{month:'short',year:'2-digit',timeZone:'UTC'}), p:computePnl(m,inp,ads,days,avgCost) });
     }
