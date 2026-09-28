@@ -1779,6 +1779,8 @@ function Orders({ active=true }) {
   const [modal,setModal]         = useState(null);
   const [dbStatus,setDbStatus]   = useState(null);
   const [syncing,setSyncing]     = useState(false);
+  const [showTags,setShowTags]   = useState(()=>localStorage.getItem('fc_show_tags')==='1');
+  const toggleTags = () => { const v=!showTags; setShowTags(v); localStorage.setItem('fc_show_tags', v?'1':'0'); };
   const PAGE_SIZE = 50;
 
   const pollDbStatus = React.useCallback(async () => {
@@ -1849,6 +1851,7 @@ function Orders({ active=true }) {
           }} title="Pull all orders from Shopify into database">
             {syncing ? <span>⏳ Syncing… {dbStatus?.total_in_db ? `(${dbStatus.total_in_db.toLocaleString()} saved)` : ''}</span> : <span>📥 Sync Orders DB {dbStatus?.total_in_db ? `(${dbStatus.total_in_db.toLocaleString()} in DB)` : ''}</span>}
           </button>
+          <button className={`chip ${showTags?'on':''}`} onClick={toggleTags} style={{padding:'7px 14px'}} title="Show each order's Shopify tags in the list">🏷 Tags</button>
         </div>
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -1876,7 +1879,7 @@ function Orders({ active=true }) {
         <table>
           <thead><tr>
             <th>Order</th><th>Date</th><th>Customer</th>
-            <th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th><th></th>
+            <th>Items</th><th>Amount</th><th>Payment</th><th>Stage</th><th>AWB</th>{showTags && <th>Tags</th>}<th></th>
           </tr></thead>
           <tbody>
             {paged.map(o=>(
@@ -1904,13 +1907,21 @@ function Orders({ active=true }) {
                 </td>
                 <td>{stageBadge(o._stage)}</td>
                 <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-muted)'}}>{o._awb||'—'}</td>
+                {showTags && (
+                  <td style={{maxWidth:200}} onClick={e=>e.stopPropagation()}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {(o.tags||[]).length===0 && <span style={{fontSize:11,color:'var(--text-dim)'}}>—</span>}
+                      {(o.tags||[]).map((t,i)=><span key={i} className="od-tag" style={{padding:'2px 9px',fontSize:10.5}}>{t}</span>)}
+                    </div>
+                  </td>
+                )}
                 <td onClick={e=>e.stopPropagation()}>
                   <button className="btn-ghost btn-sm" onClick={()=>setModal(o)}>Open</button>
                 </td>
               </tr>
             ))}
-            {!loading && paged.length===0 && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
-            {loading && <tr><td colSpan={9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}><span className="spin">↻</span> Loading…</td></tr>}
+            {!loading && paged.length===0 && <tr><td colSpan={showTags?10:9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}>No orders found</td></tr>}
+            {loading && <tr><td colSpan={showTags?10:9} style={{textAlign:'center',color:'var(--text-muted)',padding:32}}><span className="spin">↻</span> Loading…</td></tr>}
           </tbody>
         </table>
       </div>
