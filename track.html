@@ -76,14 +76,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 
 /* ── Horizontal stage stepper (croscrow-style) ── */
 .stage-bar{display:flex;align-items:flex-start;margin:16px 0 4px}
-.stage-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;text-align:center}
+.stage-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;position:relative;text-align:center}
 .stage-step:not(:first-child)::before{content:'';position:absolute;top:4.5px;right:50%;width:100%;height:2px;background:var(--border);z-index:0}
 .stage-step.done:not(:first-child)::before{background:var(--accent)}
 .stage-dot{width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid var(--border-hi);z-index:1;margin-bottom:7px}
 .stage-step.done .stage-dot{background:var(--accent);border-color:var(--accent)}
 .stage-step.active .stage-dot{border-color:var(--accent);animation:pulse 1.6s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(10,10,10,.25)}70%{box-shadow:0 0 0 6px rgba(10,10,10,0)}100%{box-shadow:0 0 0 0 rgba(10,10,10,0)}}
-.stage-label{font-size:9.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--text-muted)}
+.stage-label{font-size:8px;font-weight:700;letter-spacing:.1px;text-transform:uppercase;color:var(--text-muted);line-height:1.3;padding:0 2px;word-break:break-word;max-width:100%}
 .stage-step.done .stage-label,.stage-step.active .stage-label{color:var(--text)}
 .rto-banner{background:var(--red-bg);border:1px solid var(--red-border);color:var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:12.5px;font-weight:600;margin:14px 0 4px}
 
@@ -369,7 +369,7 @@ function resetAll(){
 }
 
 const STAGE_STEPS=['confirmed','ready','pickup','transit','ofd','delivered'];
-const STAGE_STEP_LABEL={confirmed:'Confirmed',ready:'Packed',pickup:'Picked Up',transit:'In Transit',ofd:'Out for Delivery',delivered:'Delivered'};
+const STAGE_STEP_LABEL={confirmed:'Confirmed',ready:'Packed',pickup:'Picked Up',transit:'Transit',ofd:'Out for Delivery',delivered:'Delivered'};
 function renderStageBar(stage){
   if(stage==='cancelled') return `<div class="rto-banner">✕ This order has been cancelled.</div>`;
   if(stage==='rto') return `<div class="rto-banner">🔄 Shipment is being returned to origin.</div>`;
