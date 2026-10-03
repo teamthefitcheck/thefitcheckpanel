@@ -3399,6 +3399,7 @@ app.post('/track/request', async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
 app.get('/staff', (req, res) => res.sendFile(path.join(__dirname, 'staff.html')));
 app.get('/track', (req, res) => res.sendFile(path.join(__dirname, 'track.html')));
+app.get('/returns', (req, res) => res.sendFile(path.join(__dirname, 'returns.html')));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 connectMongo().then(async () => {

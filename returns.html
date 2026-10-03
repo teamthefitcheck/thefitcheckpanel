@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Return & Exchange · Fit Check</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f5;--surface:#fff;--card:#fff;--border:#e8e8e8;--border-strong:#d0d0d0;
+  --text:#0f0f0f;--body:#555;--muted:#999;
+  --blue:#002eff;--blue-light:#eef3ff;--blue-border:#99b3ff;--blue-dark:#0020cc;
+  --green:#16a34a;--green-light:#f0fdf4;--green-border:#86efac;
+  --amber:#b45309;--amber-light:#fffbeb;--amber-border:#fde68a;
+  --red:#ef4444;--red-light:#fef2f2;--red-border:#fecaca;
+  --radius:14px;--radius-sm:10px;
+  --shadow:0 1px 4px rgba(0,0,0,.05);--shadow-md:0 6px 20px rgba(0,0,0,.08);--shadow-lg:0 10px 36px rgba(0,0,0,.12);
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:30}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none}
+.logo-mark{width:30px;height:30px;background:var(--blue);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0}
+.logo-name{font-size:15px;font-weight:700;color:var(--text)}
+.hbtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
+.hbtn:hover{background:var(--bg)}
+
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.open{opacity:1;pointer-events:auto}
+.sidebar{position:fixed;top:0;right:0;bottom:0;width:280px;max-width:84vw;background:#fff;z-index:41;transform:translateX(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1);box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.sidebar.open{transform:translateX(0)}
+.sb-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sb-head b{font-size:15px}
+.sb-body{padding:10px;flex:1}
+.sb-link{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);color:var(--text);text-decoration:none;font-size:13.5px;font-weight:600}
+.sb-link:hover{background:var(--bg)}
+.sb-link .ic{font-size:16px;width:20px;text-align:center}
+.sb-foot{padding:16px 20px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
+
+.page-wrap{max-width:600px;margin:0 auto;padding:24px 16px 48px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);animation:fadeIn .25s ease}
+.card+.card{margin-top:14px}
+
+h2{font-size:20px;font-weight:800;margin-bottom:5px}
+p.sub{font-size:13.5px;color:var(--body);margin-bottom:20px}
+
+.field{margin-bottom:14px}
+label.lbl{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.3px;margin-bottom:6px;text-transform:uppercase}
+input,select,textarea{width:100%;border:1.5px solid var(--border-strong);border-radius:var(--radius-sm);padding:11px 13px;font-size:14.5px;color:var(--text);background:#fff;outline:none;transition:border-color .15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+textarea{resize:vertical;min-height:80px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 22px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;border:none;font-family:inherit}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-dark)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:transparent;border:1.5px solid var(--border-strong);color:var(--body)}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn-full{width:100%}
+.btn-sm{padding:8px 15px;font-size:12.5px}
+
+.alert{padding:11px 15px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px}
+.alert-error{background:var(--red-light);border:1px solid var(--red-border);color:var(--red)}
+.alert-success{background:var(--green-light);border:1px solid var(--green-border);color:var(--green)}
+
+/* step wizard progress dots */
+.steps{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:22px}
+.step-dot{width:28px;height:28px;border-radius:50%;background:var(--bg);border:2px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted)}
+.step-dot.done{background:var(--blue);border-color:var(--blue);color:#fff}
+.step-dot.active{border-color:var(--blue);color:var(--blue)}
+.step-line{width:36px;height:2px;background:var(--border-strong)}
+.step-line.done{background:var(--blue)}
+
+/* order summary */
+.ord-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.ord-title{font-size:17px;font-weight:800}
+.ord-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700}
+.pill-blue{background:var(--blue-light);color:var(--blue)}
+.pill-green{background:var(--green-light);color:var(--green)}
+.pill-amber{background:var(--amber-light);color:var(--amber)}
+.pill-red{background:var(--red-light);color:var(--red)}
+
+/* action grid */
+.action-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.action-card{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:18px 14px;cursor:pointer;transition:all .15s;background:#fff;text-align:center}
+.action-card:hover{border-color:var(--blue);box-shadow:var(--shadow-md)}
+.action-ic{font-size:24px;margin-bottom:9px}
+.action-t{font-size:14px;font-weight:700}
+.action-s{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* item select */
+.item-check{display:flex;align-items:center;gap:12px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:9px;cursor:pointer;transition:all .15s}
+.item-check.sel{border-color:var(--blue);background:var(--blue-light)}
+.item-check input{width:18px;height:18px;flex-shrink:0;accent-color:var(--blue)}
+.item-check .it-t{font-weight:700;font-size:13.5px}
+.item-check .it-v{font-size:11.5px;color:var(--muted)}
+.item-check .it-p{font-weight:700;font-size:13px;margin-left:auto;flex-shrink:0}
+.variant-pick{margin:9px 0 2px 30px}
+
+.reason-chip{display:inline-block;padding:7px 13px;border:1.5px solid var(--border-strong);border-radius:20px;font-size:12.5px;font-weight:600;margin:0 6px 6px 0;cursor:pointer;transition:all .15s}
+.reason-chip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+
+.rr-card{padding:13px 15px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;font-size:13px}
+.success-box{text-align:center;padding:30px 10px}
+.success-ic{font-size:44px;margin-bottom:12px}
+
+footer{text-align:center;padding:28px 20px;font-size:11.5px;color:var(--muted)}
+footer a{color:var(--body);text-decoration:none;font-weight:600}
+
+@media(max-width:600px){ .page-wrap{padding:18px 12px 40px} .card{padding:18px} }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/returns" class="logo">
+    <div class="logo-mark">FC</div>
+    <span class="logo-name">Fit Check</span>
+  </a>
+  <button class="hbtn" onclick="openSidebar()" aria-label="Menu">☰</button>
+</header>
+
+<div class="scrim" id="scrim" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-head"><b>Menu</b><button class="hbtn" onclick="closeSidebar()">✕</button></div>
+  <div class="sb-body">
+    <a class="sb-link" id="sbTrackLink" href="/track"><span class="ic">📦</span>Track My Order</a>
+    <a class="sb-link" href="/returns"><span class="ic">↩</span>Return &amp; Exchange</a>
+    <a class="sb-link" href="https://wa.me/" target="_blank"><span class="ic">💬</span>WhatsApp Support</a>
+    <a class="sb-link" href="mailto:support@fitcheck.com"><span class="ic">✉</span>Email Us</a>
+  </div>
+  <div class="sb-foot">Fit Check · thefitcheck.in</div>
+</aside>
+
+<div class="page-wrap" id="app">
+
+  <div id="lookupSection">
+    <div class="card">
+      <h2>Return or Exchange</h2>
+      <p class="sub">Enter your order number and email or phone to get started.</p>
+      <div id="errLookup" class="alert alert-error" style="display:none"></div>
+      <div class="field">
+        <label class="lbl">Order Number</label>
+        <input id="inputOrder" placeholder="#1234" onkeydown="if(event.key==='Enter')lookupOrder()"/>
+      </div>
+      <div class="field">
+        <label class="lbl">Email or Phone</label>
+        <input id="inputContact" placeholder="you@email.com or 9876543210" onkeydown="if(event.key==='Enter')lookupOrder()"/>
+      </div>
+      <button class="btn btn-primary btn-full" id="btnLookup" onclick="lookupOrder()">Continue →</button>
+    </div>
+  </div>
+
+  <div id="portalSection" style="display:none"></div>
+  <div id="wizardSection" style="display:none"></div>
+
+</div>
+
+<footer>
+  <a href="/returns">Return Another Order</a> · <a href="/track">Track an Order</a>
+</footer>
+
+<script>
+const API='';
+let order=null, rrType=null, selectedItems={}, step=1, pendingAction=null;
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(d){ return d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function fmtMoney(n){ return '₹'+parseFloat(n||0).toLocaleString('en-IN'); }
+
+function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('scrim').classList.add('open'); }
+function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('scrim').classList.remove('open'); }
+
+function rrStatusPill(s){
+  const map={pending:['pill-amber','Pending Review'],approved:['pill-green','Approved'],rejected:['pill-red','Rejected'],in_progress:['pill-blue','In Progress'],completed:['pill-green','Completed']};
+  const [cls,label]=map[s]||['pill-blue',s];
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+async function lookupOrder(){
+  const q=document.getElementById('inputOrder').value.trim();
+  const contact=document.getElementById('inputContact').value.trim();
+  const errEl=document.getElementById('errLookup');
+  errEl.style.display='none';
+  if(!q||!contact){errEl.textContent='Please enter both your order number and contact.';errEl.style.display='block';return;}
+  const btn=document.getElementById('btnLookup');
+  btn.disabled=true;btn.textContent='Looking up…';
+  try{
+    const r=await fetch(`${API}/track/order?q=${encodeURIComponent(q)}&contact=${encodeURIComponent(contact)}`);
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'Order not found.';errEl.style.display='block';btn.disabled=false;btn.textContent='Continue →';return;}
+    order=d;
+    document.getElementById('sbTrackLink').href=`/track?order=${encodeURIComponent(order.order_name.replace(/^#/,''))}&contact=${encodeURIComponent(contact)}`;
+    showPortal();
+    if(pendingAction) startRR(pendingAction);
+  }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';}
+  btn.disabled=false;btn.textContent='Continue →';
+}
+
+function showPortal(){
+  document.getElementById('lookupSection').style.display='none';
+  document.getElementById('wizardSection').style.display='none';
+  const el=document.getElementById('portalSection');
+  el.style.display='block';
+
+  const notCancelled = !['cancelled','rto'].includes(order.stage||'');
+  const exchangeOk = order.exchange_enabled!==false;
+  const returnOk = order.return_enabled!==false;
+  const canRR = notCancelled && (exchangeOk||returnOk);
+
+  const existingRRs=(order.return_requests||[]).map(rr=>`
+    <div class="rr-card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <b>${rr.type==='exchange'?'Exchange':'Return'} Request</b>
+        ${rrStatusPill(rr.status)}
+      </div>
+      <div style="color:var(--muted);font-size:11.5px;margin-top:3px">${esc(rr.request_id)} · ${fmt(rr.created_at)}</div>
+      ${rr.reason?`<div style="color:var(--body);font-size:12px;margin-top:3px">Reason: ${esc(rr.reason)}</div>`:''}
+    </div>
+  `).join('');
+
+  el.innerHTML=`
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="backToLookup()">← Back</button>
+    <div class="card">
+      <div class="ord-head">
+        <div>
+          <div class="ord-title">${esc(order.order_name)}</div>
+          <div class="ord-sub">Placed ${fmt(order.created_at)} · ${fmtMoney(order.total)}</div>
+        </div>
+      </div>
+      ${existingRRs?`<div style="margin-top:4px">${existingRRs}</div>`:''}
+    </div>
+
+    ${canRR?`
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">What would you like to do?</div>
+      <p class="sub" style="margin-bottom:14px">Choose an option below to start your request.</p>
+      <div class="action-grid">
+        ${exchangeOk?`<div class="action-card" onclick="startRR('exchange')"><div class="action-ic">⇄</div><div class="action-t">Exchange</div><div class="action-s">Swap for a different size</div></div>`:''}
+        ${returnOk?`<div class="action-card" onclick="startRR('return')"><div class="action-ic">↩</div><div class="action-t">Return</div><div class="action-s">Send it back for a refund</div></div>`:''}
+      </div>
+    </div>
+    `:`
+    <div class="card" style="text-align:center;padding:24px">
+      <div style="font-size:24px;margin-bottom:8px">💬</div>
+      <div style="font-weight:700;margin-bottom:4px">Returns not available</div>
+      <div style="font-size:12.5px;color:var(--muted)">For any queries on this order, please <a href="mailto:support@fitcheck.com" style="color:var(--blue)">contact us</a>.</div>
+    </div>
+    `}
+  `;
+}
+
+function backToLookup(){
+  document.getElementById('portalSection').style.display='none';
+  document.getElementById('wizardSection').style.display='none';
+  document.getElementById('lookupSection').style.display='block';
+}
+
+/* ───────── Wizard ───────── */
+function startRR(type){
+  rrType=type; step=1; selectedItems={};
+  document.getElementById('portalSection').style.display='none';
+  document.getElementById('wizardSection').style.display='block';
+  renderWizard();
+}
+function cancelRR(){ showPortal(); }
+
+function stepDotsHtml(){
+  const labels=['Items','Reason','Review'];
+  let h='<div class="steps">';
+  labels.forEach((l,i)=>{
+    const n=i+1;
+    const cls = n<step?'done':(n===step?'active':'');
+    h+=`<div class="step-dot ${cls}">${n<step?'✓':n}</div>`;
+    if(i<labels.length-1) h+=`<div class="step-line ${n<step?'done':''}"></div>`;
+  });
+  h+='</div>';
+  return h;
+}
+
+function renderWizard(){
+  const el=document.getElementById('wizardSection');
+  if(step===1) return renderStep1(el);
+  if(step===2) return renderStep2(el);
+  if(step===3) return renderStep3(el);
+}
+
+function renderStep1(el){
+  const items=order.items||[];
+  el.innerHTML=`
+    <div class="card">
+      ${stepDotsHtml()}
+      <h2>${rrType==='exchange'?'Select item to exchange':'Select items to return'}</h2>
+      <p class="sub">Choose which item${rrType==='exchange'?'':'(s)'} from your order.</p>
+      <div id="itemList">
+        ${items.map((it,i)=>`
+          <div class="item-check" id="itCheck${i}" onclick="toggleItem(${i})">
+            <input type="${rrType==='exchange'?'radio':'checkbox'}" name="itSel" id="itInput${i}" onclick="event.stopPropagation();toggleItem(${i})"/>
+            <div>
+              <div class="it-t">${esc(it.title)}</div>
+              <div class="it-v">${esc(it.variant_title||'')} · Qty ${it.qty}</div>
+            </div>
+            <div class="it-p">${fmtMoney(it.price)}</div>
+          </div>
+          <div class="variant-pick" id="variantPick${i}" style="display:none"></div>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" onclick="cancelRR()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" id="btnStep1Next" onclick="rrNext1()" disabled>Continue →</button>
+      </div>
+    </div>
+  `;
+}
+function toggleItem(i){
+  const items=order.items||[];
+  if(rrType==='exchange'){
+    Object.keys(selectedItems).forEach(k=>{ document.getElementById(`itCheck${k}`)?.classList.remove('sel'); document.getElementById(`variantPick${k}`).style.display='none'; document.getElementById(`variantPick${k}`).innerHTML=''; });
+    selectedItems={};
+  }
+  const checked = document.getElementById(`itInput${i}`).checked = rrType==='exchange' ? true : !document.getElementById(`itInput${i}`).checked;
+  const row=document.getElementById(`itCheck${i}`);
+  if(checked){
+    selectedItems[i]=items[i];
+    row.classList.add('sel');
+    if(rrType==='exchange') loadVariantPicker(i);
+  } else {
+    delete selectedItems[i];
+    row.classList.remove('sel');
+    document.getElementById(`variantPick${i}`).style.display='none';
+    document.getElementById(`variantPick${i}`).innerHTML='';
+  }
+  document.getElementById('btnStep1Next').disabled = Object.keys(selectedItems).length===0;
+}
+async function loadVariantPicker(i){
+  const it=order.items[i];
+  const box=document.getElementById(`variantPick${i}`);
+  box.style.display='block';
+  box.innerHTML=`<div style="font-size:12px;color:var(--muted)">Loading sizes…</div>`;
+  try{
+    const r=await fetch(`${API}/track/product-variants/${it.product_id}`);
+    const d=await r.json();
+    const variants=d.variants||[];
+    box.innerHTML=`
+      <label class="lbl">Exchange for</label>
+      <select id="variantSel${i}">
+        ${variants.map(v=>`<option value="${v.id}" ${v.id==it.variant_id?'selected':''}>${esc(v.title)}${v.available===false?' (Out of stock)':''}</option>`).join('')}
+      </select>
+    `;
+  }catch(e){ box.innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load sizes.</div>`; }
+}
+function rrNext1(){
+  if(Object.keys(selectedItems).length===0) return;
+  if(rrType==='exchange'){
+    const i=Object.keys(selectedItems)[0];
+    const sel=document.getElementById(`variantSel${i}`);
+    selectedItems[i].new_variant_id = sel ? sel.value : null;
+  }
+  step=2; renderWizard();
+}
+
+const REASONS=['Wrong size','Wrong item received','Damaged/Defective','Not as described','Changed my mind','Quality issue','Other'];
+function renderStep2(el){
+  el.innerHTML=`
+    <div class="card">
+      ${stepDotsHtml()}
+      <h2>Tell us why</h2>
+      <p class="sub">Help us understand the issue.</p>
+      <div style="margin-bottom:14px">
+        ${REASONS.map(r=>`<span class="reason-chip" id="chip_${r.replace(/\s/g,'')}" onclick="selectReason('${r}')">${r}</span>`).join('')}
+      </div>
+      <div class="field">
+        <label class="lbl">Additional details (optional)</label>
+        <textarea id="rrNotes" placeholder="Tell us more…"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-ghost" onclick="rrBack()">← Back</button>
+        <button class="btn btn-primary" style="flex:1" id="btnStep2Next" onclick="rrNext2()" disabled>Continue →</button>
+      </div>
+    </div>
+  `;
+}
+let rrReason=null;
+function selectReason(r){
+  rrReason=r;
+  document.querySelectorAll('.reason-chip').forEach(c=>c.classList.remove('sel'));
+  document.getElementById(`chip_${r.replace(/\s/g,'')}`).classList.add('sel');
+  document.getElementById('btnStep2Next').disabled=false;
+}
+function rrNext2(){ if(!rrReason) return; step=3; renderWizard(); }
+function rrBack(){ step=Math.max(1,step-1); renderWizard(); }
+
+function renderStep3(el){
+  const notes=document.getElementById('rrNotes')?.value||'';
+  const itemsHtml=Object.values(selectedItems).map(it=>`
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div><b>${esc(it.title)}</b><div style="color:var(--muted);font-size:11.5px">${esc(it.variant_title||'')}</div></div>
+      <div>${fmtMoney(it.price)}</div>
+    </div>
+  `).join('');
+  el.innerHTML=`
+    <div class="card">
+      ${stepDotsHtml()}
+      <h2>Review &amp; Submit</h2>
+      <p class="sub">${rrType==='exchange'?'Exchange':'Return'} request for ${esc(order.order_name)}.</p>
+      <div style="margin-bottom:10px">${itemsHtml}</div>
+      <div style="font-size:12.5px;color:var(--body);margin-bottom:4px"><b>Reason:</b> ${esc(rrReason)}</div>
+      ${notes?`<div style="font-size:12.5px;color:var(--body);margin-bottom:10px"><b>Notes:</b> ${esc(notes)}</div>`:''}
+      ${rrType==='return'?`
+      <div class="field">
+        <label class="lbl">Pickup Address</label>
+        <textarea id="rrAddress" placeholder="Full address for pickup (optional — defaults to order address)"></textarea>
+      </div>
+      `:''}
+      <div id="errSubmit" class="alert alert-error" style="display:none;margin-top:10px"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-ghost" onclick="rrBack()">← Back</button>
+        <button class="btn btn-primary" style="flex:1" id="btnSubmit" onclick="submitRR()">Submit Request</button>
+      </div>
+    </div>
+  `;
+}
+
+async function submitRR(){
+  const btn=document.getElementById('btnSubmit');
+  const errEl=document.getElementById('errSubmit');
+  errEl.style.display='none';
+  btn.disabled=true;btn.textContent='Submitting…';
+  const contact=document.getElementById('inputContact')?.value.trim()||order.customer_email||order.customer_phone||'';
+  const payload={
+    shopify_order_id: order.shopify_order_id,
+    order_name: order.order_name,
+    customer_email: contact.includes('@') ? contact : (order.customer_email||''),
+    customer_name: order.customer_name||'',
+    customer_phone: !contact.includes('@') ? contact : (order.customer_phone||''),
+    type: rrType,
+    reason: rrReason,
+    shipping_address: rrType==='return' ? (document.getElementById('rrAddress')?.value||null) : null,
+    items: Object.values(selectedItems).map(it=>({
+      product_id: it.product_id, variant_id: it.variant_id, title: it.title,
+      variant_title: it.variant_title, qty: it.qty,
+      new_variant_id: it.new_variant_id||null
+    }))
+  };
+  try{
+    const r=await fetch(`${API}/track/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error||'Could not submit request.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';return;}
+    showSuccess(d.request_id);
+  }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';}
+}
+
+function showSuccess(requestId){
+  const el=document.getElementById('wizardSection');
+  el.innerHTML=`
+    <div class="card success-box">
+      <div class="success-ic">✅</div>
+      <h2>Request Submitted</h2>
+      <p class="sub">Your ${rrType} request has been received.${requestId?' Reference: '+esc(requestId):''}</p>
+      <button class="btn btn-primary" onclick="location.href='/returns'">Done</button>
+    </div>
+  `;
+}
+
+(function(){
+  const p=new URLSearchParams(window.location.search);
+  const o=p.get('order')||p.get('o');
+  const c=p.get('contact')||p.get('email');
+  if(o) document.getElementById('inputOrder').value=o;
+  if(c) document.getElementById('inputContact').value=c;
+  const action=p.get('action');
+  if(action==='return'||action==='exchange') pendingAction=action;
+  if(o&&c) lookupOrder();
+})();
+</script>
+</body>
+</html>
