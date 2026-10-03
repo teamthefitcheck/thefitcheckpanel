@@ -3065,6 +3065,20 @@ app.get('/track/shipsagar-status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Public — full scan history for the tracking timeline on the customer page.
+// Reads the saved log from the sync cron only — no live ShipSagar API call, so it's free to load on every page view.
+app.get('/track/scan-history', async (req, res) => {
+  try {
+    const orderId = String(req.query.orderId || '');
+    if (!orderId) return res.status(400).json({ error: 'orderId required' });
+    const rec = await OS.get(orderId);
+    if (!rec?.awb) return res.json({ scans: [] });
+    const track = await mdb.collection('shipsagar_tracks').findOne({ awb: rec.awb }, { projection: { history: 1, courier_status: 1, latest_desc: 1, checked_at: 1, _id: 0 } });
+    const scans = (track?.history || []).map(h => ({ date: h.date, time: h.time, desc: h.desc, loc: h.loc })).reverse();
+    res.json({ scans, courier_status: track?.courier_status || null, checked_at: track?.checked_at || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/admin/shipsagar/logs', adminAuth, async (req, res) => {
   const logs = await mdb.collection('shipsagar_cron_log').find({}, { projection: { lines: 0 } }).sort({ started_at: -1 }).limit(30).toArray();
   res.json(logs);
