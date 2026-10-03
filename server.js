@@ -613,6 +613,28 @@ app.put('/orders/:id/stage', adminAuth, async (req, res) => {
     if (note)         fields.note         = note;
     await OS.upsert(req.params.id, fields);
     auditLog('admin', 'update_stage', req.params.id, { stage, awb });
+    // If an AWB was just set/changed here (not via the fulfillments webhook), register it
+    // with ShipSagar right away instead of waiting for the next cron sweep to catch it.
+    if (awb) {
+      (async () => {
+        try {
+          const rec = await OS.get(req.params.id);
+          if (rec?.shipsagar_pushed) return;
+          const s = await mdb.collection('settings').findOne({}, { projection: { shipsagar_auto_enabled: 1, _id: 0 } });
+          if (s?.shipsagar_auto_enabled === false) return;
+          const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+          if (!creds) return;
+          const { order: o } = await shopifyREST(`/orders/${req.params.id}.json?fields=id,name,email,customer,phone,created_at`);
+          if (!shipsagarEligible(o.created_at)) return;
+          await shipsagarPushShipment({
+            awb, courierCode: toShipSagarCourierCode(courier || rec?.courier), orderNo: o.name,
+            customerName: shipsagarCustomerName(o), email: o.email || o.contact_email || '', mobileNo: o.phone || o.customer?.phone || '',
+          });
+          await mdb.collection('order_stage').updateOne({ shopify_id: req.params.id }, { $set: { shipsagar_pushed: true } });
+          console.log(`[stage-update] ShipSagar registered AWB ${awb} for ${o.name}`);
+        } catch (e) { console.error('[stage-update] ShipSagar push error:', e.message); }
+      })();
+    }
     // Send stage email
     if (stage) {
       try {
@@ -684,6 +706,26 @@ app.put('/staff/orders/:id/stage', staffAuth, async (req, res) => {
     if (tracking_url) fields.tracking_url = tracking_url;
     await OS.upsert(req.params.id, fields);
     auditLog('staff:' + req.staffUsername, 'update_stage', req.params.id, { stage, awb });
+    if (awb) {
+      (async () => {
+        try {
+          const rec = await OS.get(req.params.id);
+          if (rec?.shipsagar_pushed) return;
+          const s = await mdb.collection('settings').findOne({}, { projection: { shipsagar_auto_enabled: 1, _id: 0 } });
+          if (s?.shipsagar_auto_enabled === false) return;
+          const creds = await mdb.collection('shipping_creds').findOne({ partner: 'shipsagar' });
+          if (!creds) return;
+          const { order: o } = await shopifyREST(`/orders/${req.params.id}.json?fields=id,name,email,customer,phone,created_at`);
+          if (!shipsagarEligible(o.created_at)) return;
+          await shipsagarPushShipment({
+            awb, courierCode: toShipSagarCourierCode(courier || rec?.courier), orderNo: o.name,
+            customerName: shipsagarCustomerName(o), email: o.email || o.contact_email || '', mobileNo: o.phone || o.customer?.phone || '',
+          });
+          await mdb.collection('order_stage').updateOne({ shopify_id: req.params.id }, { $set: { shipsagar_pushed: true } });
+          console.log(`[staff-stage-update] ShipSagar registered AWB ${awb} for ${o.name}`);
+        } catch (e) { console.error('[staff-stage-update] ShipSagar push error:', e.message); }
+      })();
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2746,8 +2788,12 @@ async function _runShipsagarSyncInner({ orderIds, manual } = {}) {
         awb: { $exists: true, $ne: '' },
       }).toArray();
     } else {
+      // Track every registered AWB, AND catch any order that has an AWB but was never
+      // pushed to ShipSagar — this happens when an AWB is set through a path other than
+      // the Shopify fulfillments webhook (e.g. manual/bulk AWB entry in the admin panel),
+      // since only the webhook handler used to auto-push. The push-or-track logic below
+      // already handles not-yet-pushed records; this just makes sure they're in scope.
       records = await mdb.collection('order_stage').find({
-        shipsagar_pushed: true,
         stage: { $nin: ['delivered', 'rto', 'cancelled'] },
         awb: { $exists: true, $ne: '' },
       }).toArray();
