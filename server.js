@@ -2448,21 +2448,25 @@ app.post('/admin/orders/:id/tag', adminAuth, async (req, res) => {
 
 // ─── R&R Settings ─────────────────────────────────────────────────────────────
 app.get('/admin/rr-settings', adminAuth, async (req, res) => {
-  const doc = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, force_return_code: 1, _id: 0 } });
+  const doc = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, force_return_code: 1, exchange_fee: 1, exchange_fee_enabled: 1, _id: 0 } });
   res.json({
     exchange_enabled: doc?.exchange_enabled !== false,
     return_enabled: doc?.return_enabled !== false,
     return_window_days: doc?.return_window_days || 7,
     force_return_code: doc?.force_return_code || '',
+    exchange_fee_enabled: doc?.exchange_fee_enabled !== false,
+    exchange_fee: doc?.exchange_fee != null ? doc.exchange_fee : 199,
   });
 });
 
 app.post('/admin/rr-settings', adminAuth, async (req, res) => {
   try {
-    const { exchange_enabled, return_enabled, return_window_days, force_return_code } = req.body || {};
+    const { exchange_enabled, return_enabled, return_window_days, force_return_code, exchange_fee, exchange_fee_enabled } = req.body || {};
     await mdb.collection('settings').updateOne({}, { $set: {
       exchange_enabled, return_enabled, return_window_days: parseInt(return_window_days) || 7,
-      force_return_code: (force_return_code || '').trim(), updated_at: new Date(),
+      force_return_code: (force_return_code || '').trim(),
+      exchange_fee_enabled, exchange_fee: Math.max(0, parseInt(exchange_fee) || 0),
+      updated_at: new Date(),
     } }, { upsert: true });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3261,7 +3265,7 @@ app.get('/track/order', async (req, res) => {
     ).sort({ created_at: -1 }).toArray();
 
     // Return/exchange settings from DB
-    const rrCfg = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, _id: 0 } }) || {};
+    const rrCfg = await mdb.collection('settings').findOne({}, { projection: { exchange_enabled: 1, return_enabled: 1, return_window_days: 1, exchange_fee: 1, exchange_fee_enabled: 1, _id: 0 } }) || {};
 
     res.json({
       shopify_order_id: order.id,
@@ -3285,6 +3289,8 @@ app.get('/track/order', async (req, res) => {
       exchange_enabled: rrCfg.exchange_enabled !== false,
       return_enabled: rrCfg.return_enabled !== false,
       return_window_days: rrCfg.return_window_days || 7,
+      exchange_fee_enabled: rrCfg.exchange_fee_enabled !== false,
+      exchange_fee: rrCfg.exchange_fee != null ? rrCfg.exchange_fee : 199,
     });
   } catch (e) { console.error('GET /track/order:', e.message); res.status(500).json({ error: e.message }); }
 });
@@ -3337,17 +3343,114 @@ app.get('/track/my-orders', async (req, res) => {
   } catch (e) { console.error('GET /track/my-orders:', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ─── Exchange fee (Razorpay) ───────────────────────────────────────────────
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const razorpayAuthHeader = () => 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+
+// POST /track/exchange-fee/create-order — public, creates a Razorpay order for the exchange fee
+app.post('/track/exchange-fee/create-order', async (req, res) => {
+  try {
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET)
+      return res.status(500).json({ error: 'Payments are not configured yet. Please contact support.' });
+    const { shopify_order_id } = req.body || {};
+    if (!shopify_order_id) return res.status(400).json({ error: 'shopify_order_id required' });
+
+    const rrCfg = await mdb.collection('settings').findOne({}, { projection: { exchange_fee: 1, exchange_fee_enabled: 1, _id: 0 } }) || {};
+    if (rrCfg.exchange_fee_enabled === false) return res.status(400).json({ error: 'Exchange fee is currently disabled.' });
+    const amount = rrCfg.exchange_fee != null ? rrCfg.exchange_fee : 199;
+    if (amount <= 0) return res.status(400).json({ error: 'Nothing to charge.' });
+
+    const receipt = `exfee_${shopify_order_id}_${Date.now()}`;
+    const r = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: { Authorization: razorpayAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: amount * 100, currency: 'INR', receipt, notes: { shopify_order_id: String(shopify_order_id), purpose: 'exchange_fee' } }),
+    });
+    const rpOrder = await r.json();
+    if (!r.ok) return res.status(500).json({ error: rpOrder.error?.description || 'Could not create payment order.' });
+
+    await mdb.collection('exchange_fee_payments').insertOne({
+      razorpay_order_id: rpOrder.id, shopify_order_id: String(shopify_order_id),
+      amount, status: 'created', used: false, created_at: new Date().toISOString(),
+    });
+
+    res.json({ razorpay_order_id: rpOrder.id, amount, currency: 'INR', key_id: RAZORPAY_KEY_ID });
+  } catch (e) { console.error('POST /track/exchange-fee/create-order:', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// POST /track/exchange-fee/verify — public, verifies Razorpay payment signature
+app.post('/track/exchange-fee/verify', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature)
+      return res.status(400).json({ error: 'Missing payment details' });
+
+    const expected = crypto.createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`).digest('hex');
+    if (expected !== razorpay_signature)
+      return res.status(400).json({ error: 'Payment verification failed.' });
+
+    const existing = await mdb.collection('exchange_fee_payments').findOne({ razorpay_order_id });
+    if (!existing) return res.status(404).json({ error: 'Payment order not found.' });
+
+    await mdb.collection('exchange_fee_payments').updateOne(
+      { razorpay_order_id },
+      { $set: { status: 'paid', payment_id: razorpay_payment_id, verified_at: new Date().toISOString() } }
+    );
+
+    res.json({ ok: true, payment_id: razorpay_payment_id });
+  } catch (e) { console.error('POST /track/exchange-fee/verify:', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // POST /track/request — public submit return/exchange
 app.post('/track/request', async (req, res) => {
   try {
     const { shopify_order_id, order_name, customer_email, customer_name, customer_phone,
             customer_address1, customer_address2, customer_city, customer_state, customer_pincode,
-            type, items, reason, image_urls, shipping_address } = req.body || {};
+            type, items, reason, image_urls, shipping_address, override_code, exchange_fee_payment_id } = req.body || {};
 
     if (!shopify_order_id || !type || !items?.length || !reason)
       return res.status(400).json({ error: 'Missing required fields' });
     if (!['return', 'exchange'].includes(type))
       return res.status(400).json({ error: "type must be 'return' or 'exchange'" });
+
+    const rrCfg = await mdb.collection('settings').findOne({}, { projection: {
+      exchange_enabled: 1, return_enabled: 1, return_window_days: 1, force_return_code: 1,
+      exchange_fee_enabled: 1, exchange_fee: 1, _id: 0,
+    } }) || {};
+
+    const codeOk = !!rrCfg.force_return_code && override_code && rrCfg.force_return_code === String(override_code).trim();
+
+    if (type === 'exchange' && rrCfg.exchange_enabled === false && !codeOk)
+      return res.status(403).json({ error: 'Exchanges are currently unavailable for this order.' });
+    if (type === 'return' && rrCfg.return_enabled === false && !codeOk)
+      return res.status(403).json({ error: 'Returns are currently unavailable for this order.' });
+
+    const windowDays = rrCfg.return_window_days || 7;
+    if (!codeOk) {
+      try {
+        const order = await shopifyREST(`/orders/${shopify_order_id}.json`);
+        const createdAt = order?.order?.created_at;
+        if (createdAt) {
+          const daysSince = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+          if (daysSince > windowDays)
+            return res.status(403).json({ error: `This order is outside the ${windowDays}-day return/exchange window.` });
+        }
+      } catch {}
+    }
+
+    const feeEnabled = rrCfg.exchange_fee_enabled !== false;
+    const feeAmount = rrCfg.exchange_fee != null ? rrCfg.exchange_fee : 199;
+    if (type === 'exchange' && feeEnabled && feeAmount > 0) {
+      if (!exchange_fee_payment_id)
+        return res.status(402).json({ error: 'Exchange fee payment required.', exchange_fee: feeAmount });
+      const payment = await mdb.collection('exchange_fee_payments').findOne({ payment_id: exchange_fee_payment_id, status: 'paid' });
+      if (!payment)
+        return res.status(402).json({ error: 'Exchange fee payment could not be verified.', exchange_fee: feeAmount });
+      if (payment.used)
+        return res.status(402).json({ error: 'This payment has already been used for another request.' });
+    }
 
     const now = new Date();
     const rand = String(Math.floor(Math.random() * 9000) + 1000);
@@ -3372,9 +3475,16 @@ app.post('/track/request', async (req, res) => {
       updated_at: now.toISOString(),
       admin_note: '',
       image_urls: Array.isArray(image_urls) ? image_urls : [],
+      exchange_fee_payment_id: type === 'exchange' ? (exchange_fee_payment_id || null) : null,
     };
 
     await mdb.collection('return_requests').insertOne(doc);
+    if (type === 'exchange' && exchange_fee_payment_id) {
+      await mdb.collection('exchange_fee_payments').updateOne(
+        { payment_id: exchange_fee_payment_id },
+        { $set: { used: true, request_id, used_at: now.toISOString() } }
+      );
+    }
 
     // Notify admin via email (optional, ignore errors)
     try {

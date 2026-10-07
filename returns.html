@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Return & Exchange · Fit Check</title>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -414,22 +415,31 @@ function renderStep3(el){
         <textarea id="rrAddress" placeholder="Full address for pickup (optional — defaults to order address)"></textarea>
       </div>
       `:''}
+      ${needsExchangeFee()?`
+      <div class="rr-card" style="background:var(--blue-light);border-color:var(--blue-border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b>Exchange processing fee</b>
+          <b style="color:var(--blue)">${fmtMoney(order.exchange_fee)}</b>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Paid securely via Razorpay before your exchange is submitted.</div>
+      </div>
+      `:''}
       <div id="errSubmit" class="alert alert-error" style="display:none;margin-top:10px"></div>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="btn btn-ghost" onclick="rrBack()">← Back</button>
-        <button class="btn btn-primary" style="flex:1" id="btnSubmit" onclick="submitRR()">Submit Request</button>
+        <button class="btn btn-primary" style="flex:1" id="btnSubmit" onclick="submitRR()">${needsExchangeFee()?`Pay ${fmtMoney(order.exchange_fee)} & Submit`:'Submit Request'}</button>
       </div>
     </div>
   `;
 }
 
-async function submitRR(){
-  const btn=document.getElementById('btnSubmit');
-  const errEl=document.getElementById('errSubmit');
-  errEl.style.display='none';
-  btn.disabled=true;btn.textContent='Submitting…';
+function needsExchangeFee(){
+  return rrType==='exchange' && order.exchange_fee_enabled !== false && (order.exchange_fee||0) > 0;
+}
+
+function buildRRPayload(extra){
   const contact=document.getElementById('inputContact')?.value.trim()||order.customer_email||order.customer_phone||'';
-  const payload={
+  return {
     shopify_order_id: order.shopify_order_id,
     order_name: order.order_name,
     customer_email: contact.includes('@') ? contact : (order.customer_email||''),
@@ -442,14 +452,66 @@ async function submitRR(){
       product_id: it.product_id, variant_id: it.variant_id, title: it.title,
       variant_title: it.variant_title, qty: it.qty,
       new_variant_id: it.new_variant_id||null
-    }))
+    })),
+    ...extra,
   };
+}
+
+async function submitRR(){
+  const btn=document.getElementById('btnSubmit');
+  const errEl=document.getElementById('errSubmit');
+  errEl.style.display='none';
+  if(needsExchangeFee()) return payExchangeFeeThenSubmit(btn, errEl);
+  btn.disabled=true;btn.textContent='Submitting…';
   try{
-    const r=await fetch(`${API}/track/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const r=await fetch(`${API}/track/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildRRPayload())});
     const d=await r.json();
     if(!r.ok){errEl.textContent=d.error||'Could not submit request.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';return;}
     showSuccess(d.request_id);
   }catch(e){errEl.textContent='Something went wrong. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent='Submit Request';}
+}
+
+async function payExchangeFeeThenSubmit(btn, errEl){
+  btn.disabled=true;btn.textContent='Starting payment…';
+  try{
+    const or=await fetch(`${API}/track/exchange-fee/create-order`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shopify_order_id:order.shopify_order_id})});
+    const od=await or.json();
+    if(!or.ok) throw new Error(od.error||'Could not start payment.');
+    if(typeof Razorpay==='undefined') throw new Error('Payment system failed to load. Please refresh and try again.');
+
+    const rzp=new Razorpay({
+      key: od.key_id,
+      order_id: od.razorpay_order_id,
+      amount: Math.round(od.amount*100),
+      currency: 'INR',
+      name: 'The Fit Check',
+      description: 'Exchange processing fee',
+      theme: { color: '#e11d2e' },
+      handler: async function(resp){
+        btn.textContent='Verifying payment…';
+        try{
+          const vr=await fetch(`${API}/track/exchange-fee/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resp)});
+          const vd=await vr.json();
+          if(!vr.ok) throw new Error(vd.error||'Payment verification failed.');
+          btn.textContent='Submitting…';
+          const r=await fetch(`${API}/track/request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildRRPayload({exchange_fee_payment_id: vd.payment_id}))});
+          const d=await r.json();
+          if(!r.ok) throw new Error(d.error||'Could not submit request.');
+          showSuccess(d.request_id);
+        }catch(e){
+          errEl.textContent=e.message||'Payment succeeded but submission failed. Please contact support with your payment reference.';
+          errEl.style.display='block';
+          btn.disabled=false; btn.textContent=`Pay ${fmtMoney(order.exchange_fee)} & Submit`;
+        }
+      },
+      modal: { ondismiss: function(){ btn.disabled=false; btn.textContent=`Pay ${fmtMoney(order.exchange_fee)} & Submit`; } },
+    });
+    rzp.open();
+  }catch(e){
+    errEl.textContent=e.message||'Could not start payment. Please try again.';
+    errEl.style.display='block';
+    btn.disabled=false; btn.textContent=`Pay ${fmtMoney(order.exchange_fee)} & Submit`;
+  }
 }
 
 function showSuccess(requestId){

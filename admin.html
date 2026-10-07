@@ -2872,7 +2872,7 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
   const [newStage,setNewStage] = useState('confirmed');
   const [shopifyTags,setShopifyTags] = useState([]);
   const [tagsLoading,setTagsLoading] = useState(false);
-  const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7,force_return_code:''});
+  const [rrSettings,setRrSettings] = useState({exchange_enabled:true,return_enabled:true,return_window_days:7,force_return_code:'',exchange_fee_enabled:true,exchange_fee:199});
   const [syncScope,setSyncScope] = useState('100');
   const [eshipzEnabled,setEshipzEnabled] = useState(true);
   const [segments,setSegments]   = useState([]);
@@ -3109,6 +3109,20 @@ function Settings({ theme, setTheme, iconPreset, setIconPreset }) {
           <div style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
             <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Return Window (days)</div>
             <input type="number" value={rrSettings.return_window_days} onChange={e=>setRrSettings({...rrSettings,return_window_days:parseInt(e.target.value)||7})} style={{width:100}} min="1" max="90"/>
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13}}>Charge Exchange Fee</div>
+              <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>Customer pays this fee via Razorpay before an exchange request is submitted</div>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={rrSettings.exchange_fee_enabled} onChange={e=>setRrSettings({...rrSettings,exchange_fee_enabled:e.target.checked})}/>
+              <span className="toggle-slider"/>
+            </label>
+          </div>
+          <div style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Exchange Fee Amount (₹)</div>
+            <input type="number" value={rrSettings.exchange_fee} onChange={e=>setRrSettings({...rrSettings,exchange_fee:parseInt(e.target.value)||0})} style={{width:100}} min="0" max="5000" disabled={!rrSettings.exchange_fee_enabled}/>
           </div>
           <div style={{padding:'12px 0'}}>
             <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>Force Return Code</div>
