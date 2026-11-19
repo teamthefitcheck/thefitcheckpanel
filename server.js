@@ -445,15 +445,18 @@ app.get('/admin/diag/order-sync-check', adminAuth, async (req, res) => {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to query params required (ISO dates)' });
 
-    let shopifyOrders = [];
-    let page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}`);
-    shopifyOrders = shopifyOrders.concat(page.orders || []);
-    for (let i = 0; i < 20 && (page.orders || []).length === 250; i++) {
+    let rawOrders = [];
+    let page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}&order=id+asc`);
+    rawOrders = rawOrders.concat(page.orders || []);
+    for (let i = 0; i < 40 && (page.orders || []).length === 250; i++) {
       const lastId = page.orders[page.orders.length - 1]?.id;
       if (!lastId) break;
-      page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}&since_id=${lastId}`);
-      shopifyOrders = shopifyOrders.concat(page.orders || []);
+      page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}&order=id+asc&since_id=${lastId}`);
+      rawOrders = rawOrders.concat(page.orders || []);
     }
+    const seen = new Map();
+    rawOrders.forEach(o => seen.set(o.id, o));
+    const shopifyOrders = Array.from(seen.values());
 
     const dbOrders = await getOrdersFromDB(from, to);
     const dbIds = new Set(dbOrders.map(o => String(o.shopify_id || o.id)));
