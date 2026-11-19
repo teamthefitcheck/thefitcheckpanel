@@ -443,7 +443,7 @@ function mergeOrderWithStage(o, stageMap) {
 app.get('/admin/diag/shop-files', adminAuth, async (req, res) => {
   try {
     const data = await shopifyGQL(`query {
-      shop { name brand { logo { image { url altText } } squareLogo { image { url altText } } } }
+      shop { name }
       files(first: 40, query: "media_type:IMAGE", sortKey: CREATED_AT, reverse: true) {
         edges { node { ... on MediaImage { image { url altText } createdAt } } }
       }
