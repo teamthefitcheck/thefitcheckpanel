@@ -438,6 +438,23 @@ function mergeOrderWithStage(o, stageMap) {
   };
 }
 
+// TEMP diagnostic: lists shop brand logo + recently uploaded image files, to find the real
+// fitcheck logo asset. Remove after use.
+app.get('/admin/diag/shop-files', adminAuth, async (req, res) => {
+  try {
+    const data = await shopifyGQL(`query {
+      shop { name brand { logo { image { url altText } } squareLogo { image { url altText } } } }
+      files(first: 40, query: "media_type:IMAGE", sortKey: CREATED_AT, reverse: true) {
+        edges { node { ... on MediaImage { image { url altText } createdAt } } }
+      }
+    }`);
+    res.json(data);
+  } catch (e) {
+    console.error('GET /admin/diag/shop-files:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // TEMP diagnostic: compares live Shopify orders in a date range against the local DB cache,
 // to find orders that never synced (e.g. during a backend outage). Remove after use.
 app.get('/admin/diag/order-sync-check', adminAuth, async (req, res) => {
