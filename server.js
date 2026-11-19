@@ -438,6 +438,43 @@ function mergeOrderWithStage(o, stageMap) {
   };
 }
 
+// TEMP diagnostic: compares live Shopify orders in a date range against the local DB cache,
+// to find orders that never synced (e.g. during a backend outage). Remove after use.
+app.get('/admin/diag/order-sync-check', adminAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to query params required (ISO dates)' });
+
+    let shopifyOrders = [];
+    let page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}`);
+    shopifyOrders = shopifyOrders.concat(page.orders || []);
+    for (let i = 0; i < 20 && (page.orders || []).length === 250; i++) {
+      const lastId = page.orders[page.orders.length - 1]?.id;
+      if (!lastId) break;
+      page = await shopifyREST(`/orders.json?status=any&limit=250&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}&since_id=${lastId}`);
+      shopifyOrders = shopifyOrders.concat(page.orders || []);
+    }
+
+    const dbOrders = await getOrdersFromDB(from, to);
+    const dbIds = new Set(dbOrders.map(o => String(o.shopify_id || o.id)));
+    const missing = shopifyOrders.filter(o => !dbIds.has(String(o.id)));
+
+    const shipsagarLogs = await mdb.collection('shipsagar_cron_log').find({}, { projection: { _id: 0 } }).sort({ _id: -1 }).limit(1).toArray();
+
+    res.json({
+      range: { from, to },
+      shopify_order_count: shopifyOrders.length,
+      db_order_count: dbOrders.length,
+      missing_count: missing.length,
+      missing_orders: missing.map(o => ({ id: o.id, name: o.name, created_at: o.created_at, financial_status: o.financial_status, total_price: o.total_price })),
+      last_shipsagar_cron_log: shipsagarLogs[0] || null,
+    });
+  } catch (e) {
+    console.error('GET /admin/diag/order-sync-check:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/orders', adminAuth, async (req, res) => {
   try {
     const { from, to, stage, q, payment } = req.query;
