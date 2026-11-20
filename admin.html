@@ -1045,12 +1045,12 @@ function FlowCards({ orders }) {
   const dispRate = pc(disp.c,active), delRate = pc(del.c,disp.c), rtoRate = pc(rto.c,disp.c);
   const settled = del.c + rto.c;
   const rtoSettled = pc(rto.c,settled);
-  const Row = ({icon,label,c,r,of,color}) => (
+  const Row = ({icon,label,c,r,of,color,total:ofTotal}) => (
     <div className="fr">
       <span className="fr-l">{icon} {label}</span>
       <span className="fr-b"><i style={{width:`${Math.min(100,pc(c,of))}%`,background:color}}/></span>
       <span className="fr-c" style={{color}}>{c.toLocaleString()}</span>
-      <span className="fr-p">{pc(c,of).toFixed(0)}%</span>
+      <span className="fr-p">{pc(c,of).toFixed(0)}%{ofTotal!=null && <span style={{color:'var(--text-muted)',fontWeight:400}}> ({pc(c,ofTotal).toFixed(0)}% of total)</span>}</span>
       <span className="fr-r">{r>0?'₹'+compact(r):''}</span>
     </div>
   );
@@ -1091,7 +1091,7 @@ function FlowCards({ orders }) {
           <Mini l="Still in motion" v={'₹'+compact(inflight.r)} c="var(--cyan)"/>
         </div>
         <div className="bx-sub">Outcome of {disp.c.toLocaleString()} dispatched</div>
-        <Row icon="✅" label="Delivered" c={del.c} r={del.r} of={disp.c} color="var(--green)"/>
+        <Row icon="✅" label="Delivered" c={del.c} r={del.r} of={disp.c} total={total} color="var(--green)"/>
         <Row icon="🚚" label="On the way" c={g('pickup').c+g('transit').c+g('ofd').c} r={g('pickup').r+g('transit').r+g('ofd').r} of={disp.c} color="var(--cyan)"/>
         <Row icon="📦" label="Not picked yet" c={g('ready').c} r={g('ready').r} of={disp.c} color="var(--blue)"/>
         <Row icon="⚠️" label="NDR" c={g('ndr').c} r={g('ndr').r} of={disp.c} color="var(--orange)"/>
